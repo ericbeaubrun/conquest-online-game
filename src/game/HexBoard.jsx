@@ -6,6 +6,7 @@ import {getLogicalBoard} from './engine/board.js';
 import {buildGeometry} from './render/geometry.js';
 import {computeReachable} from './engine/selectors.js';
 import {moveSoldier, mergeSoldier, placeItem} from './engine/actions.js';
+import {SOLDIER_HP_MAX} from './engine/rules.js';
 import './HexBoard.scss';
 
 const BASE_SRC = '/base.png';
@@ -88,10 +89,10 @@ const Indicators = memo(function Indicators({moves, allies, cellMap, size}) {
             <image
                 key={key}
                 href={href}
-                x={cell.cx - size / 2}
-                y={cell.cy - size / 2}
-                width={size}
-                height={size}
+                x={cell.cx - size / (2*1.25)}
+                y={cell.cy - size / (2*1.25)}
+                width={size*0.75}
+                height={size*0.75}
                 style={{imageRendering: 'pixelated'}}
                 pointerEvents="none"
             />
@@ -111,13 +112,13 @@ const Indicators = memo(function Indicators({moves, allies, cellMap, size}) {
 // du joueur actif qui n'a pas encore été déplacé durant ce tour. Placé dans le
 // coin haut-gauche du sprite (symétrique du badge de niveau).
 const ActionIndicators = memo(function ActionIndicators({
-    placements,
-    cellMap,
-    size,
-    movedSoldiers,
-    activePlayerId,
-    selectedId,
-}) {
+                                                            placements,
+                                                            cellMap,
+                                                            size,
+                                                            movedSoldiers,
+                                                            activePlayerId,
+                                                            selectedId,
+                                                        }) {
     const badge = size * 0.45;
     return [...placements.entries()].map(([id, placed]) => {
         if (placed.type !== 'soldier' || placed.playerId !== activePlayerId) return null;
@@ -156,12 +157,22 @@ const Bases = memo(function Bases({baseCells, size}) {
 });
 
 // Couche des items posés (soldats, maisons, tours), avec le badge de niveau
-// des soldats fusionnés (2 ou 3, en haut à droite du sprite).
+// des soldats fusionnés (2 ou 3, en haut à droite du sprite) et, pour les
+// soldats, une barre de vie juste sous leurs pieds (sans déborder de la case).
 const Buildings = memo(function Buildings({placements, cellMap, size}) {
+    // Géométrie de la barre de vie, en unités du sprite. Le bas de la barre
+    // (~0.6·size sous le centre) reste au-dessus du bord de la case (0.625·size).
+    const barW = size * 0.6;
+    const barH = size * 0.11;
+    const barPad = Math.max(0.6, size * 0.025); // cadre noir « pixel »
     return [...placements.entries()].map(([id, placed]) => {
         const cell = cellMap.get(id);
         if (!cell) return null;
-        const level = placed.type === 'soldier' ? placed.level || 1 : 1;
+        const isSoldier = placed.type === 'soldier';
+        const level = isSoldier ? placed.level || 1 : 1;
+        const barX = cell.cx - barW / 2;
+        const barY = cell.cy + size * 0.49;
+        const ratio = Math.max(0, Math.min(1, (placed.hp ?? 0) / SOLDIER_HP_MAX));
         return (
             <g key={id} pointerEvents="none">
                 <image
@@ -172,6 +183,24 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
                     height={size}
                     style={{imageRendering: 'pixelated'}}
                 />
+                {isSoldier && (
+                    <>
+                        <rect
+                            x={barX}
+                            y={barY}
+                            width={barW}
+                            height={barH}
+                            className="hp-bar__frame"
+                        />
+                        <rect
+                            x={barX + barPad}
+                            y={barY + barPad}
+                            width={(barW - barPad * 2) * ratio}
+                            height={barH - barPad * 2}
+                            className="hp-bar__fill"
+                        />
+                    </>
+                )}
                 {level >= 2 && (
                     <>
                         <circle
@@ -199,10 +228,11 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
 
 // Plateau : composant purement PRÉSENTATIONNEL. Il lit l'état partagé de la
 // partie (`game`), en dérive la géométrie d'affichage, et envoie des actions
-// via `dispatch`. Il ne détient que l'état d'INTERFACE local à ce client :
-// la caméra (view) et la sélection courante (selectedSoldier) — deux choses
-// propres à chaque joueur, qui n'ont pas à transiter par le serveur.
-const HexBoard = ({game, dispatch, selectedItem}) => {
+// via `dispatch`. La sélection courante (`selectedSoldier`) est un état
+// d'INTERFACE remonté au parent — pour qu'il affiche le menu du soldat à la
+// place de la boutique — mais reste local à ce client (elle ne transite pas
+// par le serveur). La caméra (view) reste, elle, entièrement interne.
+const HexBoard = ({game, dispatch, selectedItem, selectedSoldier, onSelectSoldier}) => {
     const svgRef = useRef(null);
     const {mapId, ownership, placements, movedSoldiers, activePlayerId, players} = game;
 
@@ -217,7 +247,6 @@ const HexBoard = ({game, dispatch, selectedItem}) => {
         [players]
     );
 
-    const [selectedSoldier, setSelectedSoldier] = useState(null); // id de la case
     const [view, setView] = useState(base);
     const viewRef = useRef(view);
     viewRef.current = view; // toujours à jour pour les listeners natifs / gestes
@@ -226,12 +255,6 @@ const HexBoard = ({game, dispatch, selectedItem}) => {
     useEffect(() => {
         setView(base);
     }, [base]);
-
-    // Désélectionne le soldat si on change de joueur, passe en mode boutique,
-    // ou change de carte (un soldat sélectionné n'est plus pertinent).
-    useEffect(() => {
-        setSelectedSoldier(null);
-    }, [activePlayerId, selectedItem, mapId]);
 
     const baseSize = hexHeight() * 0.95;
     const itemSize = hexHeight() * 0.8;
@@ -334,7 +357,7 @@ const HexBoard = ({game, dispatch, selectedItem}) => {
             if (dest) {
                 if (dest.kind === 'merge') dispatch(mergeSoldier(selectedSoldier, id));
                 else dispatch(moveSoldier(selectedSoldier, id));
-                setSelectedSoldier(null);
+                onSelectSoldier(null);
                 return;
             }
         }
@@ -347,11 +370,11 @@ const HexBoard = ({game, dispatch, selectedItem}) => {
             placed.playerId === activePlayerId &&
             !movedSoldiers.has(placed.uid)
         ) {
-            setSelectedSoldier((cur) => (cur === id ? null : id));
+            onSelectSoldier((cur) => (cur === id ? null : id));
             return;
         }
         // (3) Tap ailleurs : désélection.
-        if (selectedSoldier) setSelectedSoldier(null);
+        if (selectedSoldier) onSelectSoldier(null);
     };
 
     // --- Pointeurs : glisser (pan) + pincer (pinch) + tap (conquérir) ---
@@ -362,7 +385,7 @@ const HexBoard = ({game, dispatch, selectedItem}) => {
     const onPointerDown = (e) => {
         // Clic droit : désélectionne le soldat sans démarrer de geste.
         if (e.button === 2) {
-            setSelectedSoldier(null);
+            onSelectSoldier(null);
             return;
         }
         svgRef.current.setPointerCapture(e.pointerId);

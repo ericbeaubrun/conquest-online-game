@@ -5,8 +5,29 @@
 import { MOVE_SOLDIER, MERGE_SOLDIER, PLACE_ITEM, END_TURN, SET_MAP } from './actions.js';
 import { getLogicalBoard, createInitialState } from './board.js';
 import { computeReachable, ownedCount } from './selectors.js';
-import { MERGE_MAX, BASE_INCOME } from './rules.js';
+import {
+    MERGE_MAX,
+    BASE_INCOME,
+    SOLDIER_HP_DEFAULT,
+    SOLDIER_ATK_DEFAULT,
+} from './rules.js';
 import { ITEM_COST } from '../items.js';
+
+// Fabrique un soldat neuf avec ses caractéristiques par défaut. Centralisé ici
+// pour que toute création de soldat parte du même modèle (stats + specs).
+function makeSoldier(playerId, uid) {
+    return {
+        type: 'soldier',
+        playerId,
+        uid,
+        level: 1,
+        hp: SOLDIER_HP_DEFAULT,
+        atk: SOLDIER_ATK_DEFAULT,
+        affinity: null, // feu | glace | foudre | null
+        bonus: null, // cupide | rapide | assaillant | protecteur | soigneur | bucheron | null
+        behavior: null, // conquete | attaque | defense | arbre | renfort | null
+    };
+}
 
 // Déplacement (repositionnement dans le territoire ou conquête d'une case).
 function reduceMove(state, { fromId, toId }) {
@@ -72,7 +93,7 @@ function reducePlace(state, { cellId, itemType }) {
     let item;
     if (itemType === 'soldier') {
         uidSeq += 1;
-        item = { type: 'soldier', playerId: state.activePlayerId, level: 1, uid: `s${uidSeq}` };
+        item = makeSoldier(state.activePlayerId, `s${uidSeq}`);
     } else {
         item = { type: itemType, playerId: state.activePlayerId };
     }

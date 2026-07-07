@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import HexBoard from "./game/HexBoard.jsx";
 import Shop from "./game/Shop.jsx";
+import SoldierPanel from "./game/SoldierPanel.jsx";
 import { MAPS } from "./game/maps.js";
 import { useGameSession } from "./game/session/useGameSession.js";
 import { setMap, endTurn } from "./game/engine/actions.js";
@@ -15,13 +16,20 @@ const GameLayout = () => {
     // État d'INTERFACE local à ce client (ne transite pas par le serveur).
     const [menuOpen, setMenuOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
+    // Case (id) du soldat sélectionné : pilote l'affichage boutique vs specs.
+    const [selectedSoldier, setSelectedSoldier] = useState(null);
 
     const activeColor = players.find((p) => p.id === activePlayerId)?.color;
+    // Données du soldat sélectionné (null si aucun, ou s'il vient de bouger).
+    const selectedSoldierData =
+        selectedSoldier != null ? state.placements.get(selectedSoldier) : null;
 
-    // Changement de carte : on abandonne l'item de boutique sélectionné.
+    // Changement de carte ou de joueur actif : plus rien ne doit rester
+    // sélectionné (item de boutique comme soldat).
     useEffect(() => {
         setSelectedItem(null);
-    }, [mapId]);
+        setSelectedSoldier(null);
+    }, [mapId, activePlayerId]);
 
     const toggleMenu = () => setMenuOpen((open) => !open);
     const selectMap = (id) => {
@@ -31,6 +39,12 @@ const GameLayout = () => {
     const handleEndTurn = () => {
         dispatch(endTurn());
         setSelectedItem(null);
+    };
+    // Sélectionner un item de boutique referme le menu du soldat (et inversement,
+    // sélectionner un soldat se fait toujours hors mode boutique).
+    const handleSelectItem = (id) => {
+        setSelectedItem(id);
+        if (id) setSelectedSoldier(null);
     };
 
     return (
@@ -109,13 +123,21 @@ const GameLayout = () => {
                     game={state}
                     dispatch={dispatch}
                     selectedItem={selectedItem}
+                    selectedSoldier={selectedSoldier}
+                    onSelectSoldier={setSelectedSoldier}
                 />
-                <Shop
-                    selectedItem={selectedItem}
-                    onSelect={setSelectedItem}
-                    activeColor={activeColor}
-                    activeGold={gold[activePlayerId] ?? 0}
-                />
+                {/* Un soldat sélectionné affiche ses caractéristiques ;
+                    sinon, la boutique. */}
+                {selectedSoldierData ? (
+                    <SoldierPanel soldier={selectedSoldierData} color={activeColor} />
+                ) : (
+                    <Shop
+                        selectedItem={selectedItem}
+                        onSelect={handleSelectItem}
+                        activeColor={activeColor}
+                        activeGold={gold[activePlayerId] ?? 0}
+                    />
+                )}
             </div>
         </div>
     );

@@ -129,8 +129,21 @@
   }
   &__text {
     fill: #ffffff;
-    font-weight: 700;
-    font-family: system-ui, sans-serif;
+    font-family: "VT323", "Courier New", monospace;
+  }
+}
+
+// Barre de vie sous les pieds d'un soldat (style pixel : cadre noir + jauge).
+.hp-bar {
+  &__frame {
+    fill: #111111;
+    stroke: #000000;
+    stroke-width: 1;
+    shape-rendering: crispEdges;
+  }
+  &__fill {
+    fill: #5bd35b;
+    shape-rendering: crispEdges;
   }
 }
 
