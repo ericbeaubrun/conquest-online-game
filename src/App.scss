@@ -1,0 +1,301 @@
+// ---- Bases globales ----
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  overflow: hidden; // le plateau gère son propre espace
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+// ---- Structure principale ----
+.game-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  // 100dvh corrige la barre d'adresse mobile qui rogne la hauteur.
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+// ---- Barre du haut ----
+.top-bar {
+  flex: 0 0 auto;
+  background-color: #2b2b2b;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 52px; // place réservée au burger à gauche
+  z-index: 10;
+}
+
+.burger-menu {
+  position: fixed;
+  top: 8px;
+  left: 12px;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 20;
+  user-select: none;
+}
+
+.turn-counter {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.players-info {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 5vw, 48px);
+  min-width: 0;
+}
+
+.player-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  // Réinitialise l'apparence bouton : le profil est cliquable (joueur actif).
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    opacity: 0.85;
+  }
+
+  &--active {
+    opacity: 1;
+    border-color: currentColor;
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.player-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+}
+
+.player-stats {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.end-turn-button {
+  flex: 0 0 auto;
+  background-color: #f04e4e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-size: 18px;
+
+  &:hover {
+    background-color: #c03e3e;
+  }
+}
+
+// ---- Menu latéral (tiroir) ----
+.side-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 250px;
+  max-width: 85vw;
+  background-color: #3a3a3a;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 64px 16px 16px;
+  z-index: 15;
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease-in-out;
+
+  &.open {
+    transform: translateX(0);
+  }
+
+  button {
+    background-color: #555;
+    border: none;
+    border-radius: 4px;
+    padding: 10px;
+    color: white;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover {
+      background-color: #666;
+    }
+  }
+}
+
+.menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &__title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #a9a9a9;
+  }
+}
+
+.map-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  &__name {
+    font-weight: 600;
+  }
+
+  &__desc {
+    font-size: 11px;
+    color: #bdbdbd;
+  }
+
+  &--active {
+    background-color: #2f6f4f !important;
+    outline: 1px solid #4caf7d;
+  }
+}
+
+// ---- Zone de jeu ----
+.game-content {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0; // indispensable pour que le flex enfant puisse rétrécir
+  background: radial-gradient(circle at 50% 40%, #dfe9f3 0%, #b9c8dc 100%);
+}
+
+// ---- Boutique (barre du bas) ----
+.shop {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+  background: rgba(28, 28, 28, 0.82);
+  border-radius: 14px;
+  z-index: 12;
+  backdrop-filter: blur(3px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.shop-item {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 72px;
+  padding: 6px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+  &:active {
+    transform: scale(0.96);
+  }
+
+  &__icon {
+    width: 42px;
+    height: 42px;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+
+  &__name {
+    font-size: 11px;
+    text-align: center;
+    line-height: 1.1;
+  }
+
+  &--active {
+    background: rgba(255, 255, 255, 0.18);
+    // La couleur de bordure (joueur actif) est appliquée en style inline.
+  }
+}
+
+// ---- Adaptations mobile ----
+@media (max-width: 600px) {
+  .turn-counter {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+
+  .players-info {
+    gap: 10px;
+  }
+
+  .player-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  // Stats empilées verticalement pour tenir sans déborder sous le bouton.
+  .player-stats {
+    flex-direction: column;
+    font-size: 12px;
+    gap: 2px;
+  }
+
+  .end-turn-button {
+    padding: 8px 12px;
+    font-size: 16px;
+  }
+}
