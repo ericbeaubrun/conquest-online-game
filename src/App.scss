@@ -265,9 +265,30 @@ body {
     line-height: 1.1;
   }
 
+  &__cost {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #ffd766;
+  }
+
   &--active {
     background: rgba(255, 255, 255, 0.18);
     // La couleur de bordure (joueur actif) est appliquée en style inline.
+  }
+
+  &--disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+    &:active {
+      transform: none;
+    }
   }
 }
 

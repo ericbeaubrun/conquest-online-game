@@ -1,40 +1,35 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import HexBoard from "./game/HexBoard.jsx";
 import Shop from "./game/Shop.jsx";
-import { MAPS, getMapById, DEFAULT_MAP_ID } from "./game/maps.js";
-import { playersForMap } from "./game/players.js";
+import { MAPS } from "./game/maps.js";
+import { useGameSession } from "./game/session/useGameSession.js";
+import { setMap, endTurn } from "./game/engine/actions.js";
+import { incomeFor } from "./game/engine/selectors.js";
 
 const GameLayout = () => {
+    // État PARTAGÉ de la partie (tour, joueurs, possession, or...) via la
+    // session. En mode online, seul `useGameSession` changera d'implémentation.
+    const { state, dispatch } = useGameSession({ mode: "local" });
+    const { players, activePlayerId, turn, mapId, gold } = state;
+
+    // État d'INTERFACE local à ce client (ne transite pas par le serveur).
     const [menuOpen, setMenuOpen] = useState(false);
-    const [mapId, setMapId] = useState(DEFAULT_MAP_ID);
     const [selectedItem, setSelectedItem] = useState(null);
 
-    const map = getMapById(mapId);
-    const players = useMemo(() => playersForMap(map), [map]);
-    const [activePlayerId, setActivePlayerId] = useState(players[0].id);
-    const [turn, setTurn] = useState(1);
     const activeColor = players.find((p) => p.id === activePlayerId)?.color;
 
-    // Au changement de carte, on repart au tour 1 avec le premier joueur.
+    // Changement de carte : on abandonne l'item de boutique sélectionné.
     useEffect(() => {
-        setActivePlayerId(players[0].id);
         setSelectedItem(null);
-        setTurn(1);
-    }, [mapId]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [mapId]);
 
     const toggleMenu = () => setMenuOpen((open) => !open);
     const selectMap = (id) => {
-        setMapId(id);
+        dispatch(setMap(id));
         setMenuOpen(false);
     };
-
-    // Fin de tour : on passe la main au joueur suivant. Quand on revient au
-    // premier joueur, un tour complet s'est écoulé -> on incrémente le compteur.
-    const endTurn = () => {
-        const idx = players.findIndex((p) => p.id === activePlayerId);
-        const nextIdx = (idx + 1) % players.length;
-        setActivePlayerId(players[nextIdx].id);
-        if (nextIdx === 0) setTurn((t) => t + 1);
+    const handleEndTurn = () => {
+        dispatch(endTurn());
         setSelectedItem(null);
     };
 
@@ -67,19 +62,19 @@ const GameLayout = () => {
                                 aria-label={player.name}
                             />
                             <div className="player-stats">
-                                <div className="stat">
-                                    <span role="img" aria-label="money">💰</span>
-                                    100
+                                <div className="stat" title="Or en réserve">
+                                    <span role="img" aria-label="or">💰</span>
+                                    {gold[player.id] ?? 0}
                                 </div>
-                                <div className="stat">
-                                    <span role="img" aria-label="attack">⚔️</span>
-                                    50
+                                <div className="stat" title="Or gagné par tour">
+                                    <span role="img" aria-label="or par tour">📈</span>
+                                    +{incomeFor(state, player.id)}
                                 </div>
                             </div>
                         </div>
                     ))}
                 </div>
-                <button className="end-turn-button" title="Passer son tour" onClick={endTurn}>→</button>
+                <button className="end-turn-button" title="Passer son tour" onClick={handleEndTurn}>→</button>
             </div>
 
             {/* Menu latéral */}
@@ -111,15 +106,15 @@ const GameLayout = () => {
             {/* Zone de jeu */}
             <div className="game-content">
                 <HexBoard
-                    map={map}
-                    players={players}
-                    activePlayerId={activePlayerId}
+                    game={state}
+                    dispatch={dispatch}
                     selectedItem={selectedItem}
                 />
                 <Shop
                     selectedItem={selectedItem}
                     onSelect={setSelectedItem}
                     activeColor={activeColor}
+                    activeGold={gold[activePlayerId] ?? 0}
                 />
             </div>
         </div>

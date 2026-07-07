@@ -1,27 +1,19 @@
 import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {
-    HEX_SIZE,
-    hexToPixel,
-    hexPointsAttr,
-    hexId,
-    hexHeight,
-    computeBounds,
-    pixelToHex,
-    getNeighbors,
-} from './hex.js';
-import {TERRAIN_COLORS, BLOCKED_TERRAIN} from './terrain.js';
+import {hexId, hexHeight, pixelToHex} from './hex.js';
+import {TERRAIN_COLORS} from './terrain.js';
 import {ITEM_SRC} from './items.js';
+import {getLogicalBoard} from './engine/board.js';
+import {buildGeometry} from './render/geometry.js';
+import {computeReachable} from './engine/selectors.js';
+import {moveSoldier, mergeSoldier, placeItem} from './engine/actions.js';
 import './HexBoard.scss';
 
 const BASE_SRC = '/base.png';
 const MERGE_SRC = '/mergeIndicator.png';
 const ALLIES_SRC = '/alliesIndicator.png';
 const ACTION_SRC = '/possibleAction.png';
-const PADDING = HEX_SIZE * 0.8;
 const MIN_VIEW_RATIO = 0.14; // zoom avant max : on peut voir jusqu'à 14% de la carte
 const CLICK_THRESHOLD = 6; // px : en-deçà d'un déplacement, un pointeur = un clic
-const MAX_MOVE = 4; // pas de déplacement maximum d'un soldat
-const MERGE_MAX = 3; // niveau maximum d'un soldat fusionné
 
 // Couche des cases : ne dépend que de la carte, donc mémoïsée pour ne PAS être
 // re-rendue à chaque pan/zoom ni à chaque conquête (seul le viewBox change).
@@ -205,53 +197,19 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
     });
 });
 
-const HexBoard = ({map, players, activePlayerId, selectedItem}) => {
+// Plateau : composant purement PRÉSENTATIONNEL. Il lit l'état partagé de la
+// partie (`game`), en dérive la géométrie d'affichage, et envoie des actions
+// via `dispatch`. Il ne détient que l'état d'INTERFACE local à ce client :
+// la caméra (view) et la sélection courante (selectedSoldier) — deux choses
+// propres à chaque joueur, qui n'ont pas à transiter par le serveur.
+const HexBoard = ({game, dispatch, selectedItem}) => {
     const svgRef = useRef(null);
+    const {mapId, ownership, placements, movedSoldiers, activePlayerId, players} = game;
 
-    // Géométrie précalculée + index + vue de base + bases + possession initiale.
-    const {cells, cellMap, base, baseCells, initialOwnership} = useMemo(() => {
-        const cells = map.cells.map((c) => {
-            const {x, y} = hexToPixel(c);
-            return {
-                ...c,
-                id: hexId(c.q, c.r),
-                cx: x,
-                cy: y,
-                points: hexPointsAttr(x, y),
-                blocked: BLOCKED_TERRAIN.has(c.type),
-            };
-        });
-        const cellMap = new Map(cells.map((c) => [c.id, c]));
-
-        const b = computeBounds(map.cells);
-        const base = {
-            x: b.minX - PADDING,
-            y: b.minY - PADDING,
-            w: b.width + PADDING * 2,
-            h: b.height + PADDING * 2,
-        };
-
-        // Possession de départ : chaque base + ses voisines à son propriétaire.
-        const initialOwnership = new Map();
-        const baseCells = [];
-        map.spawns.forEach((spawn, i) => {
-            const pid = players[i].id;
-            const baseId = hexId(spawn.q, spawn.r);
-            if (cellMap.has(baseId)) {
-                baseCells.push(cellMap.get(baseId));
-                initialOwnership.set(baseId, pid);
-            }
-            getNeighbors(spawn.q, spawn.r).forEach((n) => {
-                const id = hexId(n.q, n.r);
-                if (cellMap.has(id)) initialOwnership.set(id, pid);
-            });
-        });
-
-        return {cells, cellMap, base, baseCells, initialOwnership};
-    }, [map, players]);
-
-    // Identifiants des cases-bases : protégées, non conquérables.
-    const baseIds = useMemo(() => new Set(baseCells.map((c) => c.id)), [baseCells]);
+    // Modèle logique (règles) et géométrie (rendu), mémoïsés par carte.
+    const board = useMemo(() => getLogicalBoard(mapId), [mapId]);
+    const {cells, cellMap, base, baseCells} = useMemo(() => buildGeometry(mapId), [mapId]);
+    const baseIds = board.baseIds;
 
     // Couleur par joueur (stable par carte) pour la couche territoire.
     const colors = useMemo(
@@ -259,35 +217,21 @@ const HexBoard = ({map, players, activePlayerId, selectedItem}) => {
         [players]
     );
 
-    const [ownership, setOwnership] = useState(initialOwnership);
-    const [placements, setPlacements] = useState(() => new Map());
     const [selectedSoldier, setSelectedSoldier] = useState(null); // id de la case
-    // Soldats déjà déplacés durant le tour courant (par identifiant unique).
-    const [movedSoldiers, setMovedSoldiers] = useState(() => new Set());
-    const soldierUid = useRef(0);
-    const nextUid = () => `s${(soldierUid.current += 1)}`;
     const [view, setView] = useState(base);
     const viewRef = useRef(view);
     viewRef.current = view; // toujours à jour pour les listeners natifs / gestes
 
-    // Changement de carte : recentre la vue, réinitialise possession et items.
+    // Changement de carte : recentre la vue sur la nouvelle carte.
     useEffect(() => {
         setView(base);
-        setOwnership(initialOwnership);
-        setPlacements(new Map());
-    }, [base, initialOwnership]);
+    }, [base]);
 
     // Désélectionne le soldat si on change de joueur, passe en mode boutique,
     // ou change de carte (un soldat sélectionné n'est plus pertinent).
     useEffect(() => {
         setSelectedSoldier(null);
-    }, [activePlayerId, selectedItem, initialOwnership]);
-
-    // Nouveau tour (changement de joueur actif) ou nouvelle carte : chaque
-    // soldat retrouve son droit de se déplacer une fois.
-    useEffect(() => {
-        setMovedSoldiers(new Set());
-    }, [activePlayerId, initialOwnership]);
+    }, [activePlayerId, selectedItem, mapId]);
 
     const baseSize = hexHeight() * 0.95;
     const itemSize = hexHeight() * 0.8;
@@ -303,72 +247,12 @@ const HexBoard = ({map, players, activePlayerId, selectedItem}) => {
         );
     }, [selectedItem, cells, ownership, activePlayerId, baseIds, placements]);
 
-    // Cases atteignables par le soldat sélectionné.
-    // Règles : 4 pas max en tout, dont AU PLUS 1 case hors du territoire (qui
-    // sera conquise et termine le déplacement). On traverse son propre
-    // territoire et les autres soldats, mais jamais une maison / tour / base.
-    // On collecte aussi : les fusions possibles (soldat allié non plein) et les
-    // structures alliées bloquantes (pour l'indicateur bouclier).
+    // Portée du soldat sélectionné (surbrillances + indicateurs). Calculée par
+    // le sélecteur partagé avec le reducer, garantissant des règles identiques.
     const reachable = useMemo(() => {
-        const moves = new Map(); // id -> { kind: 'move' | 'conquer' | 'merge' }
-        const allies = []; // bâtiments / bases alliés bloquants
-        if (selectedItem || !selectedSoldier) return {moves, allies};
-        const start = cellMap.get(selectedSoldier);
-        if (!start) return {moves, allies};
-
-        const dist = new Map([[selectedSoldier, 0]]);
-        const queue = [selectedSoldier];
-        const seenAlly = new Set();
-        while (queue.length) {
-            const curId = queue.shift();
-            const d = dist.get(curId);
-            if (d >= MAX_MOVE) continue; // plus de pas disponibles
-            const cur = cellMap.get(curId);
-            for (const nb of getNeighbors(cur.q, cur.r)) {
-                const nid = hexId(nb.q, nb.r);
-                const ncell = cellMap.get(nid);
-                if (!ncell || ncell.blocked) continue; // hors carte ou eau
-                const placed = placements.get(nid);
-                const isBase = baseIds.has(nid);
-                const isBuilding = placed && placed.type !== 'soldier';
-                if (isBase || isBuilding) {
-                    // Structure infranchissable : indicateur si elle est alliée.
-                    const owner = isBase ? ownership.get(nid) : placed.playerId;
-                    if (owner === activePlayerId && !seenAlly.has(nid)) {
-                        seenAlly.add(nid);
-                        allies.push(nid);
-                    }
-                    continue;
-                }
-                const owned = ownership.get(nid) === activePlayerId;
-                const isSoldier = placed && placed.type === 'soldier';
-                if (owned) {
-                    // On avance dans notre territoire (on traverse les soldats).
-                    if (!dist.has(nid)) {
-                        dist.set(nid, d + 1);
-                        queue.push(nid);
-                    }
-                    if (isSoldier) {
-                        // Fusion possible sur un soldat allié non plein.
-                        if (
-                            placed.playerId === activePlayerId &&
-                            (placed.level || 1) < MERGE_MAX &&
-                            !moves.has(nid)
-                        ) {
-                            moves.set(nid, {kind: 'merge'});
-                        }
-                    } else if (!moves.has(nid)) {
-                        moves.set(nid, {kind: 'move'}); // repositionnement
-                    }
-                } else if (!isSoldier) {
-                    // Case hors territoire : conquête (1 seule, terminale).
-                    if (!moves.has(nid)) moves.set(nid, {kind: 'conquer'});
-                }
-            }
-        }
-        moves.delete(selectedSoldier);
-        return {moves, allies};
-    }, [selectedItem, selectedSoldier, cellMap, placements, ownership, activePlayerId, baseIds]);
+        if (selectedItem || !selectedSoldier) return {moves: new Map(), allies: []};
+        return computeReachable(game, board, selectedSoldier);
+    }, [selectedItem, selectedSoldier, game, board]);
 
     // --- Écran -> coordonnées SVG (compatible preserveAspectRatio="meet") ---
     const clientToSvg = useCallback((clientX, clientY, v = viewRef.current) => {
@@ -429,54 +313,7 @@ const HexBoard = ({map, players, activePlayerId, selectedItem}) => {
         return () => svg.removeEventListener('wheel', onWheel);
     }, [clientToSvg, zoomFrom]);
 
-    // Déplace le soldat de `fromId` vers `toId` ; conquiert la case si demandé.
-    const moveSoldier = (fromId, toId, conquer) => {
-        const soldier = placements.get(fromId);
-        setPlacements((prev) => {
-            const s = prev.get(fromId);
-            if (!s || s.type !== 'soldier') return prev;
-            if (prev.has(toId)) return prev; // sécurité : destination occupée
-            const next = new Map(prev);
-            next.delete(fromId);
-            next.set(toId, s);
-            return next;
-        });
-        // Ce soldat a joué : il ne pourra plus se déplacer avant le prochain tour.
-        if (soldier?.uid) {
-            setMovedSoldiers((prev) => new Set(prev).add(soldier.uid));
-        }
-        if (conquer) {
-            setOwnership((prev) => {
-                const next = new Map(prev);
-                next.set(toId, activePlayerId);
-                return next;
-            });
-        }
-    };
-
-    // Fusionne le soldat `fromId` dans le soldat allié `toId` (niveau cumulé,
-    // plafonné à MERGE_MAX). Le soldat entrant est consommé.
-    const mergeSoldier = (fromId, toId) => {
-        const from = placements.get(fromId);
-        setPlacements((prev) => {
-            const f = prev.get(fromId);
-            const to = prev.get(toId);
-            if (!f || f.type !== 'soldier' || !to || to.type !== 'soldier') return prev;
-            if (f.playerId !== to.playerId) return prev; // uniquement entre alliés
-            const level = Math.min((to.level || 1) + (f.level || 1), MERGE_MAX);
-            if (level <= (to.level || 1)) return prev; // cible déjà au maximum
-            const next = new Map(prev);
-            next.delete(fromId);
-            next.set(toId, {...to, level});
-            return next;
-        });
-        // Le soldat entrant a joué son déplacement (il est consommé par la fusion).
-        if (from?.uid) {
-            setMovedSoldiers((prev) => new Set(prev).add(from.uid));
-        }
-    };
-
-    // --- Tap sur une case ---
+    // --- Tap sur une case : traduit un clic en action de jeu. ---
     const handleTap = (clientX, clientY) => {
         const {x, y} = clientToSvg(clientX, clientY);
         const {q, r} = pixelToHex({x, y});
@@ -485,18 +322,7 @@ const HexBoard = ({map, players, activePlayerId, selectedItem}) => {
 
         // Mode boutique : placement d'un item sur notre territoire.
         if (selectedItem) {
-            if (!cell || cell.blocked || baseIds.has(id)) return;
-            if (ownership.get(id) !== activePlayerId) return;
-            setPlacements((prev) => {
-                if (prev.has(id)) return prev; // case déjà occupée
-                const item =
-                    selectedItem === 'soldier'
-                        ? {type: 'soldier', playerId: activePlayerId, level: 1, uid: nextUid()}
-                        : {type: selectedItem, playerId: activePlayerId};
-                const next = new Map(prev);
-                next.set(id, item);
-                return next;
-            });
+            dispatch(placeItem(id, selectedItem));
             return;
         }
 
@@ -506,21 +332,22 @@ const HexBoard = ({map, players, activePlayerId, selectedItem}) => {
         if (selectedSoldier) {
             const dest = reachable.moves.get(id);
             if (dest) {
-                if (dest.kind === 'merge') mergeSoldier(selectedSoldier, id);
-                else moveSoldier(selectedSoldier, id, dest.kind === 'conquer');
+                if (dest.kind === 'merge') dispatch(mergeSoldier(selectedSoldier, id));
+                else dispatch(moveSoldier(selectedSoldier, id));
                 setSelectedSoldier(null);
                 return;
             }
         }
-        // (2) Sélectionner (ou changer) le soldat actif. Un soldat déjà déplacé
-        // ce tour n'est plus sélectionnable (il rejoue au prochain tour).
+        // (2) Sélectionner (ou changer) le soldat actif — ou le désélectionner si
+        // on reclique dessus. Un soldat déjà déplacé ce tour n'est plus
+        // sélectionnable (il rejoue au prochain tour).
         if (
             placed &&
             placed.type === 'soldier' &&
             placed.playerId === activePlayerId &&
             !movedSoldiers.has(placed.uid)
         ) {
-            setSelectedSoldier(id);
+            setSelectedSoldier((cur) => (cur === id ? null : id));
             return;
         }
         // (3) Tap ailleurs : désélection.
@@ -533,6 +360,11 @@ const HexBoard = ({map, players, activePlayerId, selectedItem}) => {
     const moved = useRef(false);
 
     const onPointerDown = (e) => {
+        // Clic droit : désélectionne le soldat sans démarrer de geste.
+        if (e.button === 2) {
+            setSelectedSoldier(null);
+            return;
+        }
         svgRef.current.setPointerCapture(e.pointerId);
         pointers.current.set(e.pointerId, {x: e.clientX, y: e.clientY});
         if (pointers.current.size === 1) {
