@@ -1,16 +1,13 @@
-import { ITEM_SRC } from './items.js';
 import { StatBar } from './SoldierPanel.jsx';
+import { soldierSkin } from './soldier.js';
 import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from './engine/rules.js';
 
-// Carte compacte d'un soldat (portrait + niveau + jauges PV/ATK).
+// Carte compacte d'un soldat (portrait selon le niveau + jauges PV/ATK).
 const Card = ({ soldier, color, label }) => (
     <div className="merge-card">
         <span className="merge-card__label">{label}</span>
         <div className="merge-card__portrait" style={{ borderColor: color }}>
-            <img src={ITEM_SRC.soldier} alt="Soldat" />
-            {(soldier.level || 1) >= 2 && (
-                <span className="merge-card__level">{soldier.level}</span>
-            )}
+            <img src={soldierSkin(soldier.level || 1)} alt="Soldat" />
         </div>
         <div className="merge-card__stats">
             <StatBar icon="❤️" label="Points de vie" value={soldier.hp} max={SOLDIER_HP_MAX} kind="hp" />

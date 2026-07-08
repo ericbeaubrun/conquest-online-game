@@ -26,6 +26,15 @@ export const BEHAVIORS = [
     { id: 'reinforcement', label: 'Renfort' },
 ];
 
+// Apparence (skin) d'un soldat selon son niveau : chaque niveau a son propre
+// sprite, ce qui remplace le badge numérique affiché auparavant.
+export const SOLDIER_SKINS = {
+    1: '/SoldierLVL1.png',
+    2: '/SoldierLVL2.png',
+    3: '/SoldierLVL3.png',
+};
+export const soldierSkin = (level) => SOLDIER_SKINS[level] || SOLDIER_SKINS[1];
+
 // Libellé affiché pour une valeur donnée (`null`/inconnu -> « Aucun(e) »).
 export const affinityLabel = (id) => AFFINITIES.find((a) => a.id === id)?.label ?? 'Aucune';
 export const bonusLabel = (id) => BONUSES.find((b) => b.id === id)?.label ?? 'Aucun';

@@ -3,6 +3,7 @@ import HexBoard from "./game/HexBoard.jsx";
 import Shop from "./game/Shop.jsx";
 import SoldierPanel from "./game/SoldierPanel.jsx";
 import BuildingPanel from "./game/BuildingPanel.jsx";
+import TreePanel from "./game/TreePanel.jsx";
 import MergePreview from "./game/MergePreview.jsx";
 import CombatPreview from "./game/CombatPreview.jsx";
 import { MAPS } from "./game/maps.js";
@@ -51,6 +52,13 @@ const GameLayout = () => {
                   }
                 : { type: "base", hp: BUILDING_STATS.base.hp, playerId: state.ownership.get(selection.id) }
             : null;
+    // Arbre sélectionné : on affiche ses infos (récompense + coût) et le joueur
+    // dont il occupe le territoire, le cas échéant.
+    const treeOwner =
+        selection?.kind === "tree"
+            ? players.find((p) => p.id === state.ownership.get(selection.id)) || null
+            : null;
+
     // La boutique bascule en mode « pose directe » quand une case vide est
     // sélectionnée : cliquer un item le pose immédiatement sur cette case.
     const placeTarget = selection?.kind === "tile" ? selection.id : null;
@@ -199,13 +207,15 @@ const GameLayout = () => {
                         defenderColor={colorOf(combatPreview.defender.playerId)}
                     />
                 )}
-                {/* Un soldat ou un bâtiment sélectionné affiche ses
+                {/* Un soldat, un bâtiment ou un arbre sélectionné affiche ses
                     caractéristiques ; sinon, la boutique (en mode pose directe
                     quand une case vide est sélectionnée). */}
                 {soldierView ? (
                     <SoldierPanel soldier={soldierView} color={colorOf(soldierView.playerId)} />
                 ) : buildingView ? (
                     <BuildingPanel building={buildingView} color={colorOf(buildingView.playerId)} />
+                ) : selection?.kind === "tree" ? (
+                    <TreePanel owner={treeOwner} />
                 ) : (
                     <Shop
                         selectedItem={selectedItem}

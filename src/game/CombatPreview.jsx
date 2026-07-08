@@ -1,22 +1,20 @@
 import { ITEM_SRC } from './items.js';
 import { StatBar } from './SoldierPanel.jsx';
+import { soldierSkin } from './soldier.js';
 import { combatResult, maxHp, maxAtk } from './engine/rules.js';
 
 // Image d'une unité (soldat ou bâtiment). La base n'est pas un item de boutique.
 const UNIT_SRC = { base: '/base.png', ...ITEM_SRC };
+const unitSrc = (unit) => (unit.type === 'soldier' ? soldierSkin(unit.level || 1) : UNIT_SRC[unit.type]);
 
 // Carte d'une unité au combat : PV APRÈS échange (barre réduite), dégâts subis
 // (−X) et tête de mort si l'unité tombe à 0. Gère soldats comme tours.
 const Card = ({ before, after, color, label, dmg }) => {
-    const isSoldier = before.type === 'soldier';
     return (
         <div className={`merge-card ${after.dead ? 'merge-card--dead' : ''}`}>
             <span className="merge-card__label">{label}</span>
             <div className="merge-card__portrait" style={{ borderColor: color }}>
-                <img src={UNIT_SRC[before.type]} alt={label} />
-                {isSoldier && (before.level || 1) >= 2 && (
-                    <span className="merge-card__level">{before.level}</span>
-                )}
+                <img src={unitSrc(before)} alt={label} />
                 {after.dead && (
                     <span className="merge-card__skull" role="img" aria-label="Éliminé">☠️</span>
                 )}

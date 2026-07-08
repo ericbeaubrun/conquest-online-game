@@ -120,6 +120,17 @@
     animation: hex-pulse 0.8s ease-in-out infinite;
   }
 
+  // Case d'un arbre abattable : accent vert forêt.
+  &__choppable {
+    fill: #4caf50;
+    fill-opacity: 0.3;
+    stroke: #2e7d32;
+    stroke-width: 3.5;
+    stroke-linejoin: round;
+    pointer-events: none;
+    animation: hex-pulse 0.9s ease-in-out infinite;
+  }
+
   // Case du soldat sélectionné.
   &__selected {
     fill: none;
@@ -128,19 +139,6 @@
     stroke-linejoin: round;
     stroke-dasharray: 7 4;
     pointer-events: none;
-  }
-}
-
-// Badge de niveau d'un soldat fusionné (en haut à droite du sprite).
-.soldier-badge {
-  &__bg {
-    fill: #1b1b1b;
-    stroke: #ffffff;
-    stroke-width: 1.5;
-  }
-  &__text {
-    fill: #ffffff;
-    font-family: "VT323", "Courier New", monospace;
   }
 }
 

@@ -3,7 +3,13 @@
 // réutilise pour valider les actions). Aucune dépendance à React ni au rendu.
 
 import { getNeighbors, hexId } from '../hex.js';
-import { MAX_MOVE, BASE_INCOME, canMerge, isAttackable } from './rules.js';
+import {
+    MAX_MOVE,
+    BASE_INCOME,
+    canMerge,
+    isAttackable,
+    TREE_INCOME_PENALTY,
+} from './rules.js';
 
 // Cases atteignables par le soldat `startId`.
 // Règles : MAX_MOVE pas max, dont AU PLUS 1 case hors du territoire (conquête,
@@ -33,6 +39,11 @@ export function computeReachable(state, board, startId) {
             const ncell = cellMap.get(nid);
             if (!ncell || ncell.blocked) continue; // hors carte ou eau
             const placed = placements.get(nid);
+            // Arbre : infranchissable, mais abattable par un soldat adjacent.
+            if (placed && placed.type === 'tree') {
+                if (!moves.has(nid)) moves.set(nid, { kind: 'chop' });
+                continue;
+            }
             const isBase = baseIds.has(nid);
             const isBuilding = placed && placed.type !== 'soldier';
             if (isBase || isBuilding) {
@@ -91,7 +102,19 @@ export function ownedCount(state, playerId) {
     return n;
 }
 
-// Revenu d'un joueur pour un tour : base + 1 or par case possédée.
+// Nombre d'arbres situés sur des cases possédées par un joueur (chacun ampute
+// son revenu). Un arbre sur une case neutre ne pénalise personne.
+export function treeCountFor(state, playerId) {
+    let n = 0;
+    for (const [id, placed] of state.placements) {
+        if (placed.type === 'tree' && state.ownership.get(id) === playerId) n += 1;
+    }
+    return n;
+}
+
+// Revenu d'un joueur pour un tour : base + 1 or par case possédée, moins la
+// pénalité des arbres sur son territoire (jamais négatif).
 export function incomeFor(state, playerId) {
-    return BASE_INCOME + ownedCount(state, playerId);
+    const gross = BASE_INCOME + ownedCount(state, playerId);
+    return Math.max(0, gross - treeCountFor(state, playerId) * TREE_INCOME_PENALTY);
 }

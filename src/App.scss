@@ -336,20 +336,6 @@ body {
     }
   }
 
-  &__level {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    min-width: 22px;
-    height: 22px;
-    padding: 0 4px;
-    background: #1b1b1b;
-    border: 2px solid #fff;
-    font-size: 16px;
-    line-height: 18px;
-    text-align: center;
-  }
-
   &__stats {
     display: flex;
     flex-direction: column;
@@ -427,6 +413,9 @@ body {
   &__value {
     color: #ffd766;
   }
+  &__value--cost {
+    color: #ff6b6b;
+  }
 }
 
 // ---- Aperçu de fusion (survol d'un allié fusionnable) ----
@@ -485,20 +474,6 @@ body {
       object-fit: contain;
       image-rendering: pixelated;
     }
-  }
-
-  &__level {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 4px;
-    background: #1b1b1b;
-    border: 2px solid #fff;
-    font-size: 14px;
-    line-height: 16px;
-    text-align: center;
   }
 
   &__stats {

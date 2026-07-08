@@ -1,5 +1,4 @@
-import { ITEM_SRC } from './items.js';
-import { affinityLabel, bonusLabel, behaviorLabel } from './soldier.js';
+import { affinityLabel, bonusLabel, behaviorLabel, soldierSkin } from './soldier.js';
 import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from './engine/rules.js';
 
 // Petite jauge « valeur / max » avec barre de remplissage. Exportée pour être
@@ -26,10 +25,7 @@ export const StatBar = ({ icon, label, value, max, kind }) => (
 const SoldierPanel = ({ soldier, color }) => (
     <div className="soldier-panel">
         <div className="soldier-panel__portrait" style={{ borderColor: color }}>
-            <img src={ITEM_SRC.soldier} alt="Soldat" />
-            {(soldier.level || 1) >= 2 && (
-                <span className="soldier-panel__level">{soldier.level}</span>
-            )}
+            <img src={soldierSkin(soldier.level || 1)} alt="Soldat" />
         </div>
 
         <div className="soldier-panel__stats">

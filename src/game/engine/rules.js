@@ -7,6 +7,16 @@ export const MERGE_MAX = 3; // niveau maximum d'un soldat fusionné
 export const BASE_INCOME = 10; // or gagné par tour avant le bonus de territoire
 export const STARTING_GOLD = 0; // or de départ de chaque joueur
 
+// Arbres (forêts) : objets neutres qui apparaissent au fil de la partie. Un
+// soldat adjacent peut abattre un arbre (gain immédiat), et un arbre situé sur
+// une case possédée ampute le revenu de ce joueur. Ils restent rares (plafond
+// en proportion de la carte) et se densifient avec l'avancée de la partie.
+export const TREE_REWARD = 10; // or gagné en abattant un arbre
+export const TREE_INCOME_PENALTY = 1; // -or/tour par arbre sur une case possédée
+export const TREE_MAX_RATIO = 0.1; // au plus 10% des cases couvertes d'arbres
+export const TREE_TURN_RAMP = 20; // montée en intensité jusqu'à ce tour
+export const TREE_SPAWN_CHANCE = 0.5; // proba de base par tentative (mise à l'échelle)
+
 // Statistiques de soldat : valeur de départ et plafond atteignable.
 export const SOLDIER_HP_DEFAULT = 20;
 export const SOLDIER_HP_MAX = 100;

@@ -2,14 +2,18 @@ import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {hexId, hexHeight, pixelToHex} from './hex.js';
 import {TERRAIN_COLORS} from './terrain.js';
 import {ITEM_SRC} from './items.js';
+import {soldierSkin} from './soldier.js';
 import {getLogicalBoard} from './engine/board.js';
 import {buildGeometry} from './render/geometry.js';
 import {computeReachable} from './engine/selectors.js';
-import {moveSoldier, mergeSoldier, attackSoldier, placeItem} from './engine/actions.js';
+import {moveSoldier, mergeSoldier, attackSoldier, chopTree, placeItem} from './engine/actions.js';
 import {SOLDIER_HP_MAX} from './engine/rules.js';
 import './HexBoard.scss';
 
 const BASE_SRC = '/base.png';
+const TREE_SRC = '/forestTree.png';
+// Images des items posés, arbres compris (les arbres ne sont pas en boutique).
+const PLACEMENT_SRC = {...ITEM_SRC, tree: TREE_SRC};
 const MERGE_SRC = '/mergeIndicator.png';
 const ALLIES_SRC = '/alliesIndicator.png';
 const ENEMIES_SRC = '/enemiesIndicator.png';
@@ -69,6 +73,7 @@ const MOVE_CLASS = {
     conquer: 'hex__conquerable',
     merge: 'hex__mergeable',
     combat: 'hex__attackable',
+    chop: 'hex__choppable',
 };
 const MoveHighlight = memo(function MoveHighlight({moves, cellMap}) {
     return [...moves.entries()].map(([id, info]) => {
@@ -161,9 +166,9 @@ const Bases = memo(function Bases({baseCells, size}) {
     ));
 });
 
-// Couche des items posés (soldats, maisons, tours), avec le badge de niveau
-// des soldats fusionnés (2 ou 3, en haut à droite du sprite) et, pour les
-// soldats, une barre de vie juste sous leurs pieds (sans déborder de la case).
+// Couche des items posés (soldats, maisons, tours). Le niveau d'un soldat se
+// lit désormais à son sprite (skin par niveau) plutôt qu'à un badge numérique ;
+// les soldats portent en plus une barre de vie sous leurs pieds.
 const Buildings = memo(function Buildings({placements, cellMap, size}) {
     // Géométrie de la barre de vie, en unités du sprite. Le bas de la barre
     // (~0.6·size sous le centre) reste au-dessus du bord de la case (0.625·size).
@@ -181,7 +186,7 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
         return (
             <g key={id} pointerEvents="none">
                 <image
-                    href={ITEM_SRC[placed.type]}
+                    href={isSoldier ? soldierSkin(level) : PLACEMENT_SRC[placed.type]}
                     x={cell.cx - size / 2}
                     y={cell.cy - size / 2}
                     width={size}
@@ -206,26 +211,6 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
                         />
                     </>
                 )}
-                {level >= 2 && (
-                    <>
-                        <circle
-                            cx={cell.cx + size * 0.3}
-                            cy={cell.cy - size * 0.3}
-                            r={size * 0.2}
-                            className="soldier-badge__bg"
-                        />
-                        <text
-                            x={cell.cx + size * 0.3}
-                            y={cell.cy - size * 0.3}
-                            fontSize={size * 0.3}
-                            className="soldier-badge__text"
-                            textAnchor="middle"
-                            dominantBaseline="central"
-                        >
-                            {level}
-                        </text>
-                    </>
-                )}
             </g>
         );
     });
@@ -241,6 +226,7 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
 //   - 'soldier'  : soldat du joueur actif encore jouable (actions possibles)
 //   - 'unit'     : soldat ennemi ou déjà déplacé (specs seules, sans action)
 //   - 'building' : case portant une base / tour / maison (image + points de vie)
+//   - 'tree'     : arbre (récompense d'abattage + coût de revenu)
 //   - 'tile'     : case vide du territoire actif (cible de pose depuis la boutique)
 // Renvoie `null` si la case n'est pas sélectionnable.
 function classifyCell(id, {placements, baseIds, ownership, activePlayerId, movedSoldiers}) {
@@ -250,6 +236,7 @@ function classifyCell(id, {placements, baseIds, ownership, activePlayerId, moved
             placed.playerId === activePlayerId && !movedSoldiers.has(placed.uid);
         return {id, kind: actionable ? 'soldier' : 'unit'};
     }
+    if (placed?.type === 'tree') return {id, kind: 'tree'}; // infos de l'arbre
     if (placed || baseIds.has(id)) return {id, kind: 'building'};
     if (ownership.get(id) === activePlayerId) return {id, kind: 'tile'};
     return null;
@@ -385,6 +372,7 @@ const HexBoard = ({game, dispatch, selectedItem, selection, onSelect, onHoverTar
             if (dest) {
                 if (dest.kind === 'merge') dispatch(mergeSoldier(selection.id, id));
                 else if (dest.kind === 'combat') dispatch(attackSoldier(selection.id, id));
+                else if (dest.kind === 'chop') dispatch(chopTree(selection.id, id));
                 else dispatch(moveSoldier(selection.id, id));
                 onSelect(null);
                 return;

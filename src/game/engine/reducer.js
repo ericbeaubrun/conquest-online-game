@@ -6,20 +6,24 @@ import {
     MOVE_SOLDIER,
     MERGE_SOLDIER,
     ATTACK_SOLDIER,
+    CHOP_TREE,
     PLACE_ITEM,
     END_TURN,
     SET_MAP,
 } from './actions.js';
 import { getLogicalBoard, createInitialState } from './board.js';
-import { computeReachable, ownedCount } from './selectors.js';
+import { computeReachable, incomeFor } from './selectors.js';
 import {
-    BASE_INCOME,
     SOLDIER_HP_DEFAULT,
     SOLDIER_ATK_DEFAULT,
     BUILDING_STATS,
     canMerge,
     mergedSoldier,
     combatResult,
+    TREE_REWARD,
+    TREE_MAX_RATIO,
+    TREE_TURN_RAMP,
+    TREE_SPAWN_CHANCE,
 } from './rules.js';
 import { ITEM_COST } from '../items.js';
 
@@ -113,6 +117,65 @@ function reduceAttack(state, { fromId, toId }) {
     return { ...state, placements, movedSoldiers };
 }
 
+// Abattage d'un arbre : un soldat actif adjacent détruit l'arbre, le joueur
+// gagne aussitôt de l'or, et le tour du soldat est consommé.
+function reduceChop(state, { fromId, toId }) {
+    const from = state.placements.get(fromId);
+    if (!from || from.type !== 'soldier') return state;
+    if (from.playerId !== state.activePlayerId) return state;
+    if (state.movedSoldiers.has(from.uid)) return state;
+
+    const board = getLogicalBoard(state.mapId);
+    const dest = computeReachable(state, board, fromId).moves.get(toId);
+    if (!dest || dest.kind !== 'chop') return state;
+
+    const tree = state.placements.get(toId);
+    if (!tree || tree.type !== 'tree') return state;
+
+    const placements = new Map(state.placements);
+    placements.delete(toId);
+    const purse = state.gold[state.activePlayerId] || 0;
+    const gold = { ...state.gold, [state.activePlayerId]: purse + TREE_REWARD };
+    const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
+    return { ...state, placements, gold, movedSoldiers };
+}
+
+// Apparition d'arbres en fin de tour. Le nombre tiré croît avec l'avancée de la
+// partie (jusqu'à `TREE_TURN_RAMP`) et le nombre de joueurs, mais reste borné
+// par le plafond global (`TREE_MAX_RATIO` de la carte). Renvoie la nouvelle
+// carte des items (inchangée si rien n'apparaît).
+function spawnTrees(state, board) {
+    const cap = Math.floor(board.cells.length * TREE_MAX_RATIO);
+    let treeCount = 0;
+    for (const p of state.placements.values()) if (p.type === 'tree') treeCount += 1;
+    const room = cap - treeCount;
+    if (room <= 0) return state.placements;
+
+    // Intensité 0→1 selon l'avancée ; une tentative par joueur (les parties à
+    // plus de joueurs voient donc davantage d'arbres).
+    const progress = Math.min(state.turn / TREE_TURN_RAMP, 1);
+    let want = 0;
+    for (let i = 0; i < state.players.length; i += 1) {
+        if (Math.random() < TREE_SPAWN_CHANCE * progress) want += 1;
+    }
+    want = Math.min(want, room);
+    if (want <= 0) return state.placements;
+
+    // Cases éligibles : libres, non bloquées (eau), hors base.
+    const eligible = board.cells.filter(
+        (c) => !c.blocked && !board.baseIds.has(c.id) && !state.placements.has(c.id)
+    );
+    if (!eligible.length) return state.placements;
+
+    const placements = new Map(state.placements);
+    for (let i = 0; i < want && eligible.length; i += 1) {
+        const idx = Math.floor(Math.random() * eligible.length);
+        const [cell] = eligible.splice(idx, 1);
+        placements.set(cell.id, { type: 'tree' });
+    }
+    return placements;
+}
+
 // Pose d'un item (soldat, maison, tour) sur une case du territoire actif.
 function reducePlace(state, { cellId, itemType }) {
     const board = getLogicalBoard(state.mapId);
@@ -149,9 +212,11 @@ function reduceEndTurn(state) {
     const { players, activePlayerId } = state;
     const idx = players.findIndex((p) => p.id === activePlayerId);
     const nextIdx = (idx + 1) % players.length;
-    const income = BASE_INCOME + ownedCount(state, activePlayerId);
+    const income = incomeFor(state, activePlayerId); // net de la pénalité d'arbres
+    const board = getLogicalBoard(state.mapId);
     return {
         ...state,
+        placements: spawnTrees(state, board),
         gold: { ...state.gold, [activePlayerId]: (state.gold[activePlayerId] || 0) + income },
         turn: nextIdx === 0 ? state.turn + 1 : state.turn,
         activePlayerId: players[nextIdx].id,
@@ -167,6 +232,8 @@ export function gameReducer(state, action) {
             return reduceMerge(state, action);
         case ATTACK_SOLDIER:
             return reduceAttack(state, action);
+        case CHOP_TREE:
+            return reduceChop(state, action);
         case PLACE_ITEM:
             return reducePlace(state, action);
         case END_TURN:
