@@ -2,10 +2,14 @@ import { useEffect, useState } from "react";
 import HexBoard from "./game/HexBoard.jsx";
 import Shop from "./game/Shop.jsx";
 import SoldierPanel from "./game/SoldierPanel.jsx";
+import BuildingPanel from "./game/BuildingPanel.jsx";
+import MergePreview from "./game/MergePreview.jsx";
+import CombatPreview from "./game/CombatPreview.jsx";
 import { MAPS } from "./game/maps.js";
 import { useGameSession } from "./game/session/useGameSession.js";
-import { setMap, endTurn } from "./game/engine/actions.js";
+import { setMap, endTurn, placeItem } from "./game/engine/actions.js";
 import { incomeFor } from "./game/engine/selectors.js";
+import { BUILDING_STATS, canMerge, mergedSoldier } from "./game/engine/rules.js";
 
 const GameLayout = () => {
     // État PARTAGÉ de la partie (tour, joueurs, possession, or...) via la
@@ -16,19 +20,63 @@ const GameLayout = () => {
     // État d'INTERFACE local à ce client (ne transite pas par le serveur).
     const [menuOpen, setMenuOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
-    // Case (id) du soldat sélectionné : pilote l'affichage boutique vs specs.
-    const [selectedSoldier, setSelectedSoldier] = useState(null);
+    // Sélection courante sur le plateau : { id, kind } où kind vaut 'soldier'
+    // (soldat jouable), 'unit' (soldat ennemi / déjà joué), 'building' (base,
+    // tour, maison) ou 'tile' (case vide de son territoire). Pilote le panneau
+    // affiché en bas (specs vs boutique).
+    const [selection, setSelection] = useState(null);
+    // Cible survolée par le joueur (soldat sélectionné) : { id, kind } où kind
+    // vaut 'merge' (allié fusionnable) ou 'combat' (ennemi attaquable).
+    const [hoverTarget, setHoverTarget] = useState(null);
 
     const activeColor = players.find((p) => p.id === activePlayerId)?.color;
-    // Données du soldat sélectionné (null si aucun, ou s'il vient de bouger).
-    const selectedSoldierData =
-        selectedSoldier != null ? state.placements.get(selectedSoldier) : null;
+    const colorOf = (playerId) => players.find((p) => p.id === playerId)?.color;
+
+    // Données du soldat/bâtiment sélectionné selon le type de sélection.
+    const selectedData = selection ? state.placements.get(selection.id) : null;
+    const soldierView =
+        selection && (selection.kind === "soldier" || selection.kind === "unit")
+            ? selectedData
+            : null;
+    // Bâtiment sélectionné : un item posé (tour, maison) ou la base d'une case
+    // spawn (absente de `placements`, d'où les valeurs synthétisées).
+    const buildingView =
+        selection && selection.kind === "building"
+            ? selectedData
+                ? {
+                      type: selectedData.type,
+                      hp: selectedData.hp ?? BUILDING_STATS[selectedData.type]?.hp ?? 0,
+                      atk: selectedData.atk,
+                      playerId: selectedData.playerId,
+                  }
+                : { type: "base", hp: BUILDING_STATS.base.hp, playerId: state.ownership.get(selection.id) }
+            : null;
+    // La boutique bascule en mode « pose directe » quand une case vide est
+    // sélectionnée : cliquer un item le pose immédiatement sur cette case.
+    const placeTarget = selection?.kind === "tile" ? selection.id : null;
+
+    // Soldat sélectionné et unité survolée : servent aux aperçus de fusion et
+    // de combat (affichés uniquement quand l'action est réellement valide).
+    const hoverSoldier = selection?.kind === "soldier" ? selectedData : null;
+    const targetSoldier =
+        hoverTarget && hoverTarget.id !== selection?.id
+            ? state.placements.get(hoverTarget.id)
+            : null;
+    const mergePreview =
+        hoverTarget?.kind === "merge" && hoverSoldier && targetSoldier && canMerge(hoverSoldier, targetSoldier)
+            ? { from: hoverSoldier, to: targetSoldier, result: mergedSoldier(hoverSoldier, targetSoldier) }
+            : null;
+    const combatPreview =
+        hoverTarget?.kind === "combat" && hoverSoldier && targetSoldier
+            ? { attacker: hoverSoldier, defender: targetSoldier }
+            : null;
 
     // Changement de carte ou de joueur actif : plus rien ne doit rester
-    // sélectionné (item de boutique comme soldat).
+    // sélectionné (item de boutique comme sélection de plateau).
     useEffect(() => {
         setSelectedItem(null);
-        setSelectedSoldier(null);
+        setSelection(null);
+        setHoverTarget(null);
     }, [mapId, activePlayerId]);
 
     const toggleMenu = () => setMenuOpen((open) => !open);
@@ -40,11 +88,19 @@ const GameLayout = () => {
         dispatch(endTurn());
         setSelectedItem(null);
     };
-    // Sélectionner un item de boutique referme le menu du soldat (et inversement,
-    // sélectionner un soldat se fait toujours hors mode boutique).
+    // Clic sur un item de boutique. Si une case vide est sélectionnée, l'item y
+    // est posé directement. Sinon, on (dé)sélectionne l'item pour le mode
+    // placement classique (surbrillance des cases, puis clic sur le plateau).
     const handleSelectItem = (id) => {
+        if (placeTarget) {
+            if (id) {
+                dispatch(placeItem(placeTarget, id));
+                setSelection(null);
+            }
+            return;
+        }
         setSelectedItem(id);
-        if (id) setSelectedSoldier(null);
+        if (id) setSelection(null);
     };
 
     return (
@@ -123,13 +179,33 @@ const GameLayout = () => {
                     game={state}
                     dispatch={dispatch}
                     selectedItem={selectedItem}
-                    selectedSoldier={selectedSoldier}
-                    onSelectSoldier={setSelectedSoldier}
+                    selection={selection}
+                    onSelect={setSelection}
+                    onHoverTarget={setHoverTarget}
                 />
-                {/* Un soldat sélectionné affiche ses caractéristiques ;
-                    sinon, la boutique. */}
-                {selectedSoldierData ? (
-                    <SoldierPanel soldier={selectedSoldierData} color={activeColor} />
+                {mergePreview && (
+                    <MergePreview
+                        from={mergePreview.from}
+                        to={mergePreview.to}
+                        result={mergePreview.result}
+                        color={activeColor}
+                    />
+                )}
+                {combatPreview && (
+                    <CombatPreview
+                        attacker={combatPreview.attacker}
+                        defender={combatPreview.defender}
+                        attackerColor={colorOf(combatPreview.attacker.playerId)}
+                        defenderColor={colorOf(combatPreview.defender.playerId)}
+                    />
+                )}
+                {/* Un soldat ou un bâtiment sélectionné affiche ses
+                    caractéristiques ; sinon, la boutique (en mode pose directe
+                    quand une case vide est sélectionnée). */}
+                {soldierView ? (
+                    <SoldierPanel soldier={soldierView} color={colorOf(soldierView.playerId)} />
+                ) : buildingView ? (
+                    <BuildingPanel building={buildingView} color={colorOf(buildingView.playerId)} />
                 ) : (
                     <Shop
                         selectedItem={selectedItem}

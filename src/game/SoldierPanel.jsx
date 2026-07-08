@@ -2,8 +2,9 @@ import { ITEM_SRC } from './items.js';
 import { affinityLabel, bonusLabel, behaviorLabel } from './soldier.js';
 import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from './engine/rules.js';
 
-// Petite jauge « valeur / max » avec barre de remplissage.
-const StatBar = ({ icon, label, value, max, kind }) => (
+// Petite jauge « valeur / max » avec barre de remplissage. Exportée pour être
+// réutilisée par le panneau des bâtiments (même style pixel).
+export const StatBar = ({ icon, label, value, max, kind }) => (
     <div className={`soldier-stat soldier-stat--${kind}`}>
         <span className="soldier-stat__icon" role="img" aria-label={label}>
             {icon}

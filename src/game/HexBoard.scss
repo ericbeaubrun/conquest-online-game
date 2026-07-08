@@ -109,6 +109,17 @@
     animation: hex-pulse 0.9s ease-in-out infinite;
   }
 
+  // Case d'un soldat ennemi attaquable : accent rouge.
+  &__attackable {
+    fill: #ff4d4d;
+    fill-opacity: 0.3;
+    stroke: #ff4d4d;
+    stroke-width: 3.5;
+    stroke-linejoin: round;
+    pointer-events: none;
+    animation: hex-pulse 0.8s ease-in-out infinite;
+  }
+
   // Case du soldat sélectionné.
   &__selected {
     fill: none;

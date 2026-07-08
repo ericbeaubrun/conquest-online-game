@@ -10,12 +10,14 @@
 
 export const MOVE_SOLDIER = 'MOVE_SOLDIER';
 export const MERGE_SOLDIER = 'MERGE_SOLDIER';
+export const ATTACK_SOLDIER = 'ATTACK_SOLDIER';
 export const PLACE_ITEM = 'PLACE_ITEM';
 export const END_TURN = 'END_TURN';
 export const SET_MAP = 'SET_MAP';
 
 export const moveSoldier = (fromId, toId) => ({ type: MOVE_SOLDIER, fromId, toId });
 export const mergeSoldier = (fromId, toId) => ({ type: MERGE_SOLDIER, fromId, toId });
+export const attackSoldier = (fromId, toId) => ({ type: ATTACK_SOLDIER, fromId, toId });
 export const placeItem = (cellId, itemType) => ({ type: PLACE_ITEM, cellId, itemType });
 export const endTurn = () => ({ type: END_TURN });
 export const setMap = (mapId) => ({ type: SET_MAP, mapId });

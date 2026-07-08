@@ -5,13 +5,14 @@ import {ITEM_SRC} from './items.js';
 import {getLogicalBoard} from './engine/board.js';
 import {buildGeometry} from './render/geometry.js';
 import {computeReachable} from './engine/selectors.js';
-import {moveSoldier, mergeSoldier, placeItem} from './engine/actions.js';
+import {moveSoldier, mergeSoldier, attackSoldier, placeItem} from './engine/actions.js';
 import {SOLDIER_HP_MAX} from './engine/rules.js';
 import './HexBoard.scss';
 
 const BASE_SRC = '/base.png';
 const MERGE_SRC = '/mergeIndicator.png';
 const ALLIES_SRC = '/alliesIndicator.png';
+const ENEMIES_SRC = '/enemiesIndicator.png';
 const ACTION_SRC = '/possibleAction.png';
 const MIN_VIEW_RATIO = 0.14; // zoom avant max : on peut voir jusqu'à 14% de la carte
 const CLICK_THRESHOLD = 6; // px : en-deçà d'un déplacement, un pointeur = un clic
@@ -67,6 +68,7 @@ const MOVE_CLASS = {
     move: 'hex__reachable',
     conquer: 'hex__conquerable',
     merge: 'hex__mergeable',
+    combat: 'hex__attackable',
 };
 const MoveHighlight = memo(function MoveHighlight({moves, cellMap}) {
     return [...moves.entries()].map(([id, info]) => {
@@ -103,6 +105,9 @@ const Indicators = memo(function Indicators({moves, allies, cellMap, size}) {
             {[...moves.entries()]
                 .filter(([, info]) => info.kind === 'merge')
                 .map(([id]) => icon(id, MERGE_SRC, 'm' + id))}
+            {[...moves.entries()]
+                .filter(([, info]) => info.kind === 'combat')
+                .map(([id]) => icon(id, ENEMIES_SRC, 'c' + id))}
             {allies.map((id) => icon(id, ALLIES_SRC, 'a' + id))}
         </>
     );
@@ -232,7 +237,25 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
 // d'INTERFACE remonté au parent — pour qu'il affiche le menu du soldat à la
 // place de la boutique — mais reste local à ce client (elle ne transite pas
 // par le serveur). La caméra (view) reste, elle, entièrement interne.
-const HexBoard = ({game, dispatch, selectedItem, selectedSoldier, onSelectSoldier}) => {
+// Classe une case tapée en type de sélection :
+//   - 'soldier'  : soldat du joueur actif encore jouable (actions possibles)
+//   - 'unit'     : soldat ennemi ou déjà déplacé (specs seules, sans action)
+//   - 'building' : case portant une base / tour / maison (image + points de vie)
+//   - 'tile'     : case vide du territoire actif (cible de pose depuis la boutique)
+// Renvoie `null` si la case n'est pas sélectionnable.
+function classifyCell(id, {placements, baseIds, ownership, activePlayerId, movedSoldiers}) {
+    const placed = placements.get(id);
+    if (placed?.type === 'soldier') {
+        const actionable =
+            placed.playerId === activePlayerId && !movedSoldiers.has(placed.uid);
+        return {id, kind: actionable ? 'soldier' : 'unit'};
+    }
+    if (placed || baseIds.has(id)) return {id, kind: 'building'};
+    if (ownership.get(id) === activePlayerId) return {id, kind: 'tile'};
+    return null;
+}
+
+const HexBoard = ({game, dispatch, selectedItem, selection, onSelect, onHoverTarget}) => {
     const svgRef = useRef(null);
     const {mapId, ownership, placements, movedSoldiers, activePlayerId, players} = game;
 
@@ -273,9 +296,9 @@ const HexBoard = ({game, dispatch, selectedItem, selectedSoldier, onSelectSoldie
     // Portée du soldat sélectionné (surbrillances + indicateurs). Calculée par
     // le sélecteur partagé avec le reducer, garantissant des règles identiques.
     const reachable = useMemo(() => {
-        if (selectedItem || !selectedSoldier) return {moves: new Map(), allies: []};
-        return computeReachable(game, board, selectedSoldier);
-    }, [selectedItem, selectedSoldier, game, board]);
+        if (selectedItem || selection?.kind !== 'soldier') return {moves: new Map(), allies: []};
+        return computeReachable(game, board, selection.id);
+    }, [selectedItem, selection, game, board]);
 
     // --- Écran -> coordonnées SVG (compatible preserveAspectRatio="meet") ---
     const clientToSvg = useCallback((clientX, clientY, v = viewRef.current) => {
@@ -349,33 +372,58 @@ const HexBoard = ({game, dispatch, selectedItem, selectedSoldier, onSelectSoldie
             return;
         }
 
-        // Mode déplacement.
-        const placed = cell ? placements.get(id) : null;
-        // (1) Un soldat est sélectionné et la case tapée est une action valide.
-        if (selectedSoldier) {
+        // Tap hors carte : désélection éventuelle.
+        if (!cell) {
+            if (selection) onSelect(null);
+            return;
+        }
+
+        // (1) Un soldat jouable est sélectionné et la case tapée est une action
+        // valide (déplacement, conquête ou fusion).
+        if (selection?.kind === 'soldier') {
             const dest = reachable.moves.get(id);
             if (dest) {
-                if (dest.kind === 'merge') dispatch(mergeSoldier(selectedSoldier, id));
-                else dispatch(moveSoldier(selectedSoldier, id));
-                onSelectSoldier(null);
+                if (dest.kind === 'merge') dispatch(mergeSoldier(selection.id, id));
+                else if (dest.kind === 'combat') dispatch(attackSoldier(selection.id, id));
+                else dispatch(moveSoldier(selection.id, id));
+                onSelect(null);
                 return;
             }
         }
-        // (2) Sélectionner (ou changer) le soldat actif — ou le désélectionner si
-        // on reclique dessus. Un soldat déjà déplacé ce tour n'est plus
-        // sélectionnable (il rejoue au prochain tour).
-        if (
-            placed &&
-            placed.type === 'soldier' &&
-            placed.playerId === activePlayerId &&
-            !movedSoldiers.has(placed.uid)
-        ) {
-            onSelectSoldier((cur) => (cur === id ? null : id));
+
+        // (2) Sinon, on (dé)sélectionne la case selon son contenu. Recliquer la
+        // case déjà sélectionnée la désélectionne (même geste dans les deux sens).
+        const next = classifyCell(id, {
+            placements,
+            baseIds,
+            ownership,
+            activePlayerId,
+            movedSoldiers,
+        });
+        if (selection && next && next.id === selection.id) {
+            onSelect(null);
             return;
         }
-        // (3) Tap ailleurs : désélection.
-        if (selectedSoldier) onSelectSoldier(null);
+        onSelect(next); // `next` peut être null : la case n'est pas sélectionnable.
     };
+
+    // --- Survol : aperçu de fusion ou de combat selon la cible pointée. ---
+    const onHover = (e) => {
+        if (!onHoverTarget) return;
+        // Uniquement hors geste (pas de bouton enfoncé) et soldat sélectionné.
+        if (selection?.kind !== 'soldier' || pointers.current.size > 0) {
+            onHoverTarget(null);
+            return;
+        }
+        const {x, y} = clientToSvg(e.clientX, e.clientY);
+        const {q, r} = pixelToHex({x, y});
+        const id = hexId(q, r);
+        const move = reachable.moves.get(id);
+        onHoverTarget(move && (move.kind === 'merge' || move.kind === 'combat')
+            ? {id, kind: move.kind}
+            : null);
+    };
+    const onLeave = () => onHoverTarget && onHoverTarget(null);
 
     // --- Pointeurs : glisser (pan) + pincer (pinch) + tap (conquérir) ---
     const pointers = useRef(new Map()); // pointerId -> {x, y}
@@ -383,9 +431,9 @@ const HexBoard = ({game, dispatch, selectedItem, selectedSoldier, onSelectSoldie
     const moved = useRef(false);
 
     const onPointerDown = (e) => {
-        // Clic droit : désélectionne le soldat sans démarrer de geste.
+        // Clic droit : désélectionne sans démarrer de geste.
         if (e.button === 2) {
-            onSelectSoldier(null);
+            onSelect(null);
             return;
         }
         svgRef.current.setPointerCapture(e.pointerId);
@@ -479,6 +527,8 @@ const HexBoard = ({game, dispatch, selectedItem, selectedSoldier, onSelectSoldie
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerUp}
+                onMouseMove={onHover}
+                onMouseLeave={onLeave}
                 onContextMenu={(e) => e.preventDefault()}
                 role="group"
                 aria-label="Plateau de jeu hexagonal"
@@ -486,17 +536,15 @@ const HexBoard = ({game, dispatch, selectedItem, selectedSoldier, onSelectSoldie
                 <Tiles cells={cells}/>
                 <Territory cells={cells} ownership={ownership} colors={colors}/>
                 {selectedItem && <Highlight cells={placeableCells}/>}
-                {!selectedItem && selectedSoldier && (
-                    <>
-                        {cellMap.get(selectedSoldier) && (
-                            <polygon
-                                points={cellMap.get(selectedSoldier).points}
-                                className="hex__selected"
-                                pointerEvents="none"
-                            />
-                        )}
-                        <MoveHighlight moves={reachable.moves} cellMap={cellMap}/>
-                    </>
+                {!selectedItem && selection && cellMap.get(selection.id) && (
+                    <polygon
+                        points={cellMap.get(selection.id).points}
+                        className="hex__selected"
+                        pointerEvents="none"
+                    />
+                )}
+                {!selectedItem && selection?.kind === 'soldier' && (
+                    <MoveHighlight moves={reachable.moves} cellMap={cellMap}/>
                 )}
                 <Bases baseCells={baseCells} size={baseSize}/>
                 <Buildings placements={placements} cellMap={cellMap} size={itemSize}/>
@@ -506,9 +554,9 @@ const HexBoard = ({game, dispatch, selectedItem, selectedSoldier, onSelectSoldie
                     size={itemSize}
                     movedSoldiers={movedSoldiers}
                     activePlayerId={activePlayerId}
-                    selectedId={selectedItem ? null : selectedSoldier}
+                    selectedId={selectedItem || selection?.kind !== 'soldier' ? null : selection.id}
                 />
-                {!selectedItem && selectedSoldier && (
+                {!selectedItem && selection?.kind === 'soldier' && (
                     <Indicators
                         moves={reachable.moves}
                         allies={reachable.allies}

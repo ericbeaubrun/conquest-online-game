@@ -3,7 +3,7 @@
 // réutilise pour valider les actions). Aucune dépendance à React ni au rendu.
 
 import { getNeighbors, hexId } from '../hex.js';
-import { MAX_MOVE, MERGE_MAX, BASE_INCOME } from './rules.js';
+import { MAX_MOVE, BASE_INCOME, canMerge, isAttackable } from './rules.js';
 
 // Cases atteignables par le soldat `startId`.
 // Règles : MAX_MOVE pas max, dont AU PLUS 1 case hors du territoire (conquête,
@@ -18,6 +18,7 @@ export function computeReachable(state, board, startId) {
     const start = cellMap.get(startId);
     if (!start) return { moves, allies };
     const { placements, ownership, activePlayerId } = state;
+    const mover = placements.get(startId); // soldat qui se déplace (pour la fusion)
 
     const dist = new Map([[startId, 0]]);
     const queue = [startId];
@@ -35,16 +36,26 @@ export function computeReachable(state, board, startId) {
             const isBase = baseIds.has(nid);
             const isBuilding = placed && placed.type !== 'soldier';
             if (isBase || isBuilding) {
-                // Structure infranchissable : indicateur si elle est alliée.
+                // Structure infranchissable : indicateur si elle est alliée,
+                // cible de combat si c'est une tour ennemie attaquable.
                 const owner = isBase ? ownership.get(nid) : placed.playerId;
-                if (owner === activePlayerId && !seenAlly.has(nid)) {
-                    seenAlly.add(nid);
-                    allies.push(nid);
+                if (owner === activePlayerId) {
+                    if (!seenAlly.has(nid)) {
+                        seenAlly.add(nid);
+                        allies.push(nid);
+                    }
+                } else if (isBuilding && isAttackable(placed) && !moves.has(nid)) {
+                    moves.set(nid, { kind: 'combat' });
                 }
                 continue;
             }
-            const owned = ownership.get(nid) === activePlayerId;
             const isSoldier = placed && placed.type === 'soldier';
+            // Soldat ennemi : cible de combat (terminale, infranchissable).
+            if (isSoldier && placed.playerId !== activePlayerId) {
+                if (!moves.has(nid)) moves.set(nid, { kind: 'combat' });
+                continue;
+            }
+            const owned = ownership.get(nid) === activePlayerId;
             if (owned) {
                 // On avance dans notre territoire (on traverse les soldats).
                 if (!dist.has(nid)) {
@@ -52,10 +63,10 @@ export function computeReachable(state, board, startId) {
                     queue.push(nid);
                 }
                 if (isSoldier) {
-                    // Fusion possible sur un soldat allié non plein.
+                    // Fusion possible sur un soldat allié de MÊME niveau.
                     if (
                         placed.playerId === activePlayerId &&
-                        (placed.level || 1) < MERGE_MAX &&
+                        canMerge(mover, placed) &&
                         !moves.has(nid)
                     ) {
                         moves.set(nid, { kind: 'merge' });

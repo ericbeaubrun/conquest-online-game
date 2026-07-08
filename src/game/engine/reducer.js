@@ -2,14 +2,24 @@
 // de mutation vivent ici et nulle part ailleurs. C'est le point unique qui
 // pourra être rejoué à l'identique côté serveur en mode « online ».
 
-import { MOVE_SOLDIER, MERGE_SOLDIER, PLACE_ITEM, END_TURN, SET_MAP } from './actions.js';
+import {
+    MOVE_SOLDIER,
+    MERGE_SOLDIER,
+    ATTACK_SOLDIER,
+    PLACE_ITEM,
+    END_TURN,
+    SET_MAP,
+} from './actions.js';
 import { getLogicalBoard, createInitialState } from './board.js';
 import { computeReachable, ownedCount } from './selectors.js';
 import {
-    MERGE_MAX,
     BASE_INCOME,
     SOLDIER_HP_DEFAULT,
     SOLDIER_ATK_DEFAULT,
+    BUILDING_STATS,
+    canMerge,
+    mergedSoldier,
+    combatResult,
 } from './rules.js';
 import { ITEM_COST } from '../items.js';
 
@@ -64,13 +74,41 @@ function reduceMerge(state, { fromId, toId }) {
     if (!dest || dest.kind !== 'merge') return state;
 
     const to = state.placements.get(toId);
-    if (!to || to.type !== 'soldier' || to.playerId !== state.activePlayerId) return state;
-    const level = Math.min((to.level || 1) + (from.level || 1), MERGE_MAX);
-    if (level <= (to.level || 1)) return state; // cible déjà au maximum
+    if (!to || to.playerId !== state.activePlayerId) return state;
+    if (!canMerge(from, to)) return state; // niveaux différents ou cible au max
 
     const placements = new Map(state.placements);
     placements.delete(fromId);
-    placements.set(toId, { ...to, level });
+    placements.set(toId, mergedSoldier(from, to));
+    const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
+    return { ...state, placements, movedSoldiers };
+}
+
+// Combat : le soldat actif attaque un soldat ennemi adjacent. Les deux unités
+// se retirent mutuellement des PV (égaux à l'attaque adverse) ; celles tombées
+// à 0 meurent (retirées du plateau). L'attaquant reste sur sa case et son tour
+// est consommé.
+function reduceAttack(state, { fromId, toId }) {
+    const from = state.placements.get(fromId);
+    if (!from || from.type !== 'soldier') return state;
+    if (from.playerId !== state.activePlayerId) return state;
+    if (state.movedSoldiers.has(from.uid)) return state;
+
+    const board = getLogicalBoard(state.mapId);
+    const dest = computeReachable(state, board, fromId).moves.get(toId);
+    if (!dest || dest.kind !== 'combat') return state;
+
+    // La cible peut être un soldat OU une tour ennemie (déjà validée `combat`).
+    const to = state.placements.get(toId);
+    if (!to || to.playerId === state.activePlayerId) return state;
+
+    const { attacker, defender } = combatResult(from, to);
+    const placements = new Map(state.placements);
+    if (attacker.dead) placements.delete(fromId);
+    else placements.set(fromId, { ...from, hp: attacker.hp });
+    if (defender.dead) placements.delete(toId);
+    else placements.set(toId, { ...to, hp: defender.hp });
+
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
     return { ...state, placements, movedSoldiers };
 }
@@ -95,7 +133,9 @@ function reducePlace(state, { cellId, itemType }) {
         uidSeq += 1;
         item = makeSoldier(state.activePlayerId, `s${uidSeq}`);
     } else {
-        item = { type: itemType, playerId: state.activePlayerId };
+        const stats = BUILDING_STATS[itemType];
+        item = { type: itemType, playerId: state.activePlayerId, hp: stats?.hp ?? 0 };
+        if (stats?.atk != null) item.atk = stats.atk; // tours : attaque de riposte
     }
     placements.set(cellId, item);
     const gold = { ...state.gold, [state.activePlayerId]: purse - cost };
@@ -125,6 +165,8 @@ export function gameReducer(state, action) {
             return reduceMove(state, action);
         case MERGE_SOLDIER:
             return reduceMerge(state, action);
+        case ATTACK_SOLDIER:
+            return reduceAttack(state, action);
         case PLACE_ITEM:
             return reducePlace(state, action);
         case END_TURN:
