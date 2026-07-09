@@ -17,6 +17,8 @@ import { computeReachable, incomeFor } from './selectors.js';
 import {
     SOLDIER_HP_DEFAULT,
     SOLDIER_ATK_DEFAULT,
+    SOLDIER_HP_MAX,
+    SOLDIER_ATK_MAX,
     BUILDING_STATS,
     canMerge,
     mergedSoldier,
@@ -27,7 +29,29 @@ import {
     TREE_SPAWN_CHANCE,
 } from './rules.js';
 import { ITEM_COST } from '../items.js';
-import { CHALLENGE_METRICS, BONUS_OFFERS, isBonusUnlocked } from '../soldier.js';
+import {
+    CHALLENGE_METRICS,
+    BONUS_OFFERS,
+    isBonusUnlocked,
+    SKELETON_SRC,
+    SKELETON_HP,
+    SKELETON_ATK,
+    WARRIOR_HP,
+    WARRIOR_ATK,
+    WARRIOR_KILL_REWARD,
+    ALCHEMIST_WEAK_HP,
+    ALCHEMIST_ATK_BUFF,
+    ALCHEMIST_HP_BUFF,
+    KING_INCOME_MULT,
+    isSkeleton,
+    WARLOCK_HP,
+    WARLOCK_ATK,
+    SKELETON2_SRC,
+    SKELETON2_HP,
+    SKELETON2_ATK,
+    WARLOCK_SUMMON_CHANCE,
+    PALADIN_HP_REGEN,
+} from '../soldier.js';
 import { getNeighbors, hexId } from '../hex.js';
 
 // Fabrique un soldat neuf avec ses caractéristiques par défaut. Centralisé ici
@@ -45,6 +69,29 @@ function makeSoldier(playerId, uid) {
         behavior: null, // conquete | attaque | defense | arbre | renfort | null
         // Avancement des défis PROPRE à ce soldat (metric -> compteur). Sert à
         // débloquer les bonus. Voir CHALLENGE_METRICS dans soldier.js.
+        progress: {},
+    };
+}
+
+// Squelette invoqué par les bonus « Mort-vivant » (à la mort du porteur) et
+// « Démoniste » (chaque tour). C'est un soldat allié à part entière (il se
+// déplace, combat, compte pour le territoire) mais avec son propre sprite
+// (`skin`) et des statistiques réduites. Il ne porte aucun bonus et ne peut donc
+// pas en réinvoquer un autre. Les caractéristiques (skin/hp/atk) sont
+// paramétrables pour distinguer les deux invocations.
+function makeSkeleton(playerId, uid, { skin = SKELETON_SRC, hp = SKELETON_HP, atk = SKELETON_ATK } = {}) {
+    return {
+        type: 'soldier',
+        unit: 'skeleton', // sous-type : occupe le plateau comme un soldat, mais
+        playerId, //          ne fusionne pas et ne porte jamais de bonus.
+        uid,
+        level: 1,
+        hp,
+        atk,
+        affinity: null,
+        bonus: null,
+        behavior: null,
+        skin,
         progress: {},
     };
 }
@@ -70,9 +117,16 @@ function reduceMove(state, { fromId, toId }) {
 
     // Avancement des défis du soldat : une conquête compte 1 case conquise ; un
     // repositionnement dans son territoire compte le nombre de cases parcourues.
+    // Une case est « ennemie » quand elle appartient déjà à un adversaire (par
+    // opposition à une case neutre encore inoccupée).
+    const prevOwner = state.ownership.get(toId);
+    const isEnemyCase = prevOwner != null && prevOwner !== state.activePlayerId;
     let moved = soldier;
     if (dest.kind === 'conquer') {
         moved = withProgress(moved, CHALLENGE_METRICS.CASES_CONQUERED, 1);
+        if (isEnemyCase) {
+            moved = withProgress(moved, CHALLENGE_METRICS.ENEMY_CASES_CONQUERED, 1);
+        }
     } else {
         const steps = reachable.dist.get(toId) || 1;
         moved = withProgress(moved, CHALLENGE_METRICS.CASES_TRAVELED_OWN, steps);
@@ -86,10 +140,14 @@ function reduceMove(state, { fromId, toId }) {
     if (dest.kind === 'conquer') {
         ownership = new Map(ownership);
         ownership.set(toId, state.activePlayerId);
-        // Bonus « Aventurier » : récolte 1 or par case conquise.
-        if (soldier.bonus === 'adventurer') {
+        // Bonus « Aventurier » : récolte 1 or par case conquise. Bonus
+        // « Voleur » : 1 or supplémentaire par case volée à un adversaire.
+        let reward = 0;
+        if (soldier.bonus === 'adventurer') reward += 1;
+        if (soldier.bonus === 'thief' && isEnemyCase) reward += 1;
+        if (reward > 0) {
             const purse = state.gold[state.activePlayerId] || 0;
-            gold = { ...state.gold, [state.activePlayerId]: purse + 1 };
+            gold = { ...state.gold, [state.activePlayerId]: purse + reward };
         }
     }
     const movedSoldiers = new Set(state.movedSoldiers).add(soldier.uid);
@@ -111,9 +169,21 @@ function reduceMerge(state, { fromId, toId }) {
     if (!to || to.playerId !== state.activePlayerId) return state;
     if (!canMerge(from, to)) return state; // niveaux différents ou cible au max
 
+    let merged = mergedSoldier(from, to);
+    // Défi « Alchimiste » : le soldat de niveau 2 issu de DEUX soldats affaiblis
+    // (PV < seuil chacun) débloque le bonus. La progression voyage avec le
+    // soldat fusionné (elle survit aux fusions suivantes via `mergedSoldier`).
+    if (
+        (merged.level || 1) === 2 &&
+        (from.hp || 0) < ALCHEMIST_WEAK_HP &&
+        (to.hp || 0) < ALCHEMIST_WEAK_HP
+    ) {
+        merged = withProgress(merged, CHALLENGE_METRICS.ALCHEMIST_MERGE, 1);
+    }
+
     const placements = new Map(state.placements);
     placements.delete(fromId);
-    placements.set(toId, mergedSoldier(from, to));
+    placements.set(toId, merged);
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
     return { ...state, placements, movedSoldiers };
 }
@@ -138,13 +208,74 @@ function reduceAttack(state, { fromId, toId }) {
 
     const { attacker, defender } = combatResult(from, to);
     const placements = new Map(state.placements);
-    if (attacker.dead) placements.delete(fromId);
-    else placements.set(fromId, { ...from, hp: attacker.hp });
-    if (defender.dead) placements.delete(toId);
-    else placements.set(toId, { ...to, hp: defender.hp });
+    let uidSeq = state.uidSeq;
+
+    // Applique l'issue du combat sur une case : l'unité survivante garde ses PV
+    // à jour ; l'unité morte quitte le plateau, sauf « Mort-vivant » qui laisse
+    // un squelette allié (5/10) sur sa case. Renvoie l'unité morte (ou null).
+    const settle = (id, unit, outcome) => {
+        if (!outcome.dead) {
+            let survivor = { ...unit, hp: outcome.hp };
+            // Défi « Guerrier » : chaque combat terminé en vie compte pour un soldat.
+            if (unit.type === 'soldier') {
+                survivor = withProgress(survivor, CHALLENGE_METRICS.COMBATS_SURVIVED, 1);
+            }
+            placements.set(id, survivor);
+            return null;
+        }
+        if (unit.type === 'soldier' && unit.bonus === 'undead') {
+            uidSeq += 1;
+            placements.set(id, makeSkeleton(unit.playerId, `s${uidSeq}`));
+        } else {
+            placements.delete(id);
+        }
+        return unit;
+    };
+
+    settle(fromId, from, attacker);
+    const deadDefender = settle(toId, to, defender);
+
+    // Défi « Mort-vivant » : tuer un soldat ennemi de niveau ≥ 2. Crédité à
+    // l'attaquant seulement s'il survit (sinon sa progression disparaît avec lui).
+    if (
+        !attacker.dead &&
+        deadDefender?.type === 'soldier' &&
+        (deadDefender.level || 1) >= 2
+    ) {
+        const alive = placements.get(fromId);
+        if (alive?.uid === from.uid) {
+            placements.set(fromId, withProgress(alive, CHALLENGE_METRICS.ENEMIES_KILLED_L2, 1));
+        }
+    }
+
+    // Défi & bonus « Chevalier noir » : tuer un squelette au combat le crédite
+    // (débloque le bonus), et un chevalier noir équipé ABSORBE ses statistiques
+    // (les additionne aux siennes, comme une fusion, plafonnées).
+    if (!attacker.dead && isSkeleton(deadDefender)) {
+        const alive = placements.get(fromId);
+        if (alive?.uid === from.uid) {
+            let knight = withProgress(alive, CHALLENGE_METRICS.SKELETONS_KILLED, 1);
+            if (from.bonus === 'blackKnight') {
+                knight = {
+                    ...knight,
+                    hp: Math.min((knight.hp || 0) + (to.hp || 0), SOLDIER_HP_MAX),
+                    atk: Math.min((knight.atk || 0) + (to.atk || 0), SOLDIER_ATK_MAX),
+                };
+            }
+            placements.set(fromId, knight);
+        }
+    }
+
+    // Bonus « Guerrier » : tuer un ennemi (soldat ou tour) rapporte une prime,
+    // à condition que l'attaquant survive au combat.
+    let gold = state.gold;
+    if (from.bonus === 'warrior' && !attacker.dead && deadDefender) {
+        const purse = state.gold[state.activePlayerId] || 0;
+        gold = { ...state.gold, [state.activePlayerId]: purse + WARRIOR_KILL_REWARD };
+    }
 
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
-    return { ...state, placements, movedSoldiers };
+    return { ...state, placements, gold, movedSoldiers, uidSeq };
 }
 
 // Abattage d'un arbre : un soldat actif adjacent détruit l'arbre, le joueur
@@ -230,12 +361,13 @@ function spawnFarmerTrees(state, board, placementsIn) {
     }
     if (farmers === 0) return placementsIn;
 
-    // Cases frontalières : hors du territoire du joueur, libres, non bloquées,
-    // hors base, mais adjacentes à au moins une case qu'il possède.
+    // Cases frontalières INTÉRIEURES : possédées par le joueur, libres, non
+    // bloquées, hors base, et bordant au moins une case qui n'est PAS à lui
+    // (l'arbre pousse donc du côté intérieur de la frontière, pas à l'extérieur).
     const eligible = board.cells.filter((c) => {
         if (c.blocked || board.baseIds.has(c.id) || placementsIn.has(c.id)) return false;
-        if (state.ownership.get(c.id) === pid) return false; // pas sur son propre sol
-        return getNeighbors(c.q, c.r).some((n) => state.ownership.get(hexId(n.q, n.r)) === pid);
+        if (state.ownership.get(c.id) !== pid) return false; // seulement sur son sol
+        return getNeighbors(c.q, c.r).some((n) => state.ownership.get(hexId(n.q, n.r)) !== pid);
     });
     if (!eligible.length) return placementsIn;
 
@@ -249,6 +381,117 @@ function spawnFarmerTrees(state, board, placementsIn) {
         }
     }
     return placements;
+}
+
+// Bonus « Alchimiste » : à la fin du tour de son propriétaire, chaque alchimiste
+// renforce UN allié adjacent — le soldat allié voisin sans affinité ayant le
+// plus de PV — de +1 attaque et +2 PV (plafonnés). Chaque alchimiste agit sur sa
+// propre cible ; un même allié peut cumuler les buffs de plusieurs alchimistes.
+function applyAlchemists(state, board, placementsIn) {
+    const pid = state.activePlayerId;
+    // Repère les cases des alchimistes du joueur actif via la géométrie de la carte.
+    const alchemistCells = [];
+    for (const [id, p] of placementsIn) {
+        if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'alchemist') {
+            alchemistCells.push(id);
+        }
+    }
+    if (!alchemistCells.length) return placementsIn;
+
+    const placements = new Map(placementsIn);
+    for (const id of alchemistCells) {
+        const cell = board.cellMap.get(id);
+        if (!cell) continue;
+        // Cibles éligibles : soldats alliés adjacents SANS affinité (jamais soi-même).
+        let bestId = null;
+        let bestHp = -1;
+        for (const n of getNeighbors(cell.q, cell.r)) {
+            const nid = hexId(n.q, n.r);
+            const ally = placements.get(nid);
+            if (
+                ally &&
+                ally.type === 'soldier' &&
+                ally.playerId === pid &&
+                ally.affinity == null &&
+                (ally.hp || 0) > bestHp
+            ) {
+                bestHp = ally.hp || 0;
+                bestId = nid;
+            }
+        }
+        if (bestId == null) continue;
+        const ally = placements.get(bestId);
+        placements.set(bestId, {
+            ...ally,
+            hp: Math.min((ally.hp || 0) + ALCHEMIST_HP_BUFF, SOLDIER_HP_MAX),
+            atk: Math.min((ally.atk || 0) + ALCHEMIST_ATK_BUFF, SOLDIER_ATK_MAX),
+        });
+    }
+    return placements;
+}
+
+// Bonus « Démoniste » : à la fin du tour de son propriétaire, chaque démoniste
+// invoque un squelette allié fragile (skeleton2, 10/1) sur une case voisine
+// CONQUISE par le joueur (libre, non bloquée, hors base). L'invocation n'est pas
+// systématique : elle a une chance fixe de se produire chaque tour. Renvoie la
+// carte des items et le compteur d'uid mis à jour.
+function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn) {
+    const pid = state.activePlayerId;
+    const warlockCells = [];
+    for (const [id, p] of placementsIn) {
+        if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'warlock') {
+            warlockCells.push(id);
+        }
+    }
+    if (!warlockCells.length) return { placements: placementsIn, uidSeq: uidSeqIn };
+
+    const placements = new Map(placementsIn);
+    let uidSeq = uidSeqIn;
+    for (const id of warlockCells) {
+        const cell = board.cellMap.get(id);
+        if (!cell) continue;
+        // Tirage : l'invocation ne se déclenche qu'avec une certaine probabilité.
+        if (Math.random() >= WARLOCK_SUMMON_CHANCE) continue;
+        // Première case voisine accueillante ET possédée par le joueur.
+        const spot = getNeighbors(cell.q, cell.r)
+            .map((n) => hexId(n.q, n.r))
+            .find((nid) => {
+                const ncell = board.cellMap.get(nid);
+                return (
+                    ncell &&
+                    !ncell.blocked &&
+                    !board.baseIds.has(nid) &&
+                    !placements.has(nid) &&
+                    state.ownership.get(nid) === pid
+                );
+            });
+        if (!spot) continue;
+        uidSeq += 1;
+        placements.set(
+            spot,
+            makeSkeleton(pid, `s${uidSeq}`, {
+                skin: SKELETON2_SRC,
+                hp: SKELETON2_HP,
+                atk: SKELETON2_ATK,
+            })
+        );
+    }
+    return { placements, uidSeq };
+}
+
+// Bonus « Paladin » : à la fin du tour de son propriétaire, chaque paladin
+// régénère quelques PV (plafonnés au maximum d'un soldat).
+function healPaladins(state, placementsIn) {
+    const pid = state.activePlayerId;
+    let placements = null; // copié à la volée seulement si un paladin soigne
+    for (const [id, p] of placementsIn) {
+        if (p.type !== 'soldier' || p.playerId !== pid || p.bonus !== 'paladin') continue;
+        const healed = Math.min((p.hp || 0) + PALADIN_HP_REGEN, SOLDIER_HP_MAX);
+        if (healed === p.hp) continue;
+        if (!placements) placements = new Map(placementsIn);
+        placements.set(id, { ...p, hp: healed });
+    }
+    return placements || placementsIn;
 }
 
 // Pose d'un item (soldat, maison, tour) sur une case du territoire actif.
@@ -287,6 +530,7 @@ function reducePlace(state, { cellId, itemType }) {
 function reduceBuyBonus(state, { cellId, bonusId }) {
     const soldier = state.placements.get(cellId);
     if (!soldier || soldier.type !== 'soldier') return state;
+    if (isSkeleton(soldier)) return state; // un squelette ne porte jamais de bonus
     if (soldier.playerId !== state.activePlayerId) return state;
     if (soldier.bonus) return state; // déjà un bonus
 
@@ -298,8 +542,19 @@ function reduceBuyBonus(state, { cellId, bonusId }) {
     const purse = state.gold[state.activePlayerId] || 0;
     if (purse < price) return state; // fonds insuffisants
 
+    // Bonus « Guerrier » : équiper le bonus porte aussitôt les statistiques du
+    // soldat à leur nouveau palier.
+    const equipped = { ...soldier, bonus: bonusId };
+    if (bonusId === 'warrior') {
+        equipped.hp = WARRIOR_HP;
+        equipped.atk = WARRIOR_ATK;
+    } else if (bonusId === 'warlock') {
+        equipped.hp = WARLOCK_HP;
+        equipped.atk = WARLOCK_ATK;
+    }
+
     const placements = new Map(state.placements);
-    placements.set(cellId, { ...soldier, bonus: bonusId });
+    placements.set(cellId, equipped);
     const gold = { ...state.gold, [state.activePlayerId]: purse - price };
     return { ...state, placements, gold };
 }
@@ -311,14 +566,31 @@ function reduceEndTurn(state) {
     const { players, activePlayerId } = state;
     const idx = players.findIndex((p) => p.id === activePlayerId);
     const nextIdx = (idx + 1) % players.length;
-    const income = incomeFor(state, activePlayerId); // net de la pénalité d'arbres
+    let income = incomeFor(state, activePlayerId); // net de l'entretien des unités
+    // Bonus « Roi » : tant qu'un soldat-roi du joueur est en vie, +50% de revenu.
+    let hasKing = false;
+    for (const p of state.placements.values()) {
+        if (p.type === 'soldier' && p.playerId === activePlayerId && p.bonus === 'king') {
+            hasKing = true;
+            break;
+        }
+    }
+    if (hasKing) income = Math.floor(income * KING_INCOME_MULT);
     const board = getLogicalBoard(state.mapId);
     // Apparition normale des arbres, puis apparition « Fermier » (frontière).
     let placements = spawnTrees(state, board);
     placements = spawnFarmerTrees(state, board, placements);
+    // Renfort « Alchimiste » sur les alliés adjacents avant de passer la main.
+    placements = applyAlchemists(state, board, placements);
+    // Régénération « Paladin ».
+    placements = healPaladins(state, placements);
+    // Invocation « Démoniste » : un squelette fragile par démoniste.
+    const summon = spawnWarlockSkeletons(state, board, placements, state.uidSeq);
+    placements = summon.placements;
     return {
         ...state,
         placements,
+        uidSeq: summon.uidSeq,
         gold: { ...state.gold, [activePlayerId]: (state.gold[activePlayerId] || 0) + income },
         turn: nextIdx === 0 ? state.turn + 1 : state.turn,
         activePlayerId: players[nextIdx].id,

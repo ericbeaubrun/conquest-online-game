@@ -86,8 +86,8 @@ const MoveHighlight = memo(function MoveHighlight({moves, cellMap}) {
 });
 
 // Icônes superposées quand un soldat est sélectionné : fusion possible
-// (mergeIndicator) sur les soldats alliés, blocage (alliesIndicator) sur les
-// bâtiments / bases alliés.
+// (mergeIndicator) sur les soldats alliés fusionnables, blocage (alliesIndicator)
+// sur les bâtiments / bases alliés et les soldats alliés infusionnables.
 const Indicators = memo(function Indicators({moves, allies, cellMap, size}) {
     const icon = (id, href, key) => {
         const cell = cellMap.get(id);
@@ -398,7 +398,9 @@ const HexBoard = ({game, dispatch, selectedItem, selection, onSelect, onHoverTar
     const onHover = (e) => {
         if (!onHoverTarget) return;
         // Uniquement hors geste (pas de bouton enfoncé) et soldat sélectionné.
-        if (selection?.kind !== 'soldier' || pointers.current.size > 0) {
+        // Jamais tant qu'une boutique de bonus est ouverte (clic droit) : son
+        // aperçu ne doit pas se superposer au panneau de bonus.
+        if (selection?.kind !== 'soldier' || selection?.openBonus || pointers.current.size > 0) {
             onHoverTarget(null);
             return;
         }
@@ -418,9 +420,27 @@ const HexBoard = ({game, dispatch, selectedItem, selection, onSelect, onHoverTar
     const moved = useRef(false);
 
     const onPointerDown = (e) => {
-        // Clic droit : désélectionne sans démarrer de geste.
+        // Clic droit : sélectionne le soldat pointé et ouvre directement sa
+        // boutique de bonus ; sur toute autre case, désélectionne.
         if (e.button === 2) {
-            onSelect(null);
+            const {x, y} = clientToSvg(e.clientX, e.clientY);
+            const {q, r} = pixelToHex({x, y});
+            const id = hexId(q, r);
+            const target = classifyCell(id, {
+                placements,
+                baseIds,
+                ownership,
+                activePlayerId,
+                movedSoldiers,
+            });
+            // Clic droit : on ferme tout aperçu de survol pour qu'il ne
+            // s'affiche pas par-dessus la boutique de bonus.
+            if (onHoverTarget) onHoverTarget(null);
+            if (target && (target.kind === 'soldier' || target.kind === 'unit')) {
+                onSelect({...target, openBonus: true});
+            } else {
+                onSelect(null);
+            }
             return;
         }
         svgRef.current.setPointerCapture(e.pointerId);

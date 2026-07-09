@@ -6,13 +6,30 @@ export const MAX_MOVE = 2; // pas de déplacement maximum d'un soldat par tour
 export const MERGE_MAX = 4; // niveau maximum d'un soldat fusionné
 export const BASE_INCOME = 10; // or gagné par tour avant le bonus de territoire
 export const STARTING_GOLD = 0; // or de départ de chaque joueur
+export const HOUSE_INCOME = 10; // or/tour rapporté par chaque maison possédée
+
+// Entretien (or/tour) prélevé sur le revenu pour chaque unité possédée. Un coût
+// POSITIF réduit le revenu ; une valeur NÉGATIVE le renforce (les maisons
+// rapportent). Barème centralisé, partagé par le calcul de revenu et l'affichage
+// des panneaux. Le coût d'un soldat s'ajoute à celui de son bonus éventuel
+// (voir `upkeepFor` / `bonusUpkeep` dans soldier.js).
+export const SOLDIER_UPKEEP = { 1: 2, 2: 4, 3: 8, 4: 16 }; // par niveau de soldat
+export const SKELETON_UPKEEP = 1; // squelette invoqué (Mort-vivant / Démoniste)
+export const TOWER_UPKEEP = 10; // tour d'attaque ou de défense
+// Bâtiments : la maison rapporte (entretien négatif) ; base et arbres = 0.
+export const BUILDING_UPKEEP = {
+    base: 0,
+    house: -HOUSE_INCOME,
+    attackTower: TOWER_UPKEEP,
+    defenseTower: TOWER_UPKEEP,
+    tree: 0,
+};
 
 // Arbres (forêts) : objets neutres qui apparaissent au fil de la partie. Un
-// soldat adjacent peut abattre un arbre (gain immédiat), et un arbre situé sur
-// une case possédée ampute le revenu de ce joueur. Ils restent rares (plafond
-// en proportion de la carte) et se densifient avec l'avancée de la partie.
+// soldat adjacent peut abattre un arbre (gain immédiat). Ils restent rares
+// (plafond en proportion de la carte) et se densifient avec l'avancée de la
+// partie. Un arbre n'a aucun entretien (voir BUILDING_UPKEEP).
 export const TREE_REWARD = 10; // or gagné en abattant un arbre
-export const TREE_INCOME_PENALTY = 1; // -or/tour par arbre sur une case possédée
 export const TREE_MAX_RATIO = 0.1; // au plus 10% des cases couvertes d'arbres
 export const TREE_TURN_RAMP = 20; // montée en intensité jusqu'à ce tour
 export const TREE_SPAWN_CHANCE = 0.5; // proba de base par tentative (mise à l'échelle)
@@ -30,6 +47,8 @@ export const SOLDIER_ATK_MAX = 100;
 // (cases de fusion valides) et l'aperçu d'interface — mêmes règles partout.
 export function canMerge(from, to) {
     if (!from || !to || from.type !== 'soldier' || to.type !== 'soldier') return false;
+    // Les squelettes invoqués ne fusionnent jamais (ni comme source ni cible).
+    if (from.unit === 'skeleton' || to.unit === 'skeleton') return false;
     const lvl = from.level || 1;
     return (to.level || 1) === lvl && lvl < MERGE_MAX;
 }

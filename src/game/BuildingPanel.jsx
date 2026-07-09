@@ -1,6 +1,7 @@
 import { ITEM_SRC } from './items.js';
 import { StatBar } from './SoldierPanel.jsx';
 import { maxHp, maxAtk } from './engine/rules.js';
+import UpkeepSpec from './UpkeepSpec.jsx';
 
 // Libellé et image par type de bâtiment. La base n'est pas un item de boutique :
 // elle a sa propre image et n'apparaît pas dans `ITEM_SRC`.
@@ -15,7 +16,7 @@ const SRC = { base: '/base.png', ...ITEM_SRC };
 // Menu des caractéristiques d'un bâtiment (base, maison, tour) sélectionné.
 // Prend la place de la boutique, comme le panneau du soldat : image + barre de
 // vie. Purement informatif — aucune action possible depuis ce panneau.
-const BuildingPanel = ({ building, color }) => (
+const BuildingPanel = ({ building, color, owner }) => (
     <div className="soldier-panel">
         <div className="soldier-panel__portrait" style={{ borderColor: color }}>
             <img src={SRC[building.type]} alt={LABEL[building.type]} />
@@ -45,6 +46,7 @@ const BuildingPanel = ({ building, color }) => (
                 <span className="soldier-spec__label">Type</span>
                 <span className="soldier-spec__value">{LABEL[building.type]}</span>
             </div>
+            <UpkeepSpec unit={building} owner={owner} />
         </div>
     </div>
 );

@@ -8,8 +8,8 @@ import {
     BASE_INCOME,
     canMerge,
     isAttackable,
-    TREE_INCOME_PENALTY,
 } from './rules.js';
+import { upkeepFor } from '../soldier.js';
 
 // Cases atteignables par le soldat `startId`.
 // Règles : MAX_MOVE pas max, dont AU PLUS 1 case hors du territoire (conquête,
@@ -85,6 +85,15 @@ export function computeReachable(state, board, startId) {
                         !moves.has(nid)
                     ) {
                         moves.set(nid, { kind: 'merge' });
+                    } else if (
+                        placed.playerId === activePlayerId &&
+                        !canMerge(mover, placed) &&
+                        !seenAlly.has(nid)
+                    ) {
+                        // Allié infusionnable : case occupée où l'on ne peut
+                        // pas s'arrêter — indicateur de blocage (allié).
+                        seenAlly.add(nid);
+                        allies.push(nid);
                     }
                 } else if (!moves.has(nid)) {
                     moves.set(nid, { kind: 'move' }); // repositionnement
@@ -106,19 +115,21 @@ export function ownedCount(state, playerId) {
     return n;
 }
 
-// Nombre d'arbres situés sur des cases possédées par un joueur (chacun ampute
-// son revenu). Un arbre sur une case neutre ne pénalise personne.
-export function treeCountFor(state, playerId) {
-    let n = 0;
-    for (const [id, placed] of state.placements) {
-        if (placed.type === 'tree' && state.ownership.get(id) === playerId) n += 1;
+// Entretien total (or/tour) des unités d'un joueur. Somme du barème d'entretien
+// (`upkeepFor`) sur toutes ses unités posées ; les maisons, d'entretien négatif,
+// diminuent ce total (elles rapportent).
+export function upkeepTotal(state, playerId) {
+    let sum = 0;
+    for (const placed of state.placements.values()) {
+        if (placed.playerId === playerId) sum += upkeepFor(placed);
     }
-    return n;
+    return sum;
 }
 
-// Revenu d'un joueur pour un tour : base + 1 or par case possédée, moins la
-// pénalité des arbres sur son territoire (jamais négatif).
+// Revenu d'un joueur pour un tour : base + 1 or par case possédée, moins
+// l'entretien de ses unités (jamais négatif). Les maisons ayant un entretien
+// négatif, elles augmentent au contraire ce revenu.
 export function incomeFor(state, playerId) {
     const gross = BASE_INCOME + ownedCount(state, playerId);
-    return Math.max(0, gross - treeCountFor(state, playerId) * TREE_INCOME_PENALTY);
+    return Math.max(0, gross - upkeepTotal(state, playerId));
 }

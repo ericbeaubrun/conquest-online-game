@@ -3,6 +3,8 @@
 // aucune de ces caractéristiques (valeur `null`). Chaque liste sert à la fois
 // d'affichage (libellés) et de source de vérité pour de futures règles.
 
+import { SOLDIER_UPKEEP, SKELETON_UPKEEP, BUILDING_UPKEEP } from './engine/rules.js';
+
 export const AFFINITIES = [
     { id: 'fire', label: 'Feu' },
     { id: 'ice', label: 'Glace' },
@@ -20,8 +22,48 @@ export const CHALLENGE_METRICS = {
     TREES_CHOPPED: 'treesChopped', // arbres abattus (n'importe où)
 ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
     CASES_CONQUERED: 'casesConquered', // cases conquises
+    ENEMY_CASES_CONQUERED: 'enemyCasesConquered', // cases volées à un adversaire
     CASES_TRAVELED_OWN: 'casesTraveledOwn', // cases parcourues dans son territoire
+    ENEMIES_KILLED_L2: 'enemiesKilledL2', // soldats ennemis de niveau ≥ 2 tués
+    COMBATS_SURVIVED: 'combatsSurvived', // combats terminés en vie
+    ALCHEMIST_MERGE: 'alchemistMerge', // fusion de 2 soldats affaiblis en niveau 2
+    SKELETONS_KILLED: 'skeletonsKilled', // squelettes tués au combat
 };
+
+// Les squelettes invoqués (Mort-vivant, Démoniste) sont un SOUS-TYPE d'unité :
+// mécaniquement ils occupent le plateau comme des soldats (déplacement, combat,
+// territoire) mais portent le marqueur `unit: 'skeleton'`. Ils ne fusionnent pas
+// et ne peuvent pas recevoir de bonus. `isSkeleton` est l'unique test partagé.
+export const isSkeleton = (u) => !!u && u.unit === 'skeleton';
+
+// Bonus « Alchimiste » : à chaque fin de tour de son propriétaire, il renforce
+// l'allié adjacent le mieux portant et sans affinité. Le défi se débloque quand
+// le soldat naît de la fusion de deux soldats affaiblis (PV < ce seuil).
+export const ALCHEMIST_WEAK_HP = 20; // seuil de « soldat affaibli » pour la fusion
+export const ALCHEMIST_ATK_BUFF = 1; // +attaque procurée à l'allié ciblé
+export const ALCHEMIST_HP_BUFF = 2; // +PV procurés à l'allié ciblé
+
+// Bonus « Guerrier » : en l'équipant, le soldat voit ses statistiques portées à
+// ces valeurs, et chaque ennemi qu'il tue rapporte cette prime d'or.
+export const WARRIOR_HP = 50;
+export const WARRIOR_ATK = 50;
+export const WARRIOR_KILL_REWARD = 20;
+
+// Squelette invoqué par le bonus « Mort-vivant » : unité alliée qui remplace le
+// soldat sur sa case au moment de sa mort. Sprite et statistiques dédiés.
+export const SKELETON_SRC = '/characters/skeleton1.png';
+export const SKELETON_HP = 5;
+export const SKELETON_ATK = 10;
+
+// Bonus « Démoniste » : en l'équipant, le soldat prend ces statistiques, et à
+// chaque fin de tour il invoque un squelette allié fragile (skeleton2) sur une
+// case voisine libre.
+export const WARLOCK_HP = 100;
+export const WARLOCK_ATK = 10;
+export const SKELETON2_SRC = '/characters/skeleton2.png';
+export const SKELETON2_HP = 1;
+export const SKELETON2_ATK = 10;
+export const WARLOCK_SUMMON_CHANCE = 0.5; // proba d'invocation par tour et par démoniste
 
 // Bonus proposés dans le panneau du soldat. Chaque bonus est rattaché à UN seul
 // niveau de soldat (`requiredLevel`) : un soldat ne voit que les bonus de son
@@ -96,38 +138,58 @@ export const BONUS_OFFERS = [
     {
         id: 'thief',
         label: 'Voleur',
-        src: null,
+        src: '/characters/thief.png',
         requiredLevel: 2,
-        price: 200,
-        challenge: 'Piller 3 cases ennemies.',
-        effect: 'Vole de l’or à l’ennemi vaincu.',
+        price: 10,
+        challenge: {
+            metric: CHALLENGE_METRICS.ENEMY_CASES_CONQUERED,
+            goal: 10,
+            describe: (c, g) => `Conquérir ${c}/${g} cases ennemies.`,
+        },
+        effect: 'Gagne 1 or supplémentaire par case volée à l’ennemi.',
     },
     {
         id: 'undead',
         label: 'Mort-vivant',
-        src: null,
+        src: '/characters/undead.png',
         requiredLevel: 2,
-        price: 250,
-        challenge: 'Survivre à 4 combats de suite.',
-        effect: 'Revient une fois après la mort.',
+        price: null,
+        challenge: {
+            metric: CHALLENGE_METRICS.ENEMIES_KILLED_L2,
+            goal: 1,
+            describe: (c, g) => `Tuer ${c}/${g} ennemi de niveau 2 ou plus.`,
+        },
+        effect: 'À sa mort, invoque un squelette allié (5/10) sur sa case.',
     },
     {
         id: 'alchemist',
         label: 'Alchimiste',
-        src: null,
+        src: '/characters/alchemist.png',
         requiredLevel: 2,
-        price: null,
-        challenge: 'Rester 5 tours sans bouger.',
-        effect: 'Transforme le bois en or.',
+        price: 76,
+        upkeep: 5,
+        challenge: {
+            metric: CHALLENGE_METRICS.ALCHEMIST_MERGE,
+            goal: 1,
+            describe: (c, g) =>
+                c >= g
+                    ? 'Fusion de 2 soldats affaiblis accomplie.'
+                    : 'Fusionner 2 soldats de moins de 20 PV en niveau 2.',
+        },
+        effect: '+1 atk / +2 PV à l’allié adjacent sans affinité ayant le plus de PV.',
     },
     {
         id: 'warrior',
         label: 'Guerrier',
-        src: null,
+        src: '/characters/GoldWarrior.png',
         requiredLevel: 2,
-        price: 220,
-        challenge: 'Remporter 5 combats offensifs.',
-        effect: '+2 attaque en attaquant.',
+        price: 50,
+        challenge: {
+            metric: CHALLENGE_METRICS.COMBATS_SURVIVED,
+            goal: 3,
+            describe: (c, g) => `Survivre à ${c}/${g} combats sans mourir.`,
+        },
+        effect: 'Passe à 50/50 et gagne 20 or par ennemi tué.',
     },
 
     // ---- Niveau 3 ----
@@ -161,11 +223,16 @@ export const BONUS_OFFERS = [
     {
         id: 'blackKnight',
         label: 'Chevalier noir',
-        src: null,
+        src: '/characters/darkWarrior.png',
         requiredLevel: 3,
-        price: 400,
-        challenge: 'Éliminer 10 unités.',
-        effect: 'Ignore la première riposte.',
+        price: 40,
+        upkeep: 10,
+        challenge: {
+            metric: CHALLENGE_METRICS.SKELETONS_KILLED,
+            goal: 1,
+            describe: (c, g) => `Tuer ${c}/${g} squelette.`,
+        },
+        effect: 'Absorbe les stats des squelettes qu’il tue (comme une fusion).',
     },
 
     // ---- Niveau 4 ----
@@ -181,35 +248,49 @@ export const BONUS_OFFERS = [
     {
         id: 'paladin',
         label: 'Paladin',
-        src: null,
+        src: '/characters/paladin.png',
         requiredLevel: 4,
-        price: null,
-        challenge: 'Protéger la base 10 tours.',
-        effect: 'Aura de défense aux alliés.',
+        price: 100,
+        upkeep: 20,
+        challenge: null,
+        effect: 'Récupère 2 PV à chaque tour.',
     },
     {
         id: 'warlock',
         label: 'Démoniste',
-        src: null,
+        src: '/characters/demonist.png',
         requiredLevel: 4,
-        price: 550,
-        challenge: 'Sacrifier 3 alliés.',
-        effect: 'Invoque un démon au combat.',
+        price: 100,
+        upkeep: 40,
+        challenge: null,
+        effect: 'Passe à 10/100 et invoque un squelette allié (10/1) chaque tour.',
     },
     {
         id: 'king',
         label: 'Roi',
-        src: null,
+        src: '/characters/king.png',
         requiredLevel: 4,
-        price: 800,
-        challenge: 'Contrôler la moitié de la carte.',
-        effect: 'Booste tous les alliés du royaume.',
+        price: 100,
+        challenge: null,
+        effect: 'Tant qu’il est en vie, +50% d’or gagné par tour.',
     },
 ];
+
+// Bonus « Roi » : multiplicateur appliqué au revenu de fin de tour du joueur
+// tant qu'un de ses soldats porte ce bonus (est en vie).
+export const KING_INCOME_MULT = 1.5;
+
+// Bonus « Paladin » : PV régénérés à chaque fin de tour de son propriétaire
+// (plafonnés au maximum d'un soldat).
+export const PALADIN_HP_REGEN = 2;
 
 // Bonus disponibles pour un niveau de soldat donné (un bonus = un seul niveau).
 export const bonusOffersForLevel = (level) =>
     BONUS_OFFERS.filter((b) => b.requiredLevel === (level || 1));
+
+// Plage des niveaux de bonus existants (pour naviguer d'un niveau à l'autre).
+export const MIN_BONUS_LEVEL = Math.min(...BONUS_OFFERS.map((b) => b.requiredLevel));
+export const MAX_BONUS_LEVEL = Math.max(...BONUS_OFFERS.map((b) => b.requiredLevel));
 
 // Un défi « suivi » est un objet { metric, goal, describe } ; sinon c'est une
 // simple chaîne (défi pas encore branché à la logique de jeu).
@@ -229,13 +310,16 @@ export const bonusProgress = (soldier, bonus) => {
 // pour les défis suivis, sinon la chaîne brute.
 export const challengeText = (soldier, bonus) => {
     const { challenge } = bonus;
+    if (challenge == null) return 'Aucun défi — disponible aussitôt.';
     if (!isTrackedChallenge(challenge)) return challenge;
     const { current, goal } = bonusProgress(soldier, bonus);
     return challenge.describe(current, goal);
 };
 
-// Un bonus est débloqué pour un soldat quand son défi (suivi) est terminé.
-export const isBonusUnlocked = (soldier, bonus) => bonusProgress(soldier, bonus)?.done ?? false;
+// Un bonus est débloqué pour un soldat quand son défi (suivi) est terminé. Un
+// bonus SANS défi (`challenge` nul) est débloqué d'emblée.
+export const isBonusUnlocked = (soldier, bonus) =>
+    bonus.challenge == null || (bonusProgress(soldier, bonus)?.done ?? false);
 
 export const BEHAVIORS = [
     { id: 'conquest', label: 'Conquête' },
@@ -258,16 +342,36 @@ export const soldierSkin = (level) => SOLDIER_SKINS[level] || SOLDIER_SKINS[1];
 // Visuel (src) d'un bonus donné, ou `null` si l'asset n'existe pas encore.
 export const bonusSrc = (id) => BONUS_OFFERS.find((b) => b.id === id)?.src ?? null;
 
-// Sprite affiché pour un soldat : quand il porte un bonus (et que ce bonus a un
-// visuel), il prend l'apparence du bonus ; sinon son skin de niveau.
+// Sprite affiché pour un soldat : une unité au skin dédié (ex. squelette invoqué)
+// prime ; sinon, quand il porte un bonus (et que ce bonus a un visuel), il prend
+// l'apparence du bonus ; à défaut son skin de niveau.
 export const soldierSprite = (soldier) =>
-    (soldier?.bonus && bonusSrc(soldier.bonus)) || soldierSkin(soldier?.level || 1);
+    soldier?.skin || (soldier?.bonus && bonusSrc(soldier.bonus)) || soldierSkin(soldier?.level || 1);
 
 // Un bonus est achetable par CE soldat quand : son défi est accompli, le soldat
 // n'a pas déjà un bonus, et le porte-monnaie couvre le prix (un soldat = un seul
 // bonus). `gold` est l'or du propriétaire du soldat.
 export const canBuyBonus = (soldier, bonus, gold) =>
     isBonusUnlocked(soldier, bonus) && !soldier?.bonus && gold >= (bonus.price || 0);
+
+// Entretien (or/tour) propre à un bonus (0 par défaut). Affiché dans la boutique
+// de bonus et ajouté à l'entretien du soldat qui le porte.
+export const bonusUpkeep = (id) => BONUS_OFFERS.find((b) => b.id === id)?.upkeep ?? 0;
+
+// Entretien (or/tour) d'une unité possédée, source de vérité unique du barème :
+//   - squelette invoqué : coût fixe ;
+//   - soldat : coût de son niveau + coût de son bonus éventuel ;
+//   - bâtiment / arbre : barème `BUILDING_UPKEEP` (la maison rapporte : négatif).
+// Valeur POSITIVE = coût prélevé sur le revenu ; NÉGATIVE = gain. Défaut 0.
+export const upkeepFor = (unit) => {
+    if (!unit) return 0;
+    if (unit.type === 'soldier') {
+        if (isSkeleton(unit)) return SKELETON_UPKEEP;
+        const base = SOLDIER_UPKEEP[unit.level || 1] ?? 0;
+        return base + (unit.bonus ? bonusUpkeep(unit.bonus) : 0);
+    }
+    return BUILDING_UPKEEP[unit.type] ?? 0;
+};
 
 // Libellé affiché pour une valeur donnée (`null`/inconnu -> « Aucun(e) »).
 export const affinityLabel = (id) => AFFINITIES.find((a) => a.id === id)?.label ?? 'Aucune';

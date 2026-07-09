@@ -79,6 +79,14 @@ const GameLayout = () => {
             ? { attacker: hoverSoldier, defender: targetSoldier }
             : null;
 
+    // Le clic droit sert d'action de jeu (ouvrir la boutique de bonus) : on
+    // supprime le menu contextuel natif du navigateur sur toute l'application.
+    useEffect(() => {
+        const suppress = (e) => e.preventDefault();
+        document.addEventListener("contextmenu", suppress);
+        return () => document.removeEventListener("contextmenu", suppress);
+    }, []);
+
     // Changement de carte ou de joueur actif : plus rien ne doit rester
     // sélectionné (item de boutique comme sélection de plateau).
     useEffect(() => {
@@ -214,6 +222,10 @@ const GameLayout = () => {
                     <SoldierPanel
                         soldier={soldierView}
                         color={colorOf(soldierView.playerId)}
+                        owner={players.find((p) => p.id === soldierView.playerId) || null}
+                        // Clic droit : ouvre d'emblée la boutique de bonus.
+                        openBonus={!!selection?.openBonus}
+                        selectionId={selection?.id}
                         // Achat de bonus : possible seulement pour le soldat du
                         // joueur actif ; on lui passe son or et le dispatch.
                         canBuy={soldierView.playerId === activePlayerId}
@@ -221,7 +233,11 @@ const GameLayout = () => {
                         onBuyBonus={(bonusId) => dispatch(buyBonus(selection.id, bonusId))}
                     />
                 ) : buildingView ? (
-                    <BuildingPanel building={buildingView} color={colorOf(buildingView.playerId)} />
+                    <BuildingPanel
+                        building={buildingView}
+                        color={colorOf(buildingView.playerId)}
+                        owner={players.find((p) => p.id === buildingView.playerId) || null}
+                    />
                 ) : selection?.kind === "tree" ? (
                     <TreePanel owner={treeOwner} />
                 ) : (
