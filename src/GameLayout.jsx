@@ -8,7 +8,7 @@ import MergePreview from "./game/MergePreview.jsx";
 import CombatPreview from "./game/CombatPreview.jsx";
 import { MAPS } from "./game/maps.js";
 import { useGameSession } from "./game/session/useGameSession.js";
-import { setMap, endTurn, placeItem } from "./game/engine/actions.js";
+import { setMap, endTurn, placeItem, buyBonus } from "./game/engine/actions.js";
 import { incomeFor } from "./game/engine/selectors.js";
 import { BUILDING_STATS, canMerge, mergedSoldier } from "./game/engine/rules.js";
 
@@ -211,7 +211,15 @@ const GameLayout = () => {
                     caractéristiques ; sinon, la boutique (en mode pose directe
                     quand une case vide est sélectionnée). */}
                 {soldierView ? (
-                    <SoldierPanel soldier={soldierView} color={colorOf(soldierView.playerId)} />
+                    <SoldierPanel
+                        soldier={soldierView}
+                        color={colorOf(soldierView.playerId)}
+                        // Achat de bonus : possible seulement pour le soldat du
+                        // joueur actif ; on lui passe son or et le dispatch.
+                        canBuy={soldierView.playerId === activePlayerId}
+                        gold={gold[soldierView.playerId] ?? 0}
+                        onBuyBonus={(bonusId) => dispatch(buyBonus(selection.id, bonusId))}
+                    />
                 ) : buildingView ? (
                     <BuildingPanel building={buildingView} color={colorOf(buildingView.playerId)} />
                 ) : selection?.kind === "tree" ? (

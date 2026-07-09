@@ -13,6 +13,7 @@ export const MERGE_SOLDIER = 'MERGE_SOLDIER';
 export const ATTACK_SOLDIER = 'ATTACK_SOLDIER';
 export const CHOP_TREE = 'CHOP_TREE';
 export const PLACE_ITEM = 'PLACE_ITEM';
+export const BUY_BONUS = 'BUY_BONUS';
 export const END_TURN = 'END_TURN';
 export const SET_MAP = 'SET_MAP';
 
@@ -21,5 +22,6 @@ export const mergeSoldier = (fromId, toId) => ({ type: MERGE_SOLDIER, fromId, to
 export const attackSoldier = (fromId, toId) => ({ type: ATTACK_SOLDIER, fromId, toId });
 export const chopTree = (fromId, toId) => ({ type: CHOP_TREE, fromId, toId });
 export const placeItem = (cellId, itemType) => ({ type: PLACE_ITEM, cellId, itemType });
+export const buyBonus = (cellId, bonusId) => ({ type: BUY_BONUS, cellId, bonusId });
 export const endTurn = () => ({ type: END_TURN });
 export const setMap = (mapId) => ({ type: SET_MAP, mapId });

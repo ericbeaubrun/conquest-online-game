@@ -19,20 +19,24 @@ import {
 export function computeReachable(state, board, startId) {
     const moves = new Map(); // id -> { kind: 'move' | 'conquer' | 'merge' }
     const allies = []; // bâtiments / bases alliés bloquants
-    if (!startId) return { moves, allies };
+    const dist = new Map(); // id -> nombre de pas depuis `startId` (BFS)
+    if (!startId) return { moves, allies, dist };
     const { cellMap, baseIds } = board;
     const start = cellMap.get(startId);
-    if (!start) return { moves, allies };
+    if (!start) return { moves, allies, dist };
     const { placements, ownership, activePlayerId } = state;
     const mover = placements.get(startId); // soldat qui se déplace (pour la fusion)
+    // Bonus « Coureur » : portée de déplacement doublée à l'intérieur du
+    // territoire (la conquête reste limitée à 1 case hors territoire).
+    const maxMove = mover?.bonus === 'runner' ? MAX_MOVE * 2 : MAX_MOVE;
 
-    const dist = new Map([[startId, 0]]);
+    dist.set(startId, 0);
     const queue = [startId];
     const seenAlly = new Set();
     while (queue.length) {
         const curId = queue.shift();
         const d = dist.get(curId);
-        if (d >= MAX_MOVE) continue; // plus de pas disponibles
+        if (d >= maxMove) continue; // plus de pas disponibles
         const cur = cellMap.get(curId);
         for (const nb of getNeighbors(cur.q, cur.r)) {
             const nid = hexId(nb.q, nb.r);
@@ -92,7 +96,7 @@ export function computeReachable(state, board, startId) {
         }
     }
     moves.delete(startId);
-    return { moves, allies };
+    return { moves, allies, dist };
 }
 
 // Nombre de cases possédées par un joueur.

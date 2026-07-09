@@ -2,7 +2,7 @@ import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {hexId, hexHeight, pixelToHex} from './hex.js';
 import {TERRAIN_COLORS} from './terrain.js';
 import {ITEM_SRC} from './items.js';
-import {soldierSkin} from './soldier.js';
+import {soldierSprite} from './soldier.js';
 import {getLogicalBoard} from './engine/board.js';
 import {buildGeometry} from './render/geometry.js';
 import {computeReachable} from './engine/selectors.js';
@@ -179,14 +179,13 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
         const cell = cellMap.get(id);
         if (!cell) return null;
         const isSoldier = placed.type === 'soldier';
-        const level = isSoldier ? placed.level || 1 : 1;
         const barX = cell.cx - barW / 2;
         const barY = cell.cy + size * 0.49;
         const ratio = Math.max(0, Math.min(1, (placed.hp ?? 0) / SOLDIER_HP_MAX));
         return (
             <g key={id} pointerEvents="none">
                 <image
-                    href={isSoldier ? soldierSkin(level) : PLACEMENT_SRC[placed.type]}
+                    href={isSoldier ? soldierSprite(placed) : PLACEMENT_SRC[placed.type]}
                     x={cell.cx - size / 2}
                     y={cell.cy - size / 2}
                     width={size}
