@@ -351,24 +351,41 @@ export const soldierSprite = (soldier) =>
 // Un bonus est achetable par CE soldat quand : son défi est accompli, le soldat
 // n'a pas déjà un bonus, et le porte-monnaie couvre le prix (un soldat = un seul
 // bonus). `gold` est l'or du propriétaire du soldat.
-export const canBuyBonus = (soldier, bonus, gold) =>
-    isBonusUnlocked(soldier, bonus) && !soldier?.bonus && gold >= (bonus.price || 0);
+export const canBuyBonus = (soldier, bonus, gold, settings) =>
+    isBonusUnlocked(soldier, bonus) && !soldier?.bonus && gold >= bonusPriceOf(bonus, settings);
 
-// Entretien (or/tour) propre à un bonus (0 par défaut). Affiché dans la boutique
-// de bonus et ajouté à l'entretien du soldat qui le porte.
-export const bonusUpkeep = (id) => BONUS_OFFERS.find((b) => b.id === id)?.upkeep ?? 0;
+// Entretien (or/tour) propre à un bonus (0 par défaut). Configurable par partie
+// (`settings.bonusUpkeep`) ; retombe sur le barème du bonus sinon.
+export const bonusUpkeep = (id, settings) =>
+    settings?.bonusUpkeep?.[id] ?? BONUS_OFFERS.find((b) => b.id === id)?.upkeep ?? 0;
 
-// Entretien (or/tour) d'une unité possédée, source de vérité unique du barème :
-//   - squelette invoqué : coût fixe ;
-//   - soldat : coût de son niveau + coût de son bonus éventuel ;
-//   - bâtiment / arbre : barème `BUILDING_UPKEEP` (la maison rapporte : négatif).
+// Prix d'achat d'un bonus, configurable par partie (`settings.bonusPrice`) ;
+// retombe sur le prix du bonus (0 = gratuit) sinon.
+export const bonusPriceOf = (bonus, settings) =>
+    settings?.bonusPrice?.[bonus.id] ?? bonus.price ?? 0;
+
+// Entretien (or/tour) d'une unité possédée, source de vérité unique du barème.
+// Tous les postes sont configurables via `settings` (retombent sur les barèmes
+// par défaut sinon) :
+//   - squelette invoqué : `upkeep.skeleton` ;
+//   - soldat : `upkeep.soldier{niveau}` + entretien de son bonus éventuel ;
+//   - tour : `upkeep.tower` ; maison : rendement `houseIncome` (négatif = gain) ;
+//   - autres bâtiments / arbre : barème `BUILDING_UPKEEP`.
 // Valeur POSITIVE = coût prélevé sur le revenu ; NÉGATIVE = gain. Défaut 0.
-export const upkeepFor = (unit) => {
+export const upkeepFor = (unit, settings) => {
     if (!unit) return 0;
     if (unit.type === 'soldier') {
-        if (isSkeleton(unit)) return SKELETON_UPKEEP;
-        const base = SOLDIER_UPKEEP[unit.level || 1] ?? 0;
-        return base + (unit.bonus ? bonusUpkeep(unit.bonus) : 0);
+        if (isSkeleton(unit)) return settings?.upkeep?.skeleton ?? SKELETON_UPKEEP;
+        const lvl = unit.level || 1;
+        const base = settings?.upkeep?.[`soldier${lvl}`] ?? SOLDIER_UPKEEP[lvl] ?? 0;
+        return base + (unit.bonus ? bonusUpkeep(unit.bonus, settings) : 0);
+    }
+    if (unit.type === 'house') {
+        // Maison : entretien négatif = revenu (rendement configurable).
+        return settings?.houseIncome != null ? -settings.houseIncome : BUILDING_UPKEEP.house;
+    }
+    if (unit.type === 'attackTower' || unit.type === 'defenseTower') {
+        return settings?.upkeep?.tower ?? BUILDING_UPKEEP[unit.type];
     }
     return BUILDING_UPKEEP[unit.type] ?? 0;
 };

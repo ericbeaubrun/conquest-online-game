@@ -241,7 +241,11 @@ function classifyCell(id, {placements, baseIds, ownership, activePlayerId, moved
     return null;
 }
 
-const HexBoard = ({game, dispatch, selectedItem, selection, onSelect, onHoverTarget}) => {
+// `interactive` (défaut vrai) : quand il est faux — en online, hors du tour du
+// joueur local — le plateau reste consultable (pan, zoom, sélection pour
+// inspecter) mais AUCUNE action de jeu n'est émise. En hotseat local il vaut
+// toujours vrai : le comportement est inchangé.
+const HexBoard = ({game, dispatch, interactive = true, selectedItem, selection, onSelect, onHoverTarget}) => {
     const svgRef = useRef(null);
     const {mapId, ownership, placements, movedSoldiers, activePlayerId, players} = game;
 
@@ -352,9 +356,9 @@ const HexBoard = ({game, dispatch, selectedItem, selection, onSelect, onHoverTar
         const id = hexId(q, r);
         const cell = cellMap.get(id);
 
-        // Mode boutique : placement d'un item sur notre territoire.
+        // Mode boutique : placement d'un item sur notre territoire (si la main).
         if (selectedItem) {
-            dispatch(placeItem(id, selectedItem));
+            if (interactive) dispatch(placeItem(id, selectedItem));
             return;
         }
 
@@ -365,8 +369,8 @@ const HexBoard = ({game, dispatch, selectedItem, selection, onSelect, onHoverTar
         }
 
         // (1) Un soldat jouable est sélectionné et la case tapée est une action
-        // valide (déplacement, conquête ou fusion).
-        if (selection?.kind === 'soldier') {
+        // valide (déplacement, conquête ou fusion) — seulement pendant son tour.
+        if (interactive && selection?.kind === 'soldier') {
             const dest = reachable.moves.get(id);
             if (dest) {
                 if (dest.kind === 'merge') dispatch(mergeSoldier(selection.id, id));

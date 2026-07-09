@@ -8,7 +8,8 @@ import { getMapById, DEFAULT_MAP_ID } from '../maps.js';
 import { playersForMap } from '../players.js';
 import { hexId, getNeighbors } from '../hex.js';
 import { BLOCKED_TERRAIN } from '../terrain.js';
-import { STARTING_GOLD } from './rules.js';
+import { resolveSettings } from './settings.js';
+import { makeRng, randomSeed } from './rng.js';
 
 // Le modèle logique ne dépend que de l'identifiant de carte : on le mémoïse
 // une fois pour toutes (le reducer comme le rendu le réutilisent).
@@ -52,20 +53,65 @@ export function buildInitialOwnership(mapId, players) {
     return ownership;
 }
 
+// Construit les joueurs de la partie à partir d'une carte et, éventuellement,
+// d'une configuration hors-ligne. Sans config, on retombe sur les joueurs par
+// défaut de la carte. Avec config, on prend les joueurs choisis (nom, couleur,
+// humain/bot, difficulté), tronqués au nombre de points de départ de la carte.
+const BOT_LABELS = { easy: 'Facile', normal: 'Normal', hard: 'Difficile' };
+
+function resolvePlayers(map, setup) {
+    if (setup?.players?.length) {
+        return setup.players.slice(0, map.spawns.length).map((p, i) => {
+            const isBot = p.kind === 'bot';
+            const difficulty = isBot ? p.botDifficulty || 'normal' : null;
+            return {
+                id: p.id || `p${i + 1}`,
+                // Un bot n'a pas de nom saisi : on l'affiche par sa difficulté.
+                name: isBot ? `Bot ${BOT_LABELS[difficulty] || ''}`.trim() : p.name || `Joueur ${i + 1}`,
+                color: p.color,
+                kind: p.kind || 'human',
+                botDifficulty: difficulty,
+            };
+        });
+    }
+    return playersForMap(map);
+}
+
 // État de jeu initial pour une carte. C'est la *seule* source de vérité de la
 // partie : tour, joueur actif, possession, items posés, soldats ayant joué, or.
-export function createInitialState(mapId = DEFAULT_MAP_ID) {
+// `setup` (optionnel) porte la configuration de la page hors-ligne. `seed`
+// (optionnel) fixe la graine du générateur aléatoire : en local elle est tirée
+// au hasard, mais en mode « online » le serveur la fournit pour que tous les
+// clients rejouent la partie à l'identique.
+export function createInitialState(mapId = DEFAULT_MAP_ID, setup = null, seed = randomSeed()) {
     const map = getMapById(mapId);
-    const players = playersForMap(map);
+    const players = resolvePlayers(map, setup);
+    // Réglages d'équilibrage garnis de leurs valeurs par défaut : le moteur lit
+    // toujours `state.settings` sans se soucier des clés manquantes.
+    const settings = resolveSettings(setup?.settings);
+    // Générateur aléatoire déterministe à graine. On consomme éventuellement un
+    // tirage ici (premier joueur), puis on persiste la graine AVANCÉE dans
+    // l'état pour que la suite de la partie continue le même flux d'aléa.
+    const rng = makeRng(seed);
+    // Premier joueur : le joueur 1, ou un joueur tiré au sort si demandé.
+    const firstIdx = settings.randomFirstPlayer ? rng.int(players.length) : 0;
     return {
         mapId,
         players,
+        settings,
+        rngSeed: rng.seed, // graine courante (sérialisable, voyage dans l'état)
+        // Statut de la partie : 'playing' tant qu'aucune victoire n'est acquise,
+        // 'over' quand une condition de victoire est remplie (`winnerId` désigne
+        // le vainqueur, `endReason` la condition déclenchée).
+        status: 'playing',
+        winnerId: null,
+        endReason: null,
         turn: 1,
-        activePlayerId: players[0].id,
+        activePlayerId: players[firstIdx].id,
         ownership: buildInitialOwnership(mapId, players),
         placements: new Map(),
         movedSoldiers: new Set(),
-        gold: Object.fromEntries(players.map((p) => [p.id, STARTING_GOLD])),
+        gold: Object.fromEntries(players.map((p) => [p.id, settings.startingGold])),
         uidSeq: 0, // compteur d'identifiants de soldats (déterministe, sérialisable)
     };
 }

@@ -8,15 +8,27 @@ import MergePreview from "./game/MergePreview.jsx";
 import CombatPreview from "./game/CombatPreview.jsx";
 import { MAPS } from "./game/maps.js";
 import { useGameSession } from "./game/session/useGameSession.js";
-import { setMap, endTurn, placeItem, buyBonus } from "./game/engine/actions.js";
+import { setMap, endTurn, placeItem, buyBonus, resetGame } from "./game/engine/actions.js";
 import { incomeFor } from "./game/engine/selectors.js";
 import { BUILDING_STATS, canMerge, mergedSoldier } from "./game/engine/rules.js";
 
-const GameLayout = () => {
+const GameLayout = ({ config = null, onExit }) => {
     // État PARTAGÉ de la partie (tour, joueurs, possession, or...) via la
-    // session. En mode online, seul `useGameSession` changera d'implémentation.
-    const { state, dispatch } = useGameSession({ mode: "local" });
-    const { players, activePlayerId, turn, mapId, gold } = state;
+    // session. `config` provient de la page hors-ligne (carte, joueurs, réglages)
+    // ou porte `online: true` pour rejoindre une partie serveur. Seul
+    // `useGameSession` change d'implémentation selon le mode ; le reste est identique.
+    const online = !!config?.online;
+    const { state, dispatch, isMyTurn, mode, ready, localPlayerId } = useGameSession(
+        online
+            ? { mode: "online", roomId: config?.roomId, mapId: config?.mapId }
+            : { mode: "local", mapId: config?.mapId, setup: config }
+    );
+    const { players, activePlayerId, turn, mapId, gold, settings, status, winnerId, endReason } = state;
+    const bonusesEnabled = settings?.bonusesEnabled !== false;
+    // Ce client peut-il agir ? En hotseat local, toujours (le contrôle suit le
+    // joueur actif) ; en online, seulement pendant son propre tour. Sert à
+    // verrouiller toutes les actions de jeu (pose, fin de tour, plateau).
+    const canAct = isMyTurn && status === "playing";
 
     // État d'INTERFACE local à ce client (ne transite pas par le serveur).
     const [menuOpen, setMenuOpen] = useState(false);
@@ -30,8 +42,37 @@ const GameLayout = () => {
     // vaut 'merge' (allié fusionnable) ou 'combat' (ennemi attaquable).
     const [hoverTarget, setHoverTarget] = useState(null);
 
+    // Chrono par tour (réglage `turnTimer`, en secondes ; 0 = désactivé). Quand
+    // il tombe à zéro, la main passe automatiquement au joueur suivant. Le
+    // décompte redémarre à chaque changement de joueur / de tour.
+    const turnTimer = settings?.turnTimer || 0;
+    const [timeLeft, setTimeLeft] = useState(turnTimer);
+    useEffect(() => {
+        if (!turnTimer || status !== "playing") return undefined;
+        setTimeLeft(turnTimer);
+        const startedAt = Date.now();
+        const id = setInterval(() => {
+            const remaining = turnTimer - Math.floor((Date.now() - startedAt) / 1000);
+            setTimeLeft(remaining);
+            if (remaining <= 0) {
+                clearInterval(id);
+                dispatch(endTurn());
+            }
+        }, 250);
+        return () => clearInterval(id);
+    }, [turnTimer, status, activePlayerId, turn, dispatch]);
+
     const activeColor = players.find((p) => p.id === activePlayerId)?.color;
     const colorOf = (playerId) => players.find((p) => p.id === playerId)?.color;
+
+    // Vainqueur et libellé de la condition de fin, pour l'écran de victoire.
+    const winner = winnerId ? players.find((p) => p.id === winnerId) : null;
+    const END_REASONS = {
+        elimination: "Dernier joueur en lice",
+        domination: "Domination du territoire",
+        economy: "Course à l’or remportée",
+        timeout: "Limite de tours atteinte",
+    };
 
     // Données du soldat/bâtiment sélectionné selon le type de sélection.
     const selectedData = selection ? state.placements.get(selection.id) : null;
@@ -101,6 +142,7 @@ const GameLayout = () => {
         setMenuOpen(false);
     };
     const handleEndTurn = () => {
+        if (!canAct) return; // pas la main : on ne termine pas le tour d'autrui
         dispatch(endTurn());
         setSelectedItem(null);
     };
@@ -108,6 +150,7 @@ const GameLayout = () => {
     // est posé directement. Sinon, on (dé)sélectionne l'item pour le mode
     // placement classique (surbrillance des cases, puis clic sur le plateau).
     const handleSelectItem = (id) => {
+        if (!canAct) return; // hors de son tour : la boutique est en lecture seule
         if (placeTarget) {
             if (id) {
                 dispatch(placeItem(placeTarget, id));
@@ -119,6 +162,22 @@ const GameLayout = () => {
         if (id) setSelection(null);
     };
 
+    // Online : tant que le serveur n'a pas envoyé le premier état, on affiche un
+    // écran de connexion (l'état courant n'est encore que provisoire). Placé
+    // APRÈS tous les hooks pour respecter les règles des hooks.
+    if (mode === "online" && !ready) {
+        return (
+            <div className="game-container" style={{ display: "grid", placeItems: "center" }}>
+                <div style={{ textAlign: "center", opacity: 0.8 }}>
+                    <p style={{ fontSize: "1.2rem" }}>Connexion au serveur…</p>
+                    <button className="menu-btn menu-btn--ghost" onClick={() => onExit?.()}>
+                        Annuler
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="game-container">
             {/* Barre du haut */}
@@ -128,7 +187,23 @@ const GameLayout = () => {
                 </div>
                 <div className="turn-counter" title="Numéro du tour">
                     Tour {turn}
+                    {settings?.maxTurns ? `/${settings.maxTurns}` : ""}
                 </div>
+                {online && (
+                    <div className="turn-counter" title="Votre place dans la partie">
+                        {localPlayerId
+                            ? `Vous : ${players.find((p) => p.id === localPlayerId)?.name ?? localPlayerId}`
+                            : "Spectateur"}
+                    </div>
+                )}
+                {turnTimer > 0 && (
+                    <div
+                        className={`turn-timer ${timeLeft <= 5 ? "turn-timer--low" : ""}`}
+                        title="Temps restant pour ce tour"
+                    >
+                        ⏱ {Math.max(0, timeLeft)}s
+                    </div>
+                )}
                 <div className="players-info">
                     {players.map((player) => (
                         <div
@@ -160,7 +235,12 @@ const GameLayout = () => {
                         </div>
                     ))}
                 </div>
-                <button className="end-turn-button" title="Passer son tour" onClick={handleEndTurn}>→</button>
+                <button
+                    className="end-turn-button"
+                    title={canAct ? "Passer son tour" : "En attente du tour adverse"}
+                    onClick={handleEndTurn}
+                    disabled={!canAct}
+                >→</button>
             </div>
 
             {/* Menu latéral */}
@@ -185,7 +265,7 @@ const GameLayout = () => {
                     <button>Army</button>
                     <button>Economy</button>
                     <button>Save</button>
-                    <button>Leave</button>
+                    <button onClick={() => onExit?.()}>Leave</button>
                 </div>
             </div>
 
@@ -194,6 +274,7 @@ const GameLayout = () => {
                 <HexBoard
                     game={state}
                     dispatch={dispatch}
+                    interactive={canAct}
                     selectedItem={selectedItem}
                     selection={selection}
                     onSelect={setSelection}
@@ -231,24 +312,68 @@ const GameLayout = () => {
                         canBuy={soldierView.playerId === activePlayerId}
                         gold={gold[soldierView.playerId] ?? 0}
                         onBuyBonus={(bonusId) => dispatch(buyBonus(selection.id, bonusId))}
+                        settings={settings}
+                        bonusesEnabled={bonusesEnabled}
                     />
                 ) : buildingView ? (
                     <BuildingPanel
                         building={buildingView}
                         color={colorOf(buildingView.playerId)}
                         owner={players.find((p) => p.id === buildingView.playerId) || null}
+                        settings={settings}
                     />
                 ) : selection?.kind === "tree" ? (
-                    <TreePanel owner={treeOwner} />
+                    <TreePanel owner={treeOwner} settings={settings} />
                 ) : (
                     <Shop
                         selectedItem={selectedItem}
                         onSelect={handleSelectItem}
                         activeColor={activeColor}
                         activeGold={gold[activePlayerId] ?? 0}
+                        settings={settings}
                     />
                 )}
             </div>
+
+            {/* Écran de fin de partie : voile sombre + panneau du vainqueur. */}
+            {status === "over" && (
+                <div className="game-over">
+                    <div className="game-over__panel">
+                        <span className="game-over__label">Partie terminée</span>
+                        {winner ? (
+                            <>
+                                <div
+                                    className="game-over__avatar"
+                                    style={{ backgroundColor: winner.color }}
+                                    aria-hidden="true"
+                                />
+                                <h2 className="game-over__winner">
+                                    {winner.name} l’emporte !
+                                </h2>
+                            </>
+                        ) : (
+                            <h2 className="game-over__winner">Match nul</h2>
+                        )}
+                        <span className="game-over__reason">
+                            {END_REASONS[endReason] || ""}
+                        </span>
+                        <div className="game-over__actions">
+                            <button
+                                className="game-over__btn game-over__btn--primary"
+                                onClick={() => dispatch(resetGame())}
+                            >
+                                Rejouer
+                            </button>
+                            <button
+                                className="game-over__btn"
+                                onClick={() => onExit?.()}
+                            >
+                                Menu principal
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

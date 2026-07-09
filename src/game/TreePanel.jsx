@@ -4,7 +4,7 @@ import UpkeepSpec from './UpkeepSpec.jsx';
 // Panneau d'un arbre sélectionné : rappelle l'or gagné en l'abattant et son
 // entretien par tour (nul pour un arbre). Purement informatif — aucune action
 // depuis ce panneau.
-const TreePanel = ({ owner }) => (
+const TreePanel = ({ owner, settings }) => (
     <div className="soldier-panel">
         <div
             className="soldier-panel__portrait"
@@ -16,9 +16,9 @@ const TreePanel = ({ owner }) => (
         <div className="soldier-panel__specs">
             <div className="soldier-spec">
                 <span className="soldier-spec__label">Or à l'abattage</span>
-                <span className="soldier-spec__value">+{TREE_REWARD}</span>
+                <span className="soldier-spec__value">+{settings?.treeReward ?? TREE_REWARD}</span>
             </div>
-            <UpkeepSpec unit={{ type: 'tree' }} owner={owner} />
+            <UpkeepSpec unit={{ type: 'tree' }} owner={owner} settings={settings} />
         </div>
     </div>
 );

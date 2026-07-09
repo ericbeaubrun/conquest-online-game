@@ -6,8 +6,8 @@ import { upkeepFor } from './soldier.js';
 //   - gain  (entretien négatif, ex. maison) : en jaune, « +N pour <joueur> » ;
 //   - nul   : « Aucun ».
 // `owner` est le joueur propriétaire ({ name, color }) ou null (case neutre).
-const UpkeepSpec = ({ unit, owner }) => {
-    const cost = upkeepFor(unit);
+const UpkeepSpec = ({ unit, owner, settings }) => {
+    const cost = upkeepFor(unit, settings);
     const forWhom = owner ? (
         <>
             {' '}

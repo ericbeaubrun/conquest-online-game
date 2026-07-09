@@ -16,7 +16,7 @@ const SRC = { base: '/base.png', ...ITEM_SRC };
 // Menu des caractéristiques d'un bâtiment (base, maison, tour) sélectionné.
 // Prend la place de la boutique, comme le panneau du soldat : image + barre de
 // vie. Purement informatif — aucune action possible depuis ce panneau.
-const BuildingPanel = ({ building, color, owner }) => (
+const BuildingPanel = ({ building, color, owner, settings }) => (
     <div className="soldier-panel">
         <div className="soldier-panel__portrait" style={{ borderColor: color }}>
             <img src={SRC[building.type]} alt={LABEL[building.type]} />
@@ -46,7 +46,7 @@ const BuildingPanel = ({ building, color, owner }) => (
                 <span className="soldier-spec__label">Type</span>
                 <span className="soldier-spec__value">{LABEL[building.type]}</span>
             </div>
-            <UpkeepSpec unit={building} owner={owner} />
+            <UpkeepSpec unit={building} owner={owner} settings={settings} />
         </div>
     </div>
 );

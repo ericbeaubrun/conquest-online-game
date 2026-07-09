@@ -10,6 +10,8 @@ import {
     isAttackable,
 } from './rules.js';
 import { upkeepFor } from '../soldier.js';
+import { getLogicalBoard } from './board.js';
+import { DOMINATION_PERCENT, ECONOMY_GOAL } from './settings.js';
 
 // Cases atteignables par le soldat `startId`.
 // Règles : MAX_MOVE pas max, dont AU PLUS 1 case hors du territoire (conquête,
@@ -121,15 +123,74 @@ export function ownedCount(state, playerId) {
 export function upkeepTotal(state, playerId) {
     let sum = 0;
     for (const placed of state.placements.values()) {
-        if (placed.playerId === playerId) sum += upkeepFor(placed);
+        if (placed.playerId === playerId) sum += upkeepFor(placed, state.settings);
     }
     return sum;
 }
 
 // Revenu d'un joueur pour un tour : base + 1 or par case possédée, moins
 // l'entretien de ses unités (jamais négatif). Les maisons ayant un entretien
-// négatif, elles augmentent au contraire ce revenu.
+// négatif, elles augmentent au contraire ce revenu. Le revenu de base est
+// configurable (retombe sur `BASE_INCOME` sinon).
 export function incomeFor(state, playerId) {
-    const gross = BASE_INCOME + ownedCount(state, playerId);
+    const base = state.settings?.baseIncome ?? BASE_INCOME;
+    const gross = base + ownedCount(state, playerId);
     return Math.max(0, gross - upkeepTotal(state, playerId));
+}
+
+// Un joueur est « en vie » tant qu'il possède au moins une case OU un soldat sur
+// le plateau. Sert à la condition de victoire par élimination.
+export function playerAlive(state, playerId) {
+    if (ownedCount(state, playerId) > 0) return true;
+    for (const placed of state.placements.values()) {
+        if (placed.type === 'soldier' && placed.playerId === playerId) return true;
+    }
+    return false;
+}
+
+// Évalue les conditions de victoire et renvoie l'état, marqué 'over' si l'une
+// est remplie. PURE. Appelée après chaque action mutante. Priorités :
+//   1. élimination : s'il ne reste qu'un joueur en vie, il gagne (tous modes) ;
+//   2. mode choisi : domination (part du territoire) ou économie (or atteint) ;
+//   3. limite de tours : au-delà, le meneur (territoire, ou or en mode économie)
+//      l'emporte.
+export function checkVictory(state) {
+    const s = state.settings;
+    if (!s || state.status === 'over') return state;
+    const { players } = state;
+    const finish = (winnerId, reason) => ({ ...state, status: 'over', winnerId, endReason: reason });
+
+    const alive = players.filter((p) => playerAlive(state, p.id));
+    if (alive.length <= 1) return finish(alive[0]?.id ?? null, 'elimination');
+
+    if (s.victoryMode === 'domination') {
+        const board = getLogicalBoard(state.mapId);
+        const total = board.cells.filter((c) => !c.blocked).length || 1;
+        const threshold = (s.dominationPercent ?? DOMINATION_PERCENT) / 100;
+        for (const p of players) {
+            if (ownedCount(state, p.id) / total >= threshold) return finish(p.id, 'domination');
+        }
+    } else if (s.victoryMode === 'economy') {
+        const goal = s.economyGoal ?? ECONOMY_GOAL;
+        for (const p of players) {
+            if ((state.gold[p.id] || 0) >= goal) return finish(p.id, 'economy');
+        }
+    }
+
+    // Limite de tours atteinte : on tranche au meneur selon le mode.
+    if (s.maxTurns > 0 && state.turn > s.maxTurns) {
+        const scoreOf = (p) =>
+            s.victoryMode === 'economy' ? state.gold[p.id] || 0 : ownedCount(state, p.id);
+        let best = null;
+        let bestScore = -Infinity;
+        for (const p of players) {
+            const sc = scoreOf(p);
+            if (sc > bestScore) {
+                bestScore = sc;
+                best = p;
+            }
+        }
+        return finish(best?.id ?? null, 'timeout');
+    }
+    return state;
 }

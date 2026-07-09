@@ -1,0 +1,704 @@
+// Styles des écrans de menu (accueil + configuration hors-ligne). Même langage
+// visuel que le jeu : police VT323, coins carrés, bordures noires franches,
+// « double bordure » pixel (box-shadow 0 0 0 Npx), accents or/vert/rouge.
+
+// ---- Jetons de couleur partagés ----
+$pixel-font: "VT323", "Courier New", monospace;
+$bg: #14171c;
+$panel: #1c1c1c;
+$panel-soft: #23262d;
+$line: #4a4a4a;
+$ink: #f2f2f2;
+$muted: #a9a9a9;
+$gold: #ffd766;
+$green: #5bd35b;
+$red: #f04e4e;
+$blue: #3f7fd8;
+
+@mixin pixel-border($liner: $line) {
+    border: 3px solid #000;
+    box-shadow: 0 0 0 3px $liner;
+}
+
+// Fond commun aux deux écrans : sombre, avec une grille discrète.
+.home-screen,
+.setup-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    font-family: $pixel-font;
+    color: $ink;
+    background-color: $bg;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 24px 24px;
+    letter-spacing: 0.02em;
+    overflow: hidden;
+}
+
+// ---- Boutons génériques ----
+.menu-btn {
+    font-family: $pixel-font;
+    font-size: 22px;
+    color: $ink;
+    background: $panel-soft;
+    border: 3px solid #000;
+    box-shadow: 4px 4px 0 #000;
+    padding: 8px 18px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.12s ease;
+
+    &:hover {
+        background: #2c313a;
+    }
+    // Effet « appui » rétro : le bouton s'enfonce sur son ombre.
+    &:active {
+        transform: translate(4px, 4px);
+        box-shadow: 0 0 0 #000;
+    }
+
+    &--ghost {
+        font-size: 20px;
+        background: transparent;
+        box-shadow: none;
+        border-color: $line;
+        padding: 6px 14px;
+
+        &:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+        &:active {
+            transform: none;
+        }
+    }
+
+    // Gros boutons de jeu : deux lignes (label + sous-titre).
+    &--play {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        min-width: 240px;
+        padding: 20px 24px;
+    }
+
+    &--offline {
+        background: #234a34;
+        &:hover { background: #2b5b40; }
+    }
+    &--online {
+        background: #223b57;
+        &:hover { background: #294869; }
+    }
+
+    .menu-btn__label {
+        font-size: 34px;
+        line-height: 1;
+    }
+    .menu-btn__sub {
+        font-size: 16px;
+        color: $muted;
+        letter-spacing: 0.06em;
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        &:active { transform: none; box-shadow: 4px 4px 0 #000; }
+    }
+}
+
+// ================= ACCUEIL =================
+.home-topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+
+    &__brand {
+        font-size: 26px;
+        letter-spacing: 0.16em;
+        color: $muted;
+    }
+}
+
+.home-hero {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 20px;
+
+    &__title {
+        margin: 0;
+        font-size: clamp(56px, 12vw, 120px);
+        line-height: 0.9;
+        letter-spacing: 0.08em;
+        color: $gold;
+        // Ombre pixel « en escalier » sous le titre.
+        text-shadow: 4px 4px 0 #000, 8px 8px 0 rgba(0, 0, 0, 0.35);
+    }
+
+    &__tagline {
+        margin: 0 0 40px;
+        font-size: 24px;
+        color: $muted;
+    }
+
+    &__actions {
+        display: flex;
+        gap: 28px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
+
+// ================= CONFIGURATION HORS-LIGNE =================
+.setup-topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    background: $panel;
+    border-bottom: 3px solid #000;
+    box-shadow: 0 3px 0 $line;
+    z-index: 5;
+
+    &__title {
+        flex: 1;
+        margin: 0;
+        text-align: center;
+        font-size: 30px;
+        letter-spacing: 0.08em;
+        color: $ink;
+    }
+
+    &__spacer {
+        // Équilibre le bouton « Retour » pour centrer le titre.
+        width: 96px;
+    }
+}
+
+.setup-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 980px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.setup-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    &__title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0;
+        font-size: 22px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: $muted;
+        border-bottom: 2px solid $line;
+        padding-bottom: 6px;
+    }
+
+    &__count {
+        font-size: 18px;
+        color: $gold;
+        letter-spacing: 0.04em;
+    }
+}
+
+// ---- Cartes de sélection de map ----
+.map-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.map-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+    padding: 12px 14px;
+    color: $ink;
+    background: $panel;
+    font-family: $pixel-font;
+    @include pixel-border;
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.06s ease;
+
+    &:hover {
+        background: #262a31;
+    }
+    &:active {
+        transform: translateY(1px);
+    }
+
+    &__name {
+        font-size: 24px;
+        color: $ink;
+    }
+    &__desc {
+        font-size: 16px;
+        color: $muted;
+    }
+    &__cap {
+        font-size: 15px;
+        color: $blue;
+        letter-spacing: 0.04em;
+    }
+
+    &--active {
+        background: #2f6f4f;
+        box-shadow: 0 0 0 3px $green;
+        .map-card__cap { color: #cfefd8; }
+    }
+}
+
+// ---- Liste des joueurs ----
+.player-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.player-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: $panel;
+    @include pixel-border;
+    flex-wrap: wrap;
+
+    &__num {
+        flex: 0 0 auto;
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        color: #000;
+        background: $gold;
+        border: 2px solid #000;
+    }
+
+    &__name {
+        flex: 1 1 160px;
+        min-width: 120px;
+        font-family: $pixel-font;
+        font-size: 20px;
+        color: $ink;
+        background: #000;
+        border: 2px solid $line;
+        padding: 5px 10px;
+
+        &:focus {
+            outline: none;
+            border-color: $gold;
+        }
+        &::placeholder {
+            color: #6a6a6a;
+        }
+    }
+
+    &__remove {
+        flex: 0 0 auto;
+        margin-left: auto;
+        width: 30px;
+        height: 30px;
+        font-family: $pixel-font;
+        font-size: 24px;
+        line-height: 1;
+        color: $ink;
+        background: #3a2020;
+        border: 2px solid #000;
+        box-shadow: inset 0 0 0 1px $line;
+        cursor: pointer;
+
+        &:hover:not(:disabled) {
+            background: $red;
+        }
+        &:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+    }
+}
+
+.add-player-btn {
+    align-self: flex-start;
+    font-family: $pixel-font;
+    font-size: 20px;
+    color: $green;
+    background: transparent;
+    border: 2px dashed $line;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+
+    &:hover:not(:disabled) {
+        background: rgba(91, 211, 91, 0.1);
+    }
+    &:disabled {
+        color: $muted;
+        cursor: not-allowed;
+        border-style: solid;
+    }
+}
+
+// ---- Toggle segmenté ----
+.segmented {
+    display: inline-flex;
+    border: 2px solid #000;
+    box-shadow: inset 0 0 0 1px $line;
+    background: #000;
+
+    &__opt {
+        font-family: $pixel-font;
+        font-size: 18px;
+        color: $muted;
+        background: $panel-soft;
+        border: none;
+        padding: 5px 14px;
+        cursor: pointer;
+        border-right: 2px solid #000;
+        transition: background 0.1s ease, color 0.1s ease;
+
+        &:last-child {
+            border-right: none;
+        }
+        &:hover {
+            color: $ink;
+        }
+        &--active {
+            color: #000;
+            background: $gold;
+        }
+    }
+
+    &--sm &__opt {
+        font-size: 16px;
+        padding: 4px 10px;
+    }
+}
+
+// ---- Sélecteur de couleur ----
+.color-picker {
+    position: relative;
+    flex: 0 0 auto;
+
+    &__swatch {
+        width: 34px;
+        height: 34px;
+        border: 3px solid #000;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+        cursor: pointer;
+        padding: 0;
+    }
+
+    &__scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+    }
+
+    &__menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        z-index: 31;
+        display: grid;
+        grid-template-columns: repeat(4, 28px);
+        gap: 6px;
+        padding: 8px;
+        background: $panel;
+        @include pixel-border;
+    }
+
+    &__chip {
+        width: 28px;
+        height: 28px;
+        border: 2px solid #000;
+        cursor: pointer;
+        padding: 0;
+
+        &--active {
+            box-shadow: 0 0 0 2px $gold;
+        }
+        &--taken {
+            opacity: 0.3;
+            cursor: not-allowed;
+            position: relative;
+        }
+    }
+}
+
+// ---- Réglages ----
+// Chaque catégorie est un bloc titré ; ses réglages forment une LISTE VERTICALE
+// compacte (un réglage par ligne) plutôt qu'une grille multi-colonnes.
+.setting-group {
+    margin-bottom: 10px;
+
+    &__title {
+        margin: 0 0 6px;
+        font-size: 16px;
+        text-transform: uppercase;
+        color: $blue;
+        letter-spacing: 0.08em;
+    }
+
+    &__list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+}
+
+// Réglage « groupe » : pleine largeur, repliable ; sa sous-liste s'ouvre juste
+// EN DESSOUS de son en-tête (titre + chevron). Double classe pour l'emporter sur
+// le `display: flex` de `.setting` (même spécificité, défini plus bas).
+.setting.setting--group {
+    display: block;
+    padding: 0;
+}
+
+.setting__grouphead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 6px 10px;
+    font-family: $pixel-font;
+    text-align: left;
+    color: $ink;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.04);
+    }
+}
+
+.setting__chevron {
+    flex: 0 0 auto;
+    font-size: 13px;
+    color: $muted;
+}
+
+// Sous-liste : nettement rattachée sous l'en-tête (liseré haut + fond en creux),
+// paramètres sur DEUX colonnes séparées par un délimiteur vertical.
+.setting__grouplist {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 0;
+    row-gap: 4px;
+    padding: 8px 10px 10px;
+    border-top: 2px solid $line;
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.setting__grouprow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 3px 0;
+
+    // Délimiteur vertical centré entre les deux colonnes : liseré à droite des
+    // cellules de gauche (impaires), marge symétrique sur celles de droite.
+    &:nth-child(odd) {
+        border-right: 2px solid $line;
+        padding-right: 16px;
+    }
+    &:nth-child(even) {
+        padding-left: 16px;
+    }
+}
+
+.setting__grouplabel {
+    font-size: 16px;
+    color: #d0d0d0;
+    min-width: 0;
+}
+
+.setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 10px;
+    background: $panel;
+    border: 2px solid #000;
+    box-shadow: inset 0 0 0 1px $line;
+
+    &__text {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+    }
+
+    &__label {
+        font-size: 17px;
+        color: $ink;
+    }
+    &__help {
+        font-size: 13px;
+        color: $muted;
+        line-height: 1.12;
+    }
+
+    &__control {
+        flex: 0 0 auto;
+    }
+
+    &__select {
+        font-family: $pixel-font;
+        font-size: 18px;
+        color: $ink;
+        background: #000;
+        border: 2px solid $line;
+        padding: 5px 8px;
+        cursor: pointer;
+
+        &:focus {
+            outline: none;
+            border-color: $gold;
+        }
+    }
+
+    &__number {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    &__step {
+        width: 28px;
+        height: 28px;
+        font-family: $pixel-font;
+        font-size: 20px;
+        line-height: 1;
+        color: $ink;
+        background: $panel-soft;
+        border: 2px solid #000;
+        cursor: pointer;
+
+        &:hover:not(:disabled) {
+            background: #2c313a;
+        }
+        &:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+    }
+
+    &__input {
+        width: 58px;
+        font-family: $pixel-font;
+        font-size: 19px;
+        text-align: center;
+        color: $gold;
+        background: #000;
+        border: 2px solid $line;
+        padding: 4px 2px;
+
+        &:focus {
+            outline: none;
+            border-color: $gold;
+        }
+        // Masque les flèches natives (on fournit nos propres +/−).
+        -moz-appearance: textfield;
+        &::-webkit-outer-spin-button,
+        &::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    }
+
+    &__unit {
+        font-size: 16px;
+        color: $muted;
+        min-width: 20px;
+    }
+}
+
+// ---- Bandeau de lancement ----
+.setup-launchbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 20px;
+    background: $panel;
+    border-top: 3px solid #000;
+    box-shadow: 0 -3px 0 $line;
+
+    &__summary {
+        font-size: 20px;
+        color: $muted;
+    }
+}
+
+.menu-btn--launch {
+    flex-direction: row;
+    min-width: 0;
+    padding: 12px 28px;
+    font-size: 26px;
+    background: #234a34;
+    &:hover { background: #2b5b40; }
+}
+
+// ---- Adaptations mobile ----
+@media (max-width: 600px) {
+    .home-hero__actions {
+        flex-direction: column;
+        width: 100%;
+        max-width: 320px;
+    }
+    .menu-btn--play {
+        width: 100%;
+    }
+    .setup-topbar__title {
+        font-size: 22px;
+    }
+    .setup-topbar__spacer {
+        display: none;
+    }
+    // Sous-listes des groupes en une seule colonne sur petit écran : le
+    // délimiteur vertical n'a plus lieu d'être.
+    .setting__grouplist {
+        grid-template-columns: 1fr;
+    }
+    .setting__grouprow:nth-child(odd) {
+        border-right: none;
+        padding-right: 0;
+    }
+    .setting__grouprow:nth-child(even) {
+        padding-left: 0;
+    }
+    .player-row {
+        gap: 8px;
+    }
+}

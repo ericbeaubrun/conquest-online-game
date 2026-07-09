@@ -11,9 +11,11 @@ import {
     BUY_BONUS,
     END_TURN,
     SET_MAP,
+    RESET_GAME,
 } from './actions.js';
 import { getLogicalBoard, createInitialState } from './board.js';
-import { computeReachable, incomeFor } from './selectors.js';
+import { makeRng } from './rng.js';
+import { computeReachable, incomeFor, checkVictory } from './selectors.js';
 import {
     SOLDIER_HP_DEFAULT,
     SOLDIER_ATK_DEFAULT,
@@ -25,13 +27,12 @@ import {
     combatResult,
     TREE_REWARD,
     TREE_MAX_RATIO,
-    TREE_TURN_RAMP,
-    TREE_SPAWN_CHANCE,
 } from './rules.js';
 import { ITEM_COST } from '../items.js';
 import {
     CHALLENGE_METRICS,
     BONUS_OFFERS,
+    bonusPriceOf,
     isBonusUnlocked,
     SKELETON_SRC,
     SKELETON_HP,
@@ -56,14 +57,15 @@ import { getNeighbors, hexId } from '../hex.js';
 
 // Fabrique un soldat neuf avec ses caractéristiques par défaut. Centralisé ici
 // pour que toute création de soldat parte du même modèle (stats + specs).
-function makeSoldier(playerId, uid) {
+function makeSoldier(playerId, uid, settings) {
     return {
         type: 'soldier',
         playerId,
         uid,
         level: 1,
-        hp: SOLDIER_HP_DEFAULT,
-        atk: SOLDIER_ATK_DEFAULT,
+        // PV / attaque de départ configurables (retombent sur les valeurs par défaut).
+        hp: settings?.soldierHp ?? SOLDIER_HP_DEFAULT,
+        atk: settings?.soldierAtk ?? SOLDIER_ATK_DEFAULT,
         affinity: null, // feu | glace | foudre | null
         bonus: null, // cupide | rapide | assaillant | protecteur | soigneur | bucheron | null
         behavior: null, // conquete | attaque | defense | arbre | renfort | null
@@ -304,32 +306,39 @@ function reduceChop(state, { fromId, toId }) {
     const placements = new Map(state.placements);
     placements.delete(toId);
     placements.set(fromId, chopper); // le soldat reste sur place, progression à jour
-    // Bonus « Bûcheron » : gagne 2× plus d'or en coupant les arbres.
-    const reward = from.bonus === 'lumberjack' ? TREE_REWARD * 2 : TREE_REWARD;
+    // Récompense configurable ; le bonus « Bûcheron » la double.
+    const baseReward = state.settings?.treeReward ?? TREE_REWARD;
+    const reward = from.bonus === 'lumberjack' ? baseReward * 2 : baseReward;
     const purse = state.gold[state.activePlayerId] || 0;
     const gold = { ...state.gold, [state.activePlayerId]: purse + reward };
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
     return { ...state, placements, gold, movedSoldiers };
 }
 
-// Apparition d'arbres en fin de tour. Le nombre tiré croît avec l'avancée de la
-// partie (jusqu'à `TREE_TURN_RAMP`) et le nombre de joueurs, mais reste borné
-// par le plafond global (`TREE_MAX_RATIO` de la carte). Renvoie la nouvelle
-// carte des items (inchangée si rien n'apparaît).
-function spawnTrees(state, board) {
-    const cap = Math.floor(board.cells.length * TREE_MAX_RATIO);
+// Apparition d'arbres en fin de tour. Chaque tour, une « vague » d'arbres a une
+// certaine probabilité de survenir (`treeSpawnChance`) ; le cas échéant, elle
+// pose entre `treeSpawnMin` et `treeSpawnMax` arbres. Le tout reste borné par le
+// plafond global (`treeDensity` de la carte). Renvoie la nouvelle carte des items
+// (inchangée si rien n'apparaît).
+function spawnTrees(state, board, rng) {
+    const s = state.settings;
+    // Apparition des arbres désactivable en configuration.
+    if (s && s.treesEnabled === false) return state.placements;
+    // Densité maximale configurable (pourcentage → ratio) ; défaut = barème.
+    const ratio = s?.treeDensity != null ? s.treeDensity / 100 : TREE_MAX_RATIO;
+    const cap = Math.floor(board.cells.length * ratio);
     let treeCount = 0;
     for (const p of state.placements.values()) if (p.type === 'tree') treeCount += 1;
     const room = cap - treeCount;
     if (room <= 0) return state.placements;
 
-    // Intensité 0→1 selon l'avancée ; une tentative par joueur (les parties à
-    // plus de joueurs voient donc davantage d'arbres).
-    const progress = Math.min(state.turn / TREE_TURN_RAMP, 1);
-    let want = 0;
-    for (let i = 0; i < state.players.length; i += 1) {
-        if (Math.random() < TREE_SPAWN_CHANCE * progress) want += 1;
-    }
+    // Probabilité qu'une vague apparaisse ce tour (0..1).
+    const chance = (s?.treeSpawnChance ?? 50) / 100;
+    if (rng.next() >= chance) return state.placements;
+    // Nombre d'arbres de la vague : entier tiré dans [min, max] (min ≤ max).
+    const min = Math.max(0, s?.treeSpawnMin ?? 0);
+    const max = Math.max(min, s?.treeSpawnMax ?? 2);
+    let want = min + rng.int(max - min + 1);
     want = Math.min(want, room);
     if (want <= 0) return state.placements;
 
@@ -341,7 +350,7 @@ function spawnTrees(state, board) {
 
     const placements = new Map(state.placements);
     for (let i = 0; i < want && eligible.length; i += 1) {
-        const idx = Math.floor(Math.random() * eligible.length);
+        const idx = rng.int(eligible.length);
         const [cell] = eligible.splice(idx, 1);
         placements.set(cell.id, { type: 'tree' });
     }
@@ -352,7 +361,9 @@ function spawnTrees(state, board) {
 // 2 arbres sur des cases collées à SON territoire (frontière), indépendamment du
 // système d'apparition normal (n'entre pas dans le plafond / la montée en
 // intensité). Prend la carte des items déjà mise à jour par `spawnTrees`.
-function spawnFarmerTrees(state, board, placementsIn) {
+function spawnFarmerTrees(state, board, placementsIn, rng) {
+    // Rien à faire si les arbres sont désactivés en configuration.
+    if (state.settings && state.settings.treesEnabled === false) return placementsIn;
     const pid = state.activePlayerId;
     // Combien de soldats-fermiers possède le joueur actif ?
     let farmers = 0;
@@ -373,9 +384,9 @@ function spawnFarmerTrees(state, board, placementsIn) {
 
     const placements = new Map(placementsIn);
     for (let f = 0; f < farmers; f += 1) {
-        const want = Math.floor(Math.random() * 3); // 0, 1 ou 2 arbres
+        const want = rng.int(3); // 0, 1 ou 2 arbres
         for (let i = 0; i < want && eligible.length; i += 1) {
-            const idx = Math.floor(Math.random() * eligible.length);
+            const idx = rng.int(eligible.length);
             const [cell] = eligible.splice(idx, 1); // case consommée (un arbre max)
             placements.set(cell.id, { type: 'tree' });
         }
@@ -435,7 +446,7 @@ function applyAlchemists(state, board, placementsIn) {
 // CONQUISE par le joueur (libre, non bloquée, hors base). L'invocation n'est pas
 // systématique : elle a une chance fixe de se produire chaque tour. Renvoie la
 // carte des items et le compteur d'uid mis à jour.
-function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn) {
+function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn, rng) {
     const pid = state.activePlayerId;
     const warlockCells = [];
     for (const [id, p] of placementsIn) {
@@ -451,7 +462,7 @@ function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn) {
         const cell = board.cellMap.get(id);
         if (!cell) continue;
         // Tirage : l'invocation ne se déclenche qu'avec une certaine probabilité.
-        if (Math.random() >= WARLOCK_SUMMON_CHANCE) continue;
+        if (rng.next() >= WARLOCK_SUMMON_CHANCE) continue;
         // Première case voisine accueillante ET possédée par le joueur.
         const spot = getNeighbors(cell.q, cell.r)
             .map((n) => hexId(n.q, n.r))
@@ -502,8 +513,9 @@ function reducePlace(state, { cellId, itemType }) {
     if (state.ownership.get(cellId) !== state.activePlayerId) return state;
     if (state.placements.has(cellId)) return state; // case déjà occupée
 
-    // Achat : le joueur actif doit avoir assez d'or ; le coût est débité.
-    const cost = ITEM_COST[itemType] || 0;
+    // Achat : le joueur actif doit avoir assez d'or ; le coût est débité. Le prix
+    // de chaque item est configurable (retombe sur le barème par défaut).
+    const cost = state.settings?.itemCost?.[itemType] ?? ITEM_COST[itemType] ?? 0;
     const purse = state.gold[state.activePlayerId] || 0;
     if (purse < cost) return state; // fonds insuffisants
 
@@ -512,7 +524,7 @@ function reducePlace(state, { cellId, itemType }) {
     let item;
     if (itemType === 'soldier') {
         uidSeq += 1;
-        item = makeSoldier(state.activePlayerId, `s${uidSeq}`);
+        item = makeSoldier(state.activePlayerId, `s${uidSeq}`, state.settings);
     } else {
         const stats = BUILDING_STATS[itemType];
         item = { type: itemType, playerId: state.activePlayerId, hp: stats?.hp ?? 0 };
@@ -528,17 +540,19 @@ function reducePlace(state, { cellId, itemType }) {
 // bonus (un seul par soldat) et le joueur a de quoi payer. Le prix est débité et
 // le soldat prend le bonus (son sprite change côté affichage).
 function reduceBuyBonus(state, { cellId, bonusId }) {
+    if (state.settings && state.settings.bonusesEnabled === false) return state; // bonus désactivés
     const soldier = state.placements.get(cellId);
     if (!soldier || soldier.type !== 'soldier') return state;
     if (isSkeleton(soldier)) return state; // un squelette ne porte jamais de bonus
     if (soldier.playerId !== state.activePlayerId) return state;
     if (soldier.bonus) return state; // déjà un bonus
 
+    if (state.settings?.bonusEnabled?.[bonusId] === false) return state; // bonus désactivé
     const bonus = BONUS_OFFERS.find((b) => b.id === bonusId);
     if (!bonus || bonus.requiredLevel !== (soldier.level || 1)) return state;
     if (!isBonusUnlocked(soldier, bonus)) return state; // défi non accompli
 
-    const price = bonus.price || 0;
+    const price = bonusPriceOf(bonus, state.settings); // prix configurable
     const purse = state.gold[state.activePlayerId] || 0;
     if (purse < price) return state; // fonds insuffisants
 
@@ -577,20 +591,25 @@ function reduceEndTurn(state) {
     }
     if (hasKing) income = Math.floor(income * KING_INCOME_MULT);
     const board = getLogicalBoard(state.mapId);
+    // Générateur aléatoire déterministe repris à la graine courante de l'état.
+    // Toutes les apparitions/invocations de ce tour puisent dans ce flux, puis
+    // on persiste la graine avancée pour que le prochain tour continue la suite.
+    const rng = makeRng(state.rngSeed);
     // Apparition normale des arbres, puis apparition « Fermier » (frontière).
-    let placements = spawnTrees(state, board);
-    placements = spawnFarmerTrees(state, board, placements);
+    let placements = spawnTrees(state, board, rng);
+    placements = spawnFarmerTrees(state, board, placements, rng);
     // Renfort « Alchimiste » sur les alliés adjacents avant de passer la main.
     placements = applyAlchemists(state, board, placements);
     // Régénération « Paladin ».
     placements = healPaladins(state, placements);
     // Invocation « Démoniste » : un squelette fragile par démoniste.
-    const summon = spawnWarlockSkeletons(state, board, placements, state.uidSeq);
+    const summon = spawnWarlockSkeletons(state, board, placements, state.uidSeq, rng);
     placements = summon.placements;
     return {
         ...state,
         placements,
         uidSeq: summon.uidSeq,
+        rngSeed: rng.seed, // graine avancée : la suite de la partie reste déterministe
         gold: { ...state.gold, [activePlayerId]: (state.gold[activePlayerId] || 0) + income },
         turn: nextIdx === 0 ? state.turn + 1 : state.turn,
         activePlayerId: players[nextIdx].id,
@@ -599,24 +618,48 @@ function reduceEndTurn(state) {
 }
 
 export function gameReducer(state, action) {
+    // Réinitialisation d'une carte (menu latéral) : repart des joueurs/réglages
+    // par défaut de la carte. Rejouer la partie courante conserve, lui, la
+    // configuration choisie (mêmes joueurs, mêmes réglages).
+    if (action.type === SET_MAP) return createInitialState(action.mapId, null, action.seed);
+    if (action.type === RESET_GAME) {
+        return createInitialState(
+            state.mapId,
+            { players: state.players, settings: state.settings },
+            action.seed
+        );
+    }
+    // Partie terminée : plus aucune action de jeu n'est acceptée (seules la
+    // sortie et la réinitialisation, traitées ci-dessus, restent possibles).
+    if (state.status === 'over') return state;
+
+    let next;
     switch (action.type) {
         case MOVE_SOLDIER:
-            return reduceMove(state, action);
+            next = reduceMove(state, action);
+            break;
         case MERGE_SOLDIER:
-            return reduceMerge(state, action);
+            next = reduceMerge(state, action);
+            break;
         case ATTACK_SOLDIER:
-            return reduceAttack(state, action);
+            next = reduceAttack(state, action);
+            break;
         case CHOP_TREE:
-            return reduceChop(state, action);
+            next = reduceChop(state, action);
+            break;
         case PLACE_ITEM:
-            return reducePlace(state, action);
+            next = reducePlace(state, action);
+            break;
         case BUY_BONUS:
-            return reduceBuyBonus(state, action);
+            next = reduceBuyBonus(state, action);
+            break;
         case END_TURN:
-            return reduceEndTurn(state);
-        case SET_MAP:
-            return createInitialState(action.mapId);
+            next = reduceEndTurn(state);
+            break;
         default:
             return state;
     }
+    // L'action n'a rien changé : inutile de réévaluer les conditions de victoire.
+    if (next === state) return state;
+    return checkVictory(next);
 }
