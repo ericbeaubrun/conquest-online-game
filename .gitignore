@@ -14,7 +14,3 @@ dist-ssr/
 # Logs
 *.log
 npm-debug.log*
-
-# conquest-back est un dépôt git indépendant (conquest-online-server),
-# versionné séparément — non suivi par le monorepo parent.
-/conquest-back/

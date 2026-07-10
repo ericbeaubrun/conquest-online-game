@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Conquest — Test lobby online</title>
+    <style>
+        :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+        body { margin: 0; padding: 1.5rem; max-width: 760px; margin-inline: auto; line-height: 1.4; }
+        h1 { font-size: 1.25rem; } h2 { font-size: 1rem; margin: 0 0 .6rem; }
+        .card { border: 1px solid #8884; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+        button, select, input { font: inherit; padding: .4rem .7rem; border-radius: 8px; border: 1px solid #8886; background: #8882; }
+        button { cursor: pointer; } button:disabled { opacity: .4; cursor: not-allowed; }
+        button.primary { background: #3f7fd8; color: #fff; border-color: #3f7fd8; }
+        .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+        .seat { display: inline-flex; align-items: center; gap: .4rem; padding: .2rem .5rem; border-radius: 6px; border: 1px solid #8884; }
+        .dot { width: .8rem; height: .8rem; border-radius: 50%; display: inline-block; }
+        .players { display: flex; gap: 1rem; } .player { flex: 1; padding: .6rem; border-radius: 8px; border: 2px solid transparent; }
+        .player.active { border-color: currentColor; font-weight: 700; }
+        .muted { opacity: .7; font-size: .85rem; } code { background: #8882; padding: .1rem .3rem; border-radius: 4px; }
+        .lobby-item { display: flex; justify-content: space-between; align-items: center; padding: .4rem .6rem; border: 1px solid #8884; border-radius: 8px; margin-bottom: .4rem; }
+        #log { font-family: ui-monospace, monospace; font-size: .8rem; white-space: pre-wrap; max-height: 200px; overflow: auto; background: #8881; padding: .6rem; border-radius: 8px; }
+        textarea { width: 100%; font-family: ui-monospace, monospace; font-size: .8rem; box-sizing: border-box; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Conquest — banc de test du lobby online</h1>
+    <p class="muted">
+        Ouvrez cette page dans <strong>deux onglets</strong>. Onglet 1 : « Créer une
+        partie » (vous devenez hôte, siège Rouge). Onglet 2 : « Rafraîchir » puis
+        « Rejoindre » la partie listée (siège Bleu). L'hôte clique « Démarrer »,
+        puis jouez à tour de rôle. Les parties survivent à un redémarrage du serveur.
+    </p>
+
+    <div class="card">
+        <h2>Lobby</h2>
+        <div class="row">
+            <select id="map">
+                <option value="duel">Duel (2 j.)</option>
+                <option value="vallee">Vallée (3 j.)</option>
+                <option value="continent">Continent (4 j.)</option>
+                <option value="archipel">Archipel (4 j.)</option>
+            </select>
+            <button id="create" class="primary">Créer une partie</button>
+            <button id="refresh">Rafraîchir la liste</button>
+            <span style="flex:1"></span>
+            <input id="code" placeholder="CODE" size="6" style="text-transform:uppercase" />
+            <button id="join">Rejoindre</button>
+        </div>
+        <div id="list" style="margin-top:.8rem"></div>
+    </div>
+
+    <div class="card hidden" id="room">
+        <h2>Salle <code id="roomCode"></code> — <span id="roomStatus"></span></h2>
+        <div class="row"><span id="me" class="muted"></span></div>
+        <div id="seats" class="row" style="margin-top:.5rem"></div>
+        <div class="row" style="margin-top:.6rem">
+            <button id="start" class="primary">Démarrer la partie</button>
+        </div>
+    </div>
+
+    <div class="card hidden" id="game">
+        <div class="row" style="justify-content:space-between">
+            <strong id="turn">Tour —</strong><span id="status" class="muted"></span>
+        </div>
+        <div class="players" id="gamePlayers" style="margin-top:.6rem"></div>
+        <p class="muted" id="placements" style="margin-top:.6rem"></p>
+        <div class="row" style="margin-top:.4rem">
+            <button id="place">Poser un soldat (case de test)</button>
+            <button id="end">Terminer mon tour</button>
+        </div>
+        <details style="margin-top:.6rem">
+            <summary class="muted">Action brute (avancé)</summary>
+            <textarea id="raw" rows="2">{ "type": "END_TURN" }</textarea>
+            <div class="row" style="margin-top:.4rem"><button id="send">Envoyer</button></div>
+        </details>
+    </div>
+
+    <div class="card"><h2>Journal</h2><div id="log"></div></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const TEST_CELL = { p1: '-3,0', p2: '3,0' }; // cases faciles (carte Duel)
+        const socket = io();
+        let myPlayerId = null, myCode = null, hostSeat = null, lastState = null;
+
+        const $ = (id) => document.getElementById(id);
+        const show = (id, on) => $(id).classList.toggle('hidden', !on);
+        function log(msg, obj) {
+            $('log').textContent = `[${new Date().toLocaleTimeString()}] ${msg}` +
+                (obj !== undefined ? ' ' + JSON.stringify(obj) : '') + '\n' + $('log').textContent;
+        }
+
+        // startingGold non nul pour pouvoir poser une unité dès le 1er tour (test).
+        $('create').onclick = () => socket.emit('lobby:create', { mapId: $('map').value, settings: { startingGold: 50 } });
+        $('refresh').onclick = () => socket.emit('lobby:list');
+        $('join').onclick = () => socket.emit('lobby:join', { code: $('code').value.trim().toUpperCase() });
+        $('start').onclick = () => socket.emit('lobby:start', { code: myCode });
+        $('end').onclick = () => socket.emit('game:action', { type: 'END_TURN' });
+        $('place').onclick = () => {
+            if (!myPlayerId) return log('Rejoignez et démarrez une partie d’abord.');
+            socket.emit('game:action', { type: 'PLACE_ITEM', cellId: TEST_CELL[myPlayerId], itemType: 'soldier' });
+        };
+        $('send').onclick = () => { try { socket.emit('game:action', JSON.parse($('raw').value)); } catch (e) { log('JSON invalide: ' + e.message); } };
+
+        socket.on('connect', () => { log('Connecté (' + socket.id + ')'); socket.emit('lobby:list'); });
+        socket.on('disconnect', () => log('Déconnecté.'));
+        socket.on('lobby:error', (e) => log('❌ lobby:error ' + e.reason, e.message));
+        socket.on('game:rejected', (r) => log('❌ action refusée: ' + r.reason, r.action?.type));
+
+        socket.on('lobby:list', (lobbies) => {
+            $('list').innerHTML = lobbies.length
+                ? lobbies.map((l) => `<div class="lobby-item">
+                    <span><code>${l.code}</code> · ${l.name} · ${l.mapId} · ${l.status} · ${l.seatsTaken}/${l.seatsTotal}</span>
+                    <button onclick="document.getElementById('code').value='${l.code}';document.getElementById('join').click()">Rejoindre</button>
+                  </div>`).join('')
+                : '<span class="muted">Aucune partie ouverte. Créez-en une.</span>';
+        });
+
+        socket.on('lobby:joined', ({ code, playerId, lobby }) => {
+            myCode = code; myPlayerId = playerId; hostSeat = lobby.seats[0]?.playerId;
+            $('roomCode').textContent = code;
+            $('me').textContent = playerId ? `Vous êtes ${playerId}` : 'Spectateur (partie pleine)';
+            show('room', true);
+            renderRoom(lobby.status, lobby.seats);
+            log('Rejoint ' + code + ' comme ' + (playerId || 'spectateur'));
+        });
+
+        socket.on('lobby:update', ({ code, status, seats }) => {
+            if (code !== myCode) return;
+            renderRoom(status, seats);
+        });
+
+        socket.on('game:state', (state) => { lastState = state; show('game', true); renderGame(state); });
+
+        function renderRoom(status, seats) {
+            $('roomStatus').textContent = status;
+            $('seats').innerHTML = seats.map((s) =>
+                `<span class="seat"><span class="dot" style="background:${s.color}"></span>${s.name} (${s.playerId}) — ${s.taken ? 'occupé' : 'libre'}</span>`).join('');
+            // Seul l'hôte (1er siège) peut démarrer, et seulement en attente.
+            $('start').disabled = !(myPlayerId === hostSeat && status === 'waiting');
+        }
+
+        function renderGame(s) {
+            const isMyTurn = myPlayerId && s.activePlayerId === myPlayerId;
+            $('turn').textContent = `Tour ${s.turn}` + (s.settings?.maxTurns ? `/${s.settings.maxTurns}` : '');
+            $('status').textContent = s.status === 'over'
+                ? '🏁 Terminé' + (s.winnerId ? ' — vainqueur ' + s.winnerId : '')
+                : (isMyTurn ? '✅ À vous' : 'En attente…');
+            $('gamePlayers').innerHTML = s.players.map((p) => {
+                const active = p.id === s.activePlayerId;
+                return `<div class="player ${active ? 'active' : ''}" style="color:${p.color}">
+                    ${p.name}${active ? ' ◀' : ''}<br><span class="muted" style="color:inherit">💰 ${s.gold[p.id] ?? 0}${p.id === myPlayerId ? ' (vous)' : ''}</span></div>`;
+            }).join('');
+            const units = s.placements || [];
+            $('placements').textContent = `${units.length} unité(s)/objet(s) — dont ${units.filter(([, u]) => u.playerId === myPlayerId).length} à vous.`;
+            const canAct = isMyTurn && s.status !== 'over';
+            $('end').disabled = !canAct; $('place').disabled = !canAct;
+        }
+    </script>
+</body>
+</html>
