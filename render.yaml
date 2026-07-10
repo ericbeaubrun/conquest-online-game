@@ -1,0 +1,21 @@
+# Blueprint Render — déploie le serveur (workspace conquest-back) du monorepo.
+# L'install tourne à la RACINE du dépôt (rootDir: .) pour que npm crée le symlink
+# du workspace @conquest/shared-engine, puis le start cible le workspace back.
+services:
+  - type: web
+    name: conquest-back
+    runtime: node
+    rootDir: .
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start -w conquest-back
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Renseigner dans le dashboard Render (marqués sync:false = non versionnés) :
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        sync: false
