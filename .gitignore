@@ -1,24 +1,20 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Dépendances (installées à la racine du monorepo, partagées par les paquets)
+node_modules/
 
-node_modules
-dist
-dist-ssr
-*.local
+# Build front
+dist/
+dist-ssr/
 
-# Editor directories and files
+# Éditeurs
+.idea/
 .vscode/*
 !.vscode/extensions.json
-.idea
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+
+# Logs
+*.log
+npm-debug.log*
+
+# conquest-back est un dépôt git indépendant (conquest-online-server),
+# versionné séparément — non suivi par le monorepo parent.
+/conquest-back/
