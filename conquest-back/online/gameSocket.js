@@ -163,7 +163,10 @@ export function attachGameServer(io) {
                     socket.emit('game:rejected', { reason: 'not-your-turn', action });
                     return;
                 }
-                const next = await applyAction(entry, action); // applique + persiste
+                // Applique en mémoire (synchrone) puis DIFFUSE AUSSITÔT : le
+                // broadcast n'attend plus l'écriture Mongo (planifiée en arrière-plan
+                // par applyAction). C'est ce qui supprime la latence DB du jeu.
+                const next = applyAction(entry, action);
                 if (!next) {
                     socket.emit('game:rejected', { reason: 'illegal-action', action });
                     return;

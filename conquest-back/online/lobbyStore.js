@@ -39,6 +39,39 @@ async function uniqueCode() {
     return randomCode(6); // repli très improbable
 }
 
+// --- Persistance différée (write-behind) ---
+// On n'attend PLUS l'écriture Mongo pour rediffuser l'état : l'état vif en
+// mémoire fait déjà autorité pendant la session. On regroupe donc les écritures
+// (au plus une par PERSIST_DELAY ms) et on force une écriture immédiate sur les
+// événements à ne pas perdre (fin de partie). La banque ne bloque plus le jeu.
+const PERSIST_DELAY = 1000;
+const persistTimers = new Map(); // code -> timeout en attente
+
+// Écrit maintenant, sans bloquer l'appelant (fire-and-forget + log d'erreur).
+function flushPersist(entry) {
+    const t = persistTimers.get(entry.code);
+    if (t) {
+        clearTimeout(t);
+        persistTimers.delete(entry.code);
+    }
+    persist(entry).catch((e) => {
+        // eslint-disable-next-line no-console
+        console.error(`[persist] échec pour '${entry.code}':`, e.message || e);
+    });
+}
+
+// Planifie une écriture. `immediate` force le flush tout de suite ; sinon on
+// coalesce : une seule écriture différée par fenêtre PERSIST_DELAY.
+function schedulePersist(entry, { immediate = false } = {}) {
+    if (immediate) {
+        flushPersist(entry);
+        return;
+    }
+    if (persistTimers.has(entry.code)) return; // écriture déjà planifiée
+    const t = setTimeout(() => flushPersist(entry), PERSIST_DELAY);
+    persistTimers.set(entry.code, t);
+}
+
 // Écrit l'entrée vive dans MongoDB (métadonnées + état sérialisé).
 async function persist(entry) {
     await lobbiesCol().updateOne(
@@ -186,14 +219,18 @@ export async function startLobby(entry) {
     return entry;
 }
 
-// --- Application d'une action de jeu (avec persistance write-through) ---
-// Renvoie le nouvel état, ou null si l'action n'a rien changé (illégale/no-op).
-export async function applyAction(entry, action) {
+// --- Application d'une action de jeu (persistance différée) ---
+// SYNCHRONE : applique le reducer en mémoire et renvoie le nouvel état tout de
+// suite, pour que l'appelant puisse rediffuser SANS attendre la base. La
+// persistance est planifiée en arrière-plan (write-behind), forcée en fin de
+// partie. Renvoie null si l'action n'a rien changé (illégale/no-op).
+export function applyAction(entry, action) {
     if (!entry.state) return null;
     const next = gameReducer(entry.state, action);
     if (next === entry.state) return null;
     entry.state = next;
-    if (next.status === 'over' && entry.status !== 'over') entry.status = 'over';
-    await persist(entry);
+    const gameOver = next.status === 'over' && entry.status !== 'over';
+    if (gameOver) entry.status = 'over';
+    schedulePersist(entry, { immediate: gameOver });
     return next;
 }

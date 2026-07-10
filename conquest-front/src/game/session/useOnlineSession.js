@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { deserializeState } from '@conquest/shared-engine/engine/serialize.js';
+import { gameReducer } from '@conquest/shared-engine/engine/reducer.js';
 
 const SERVER_URL = import.meta.env?.VITE_SERVER_URL || 'http://localhost:3000';
 
@@ -21,6 +22,7 @@ export function useOnlineSession() {
     const [lobby, setLobby] = useState(null); // salle rejointe { code, name, mapId, status, seats }
     const [localPlayerId, setLocalPlayerId] = useState(null); // siège attribué (null = spectateur)
     const [gameState, setGameState] = useState(null); // état de jeu (une fois la partie démarrée)
+    const serverStateRef = useRef(null); // dernier état reçu du serveur (autorité), pour rollback
 
     useEffect(() => {
         const socket = io(SERVER_URL, { transports: ['websocket'] });
@@ -43,7 +45,18 @@ export function useOnlineSession() {
         socket.on('lobby:update', ({ code, status, seats }) => {
             setLobby((prev) => (prev && prev.code === code ? { ...prev, status, seats } : prev));
         });
-        socket.on('game:state', (raw) => setGameState(deserializeState(raw)));
+        // État serveur = autorité. Il remplace tout état optimiste local et sert
+        // de point de retour en cas de coup refusé.
+        socket.on('game:state', (raw) => {
+            const s = deserializeState(raw);
+            serverStateRef.current = s;
+            setGameState(s);
+        });
+        // Coup refusé par le serveur : on annule l'optimisme en revenant au
+        // dernier état faisant autorité.
+        socket.on('game:rejected', () => {
+            if (serverStateRef.current) setGameState(serverStateRef.current);
+        });
 
         return () => {
             socket.close();
@@ -65,8 +78,21 @@ export function useOnlineSession() {
         socketRef.current?.emit('lobby:start', { code: lobby?.code });
     }, [lobby?.code]);
 
-    // --- Action de jeu : émise au serveur (jamais appliquée localement) ---
-    const dispatch = useCallback((action) => socketRef.current?.emit('game:action', action), []);
+    // --- Action de jeu : appliquée OPTIMISTE localement, puis émise au serveur ---
+    // On rejoue le coup tout de suite avec le même moteur déterministe que le
+    // serveur (même seed embarquée dans l'état) → ressenti instantané. Le serveur
+    // reste l'autorité : son 'game:state' remplacera cet état, et 'game:rejected'
+    // le fera revenir en arrière (voir serverStateRef).
+    const dispatch = useCallback((action) => {
+        const socket = socketRef.current;
+        if (!socket) return;
+        setGameState((prev) => {
+            if (!prev) return prev;
+            const next = gameReducer(prev, action);
+            return next === prev ? prev : next; // no-op si le moteur juge le coup illégal
+        });
+        socket.emit('game:action', action);
+    }, []);
 
     // Session de jeu au format attendu par GameLayout. `ready` vrai dès qu'un état
     // serveur est arrivé ; `isMyTurn` faux hors de son tour ou en spectateur.
