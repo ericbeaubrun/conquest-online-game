@@ -1,6 +1,6 @@
 import { StatBar } from './SoldierPanel.jsx';
-import { soldierSkin } from '@shared/data/soldier.js';
-import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from '@shared/engine/rules.js';
+import { soldierSkin } from '@conquest/shared-engine/data/soldier.js';
+import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from '@conquest/shared-engine/engine/rules.js';
 
 // Carte compacte d'un soldat (portrait selon le niveau + jauges PV/ATK).
 const Card = ({ soldier, color, label }) => (

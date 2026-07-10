@@ -1,4 +1,4 @@
-import { upkeepFor } from '@shared/data/soldier.js';
+import { upkeepFor } from '@conquest/shared-engine/data/soldier.js';
 
 // Ligne « Or / tour » homogène pour toute unité possédable (soldat, squelette,
 // bâtiment, arbre). Affiche l'entretien attribué à son propriétaire :

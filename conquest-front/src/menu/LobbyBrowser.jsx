@@ -3,7 +3,7 @@
 // Réutilise le style de la page de configuration hors-ligne pour la cohérence.
 
 import { useState } from "react";
-import { MAPS, DEFAULT_MAP_ID } from "@shared/data/maps.js";
+import { MAPS, DEFAULT_MAP_ID } from "@conquest/shared-engine/data/maps.js";
 
 const LobbyBrowser = ({ lobbies = [], error, onCreate, onJoin, onRefresh, onBack }) => {
     const [mapId, setMapId] = useState(DEFAULT_MAP_ID);

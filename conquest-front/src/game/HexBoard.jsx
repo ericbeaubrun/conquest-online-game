@@ -1,13 +1,13 @@
 import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {hexId, hexHeight, pixelToHex} from '@shared/data/hex.js';
-import {TERRAIN_COLORS} from '@shared/data/terrain.js';
-import {ITEM_SRC} from '@shared/data/items.js';
-import {soldierSprite, hasUnlockedBonus} from '@shared/data/soldier.js';
-import {getLogicalBoard} from '@shared/engine/board.js';
-import {buildGeometry} from '@shared/render/geometry.js';
-import {computeReachable} from '@shared/engine/selectors.js';
-import {moveSoldier, mergeSoldier, attackSoldier, chopTree, placeItem} from '@shared/engine/actions.js';
-import {SOLDIER_HP_MAX} from '@shared/engine/rules.js';
+import {hexId, hexHeight, pixelToHex} from '@conquest/shared-engine/data/hex.js';
+import {TERRAIN_COLORS} from '@conquest/shared-engine/data/terrain.js';
+import {ITEM_SRC} from '@conquest/shared-engine/data/items.js';
+import {soldierSprite, hasUnlockedBonus} from '@conquest/shared-engine/data/soldier.js';
+import {getLogicalBoard} from '@conquest/shared-engine/engine/board.js';
+import {buildGeometry} from '@conquest/shared-engine/render/geometry.js';
+import {computeReachable} from '@conquest/shared-engine/engine/selectors.js';
+import {moveSoldier, mergeSoldier, attackSoldier, chopTree, placeItem} from '@conquest/shared-engine/engine/actions.js';
+import {SOLDIER_HP_MAX} from '@conquest/shared-engine/engine/rules.js';
 import './HexBoard.scss';
 
 const BASE_SRC = '/base.png';

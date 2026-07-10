@@ -1,7 +1,7 @@
-import { ITEM_SRC } from '@shared/data/items.js';
+import { ITEM_SRC } from '@conquest/shared-engine/data/items.js';
 import { StatBar } from './SoldierPanel.jsx';
-import { soldierSprite } from '@shared/data/soldier.js';
-import { combatResult, maxHp, maxAtk } from '@shared/engine/rules.js';
+import { soldierSprite } from '@conquest/shared-engine/data/soldier.js';
+import { combatResult, maxHp, maxAtk } from '@conquest/shared-engine/engine/rules.js';
 
 // Image d'une unité (soldat ou bâtiment). La base n'est pas un item de boutique.
 // Pour un soldat on prend le sprite complet (skin dédié ou visuel de son bonus),

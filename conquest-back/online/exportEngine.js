@@ -35,20 +35,20 @@
 // deux côtés : le serveur rejoue exactement le même reducer, avec le même PRNG à
 // graine, donc le même état déterministe que celui qu'un client calculerait.
 //
-// ✅ Couplage via monorepo : la logique métier est centralisée dans le paquet
-// `shared-engine/` à la racine du monorepo, importé ici en relatif
-// (`../../shared-engine`). Le front (conquest-front) consomme exactement les
-// mêmes modules via l'alias Vite `@shared`. Source de vérité unique partagée.
+// ✅ Couplage via monorepo (npm workspaces) : la logique métier est centralisée
+// dans le paquet `@conquest/shared-engine`, importé ici par son nom de paquet.
+// Le front (conquest-front) importe exactement les mêmes modules par le même
+// nom. Source de vérité unique, résolue via node_modules (symlink workspace).
 
 // NB : on n'importe QUE des modules purs du moteur. Surtout PAS
 // de fichiers liés à l'UI ou React — le serveur fait sa propre
 // vérification de tour à partir de `state.activePlayerId`.
-export {gameReducer} from '../../shared-engine/engine/reducer.js';
-export {createInitialState} from '../../shared-engine/engine/board.js';
-export {serializeState, deserializeState} from '../../shared-engine/engine/serialize.js';
-export {randomSeed} from '../../shared-engine/engine/rng.js';
+export {gameReducer} from '@conquest/shared-engine/engine/reducer.js';
+export {createInitialState} from '@conquest/shared-engine/engine/board.js';
+export {serializeState, deserializeState} from '@conquest/shared-engine/engine/serialize.js';
+export {randomSeed} from '@conquest/shared-engine/engine/rng.js';
 
 // Données de définition de partie (cartes, joueurs par défaut) : nécessaires au
 // lobby pour dériver les sièges d'une carte. Modules purs eux aussi.
-export {MAPS, getMapById, DEFAULT_MAP_ID} from '../../shared-engine/data/maps.js';
-export {PLAYERS, playersForMap} from '../../shared-engine/data/players.js';
+export {MAPS, getMapById, DEFAULT_MAP_ID} from '@conquest/shared-engine/data/maps.js';
+export {PLAYERS, playersForMap} from '@conquest/shared-engine/data/players.js';

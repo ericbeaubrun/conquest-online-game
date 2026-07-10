@@ -1,0 +1,16 @@
+{
+  "name": "conquest-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "shared-engine",
+    "conquest-front",
+    "conquest-back"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w conquest-front",
+    "build": "npm run build -w conquest-front",
+    "start": "npm start -w conquest-back",
+    "lint": "npm run lint -w conquest-front"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@conquest/shared-engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Moteur de jeu déterministe partagé par le front (Vite) et le back (Node).",
+  "exports": {
+    "./*": "./*"
+  }
+}

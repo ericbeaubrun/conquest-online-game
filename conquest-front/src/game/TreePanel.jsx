@@ -1,4 +1,4 @@
-import { TREE_REWARD } from '@shared/engine/rules.js';
+import { TREE_REWARD } from '@conquest/shared-engine/engine/rules.js';
 import UpkeepSpec from './UpkeepSpec.jsx';
 
 // Panneau d'un arbre sélectionné : rappelle l'or gagné en l'abattant et son

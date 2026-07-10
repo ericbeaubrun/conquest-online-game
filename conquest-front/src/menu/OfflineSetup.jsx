@@ -7,7 +7,7 @@
 // Un bandeau collant en bas lance la partie.
 
 import { useMemo, useState } from 'react';
-import { MAPS } from '@shared/data/maps.js';
+import { MAPS } from '@conquest/shared-engine/data/maps.js';
 import {
     COLOR_PALETTE,
     BOT_DIFFICULTIES,

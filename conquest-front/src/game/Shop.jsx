@@ -1,4 +1,4 @@
-import { ITEMS } from '@shared/data/items.js';
+import { ITEMS } from '@conquest/shared-engine/data/items.js';
 
 // Boutique en bas de l'écran. Cliquer un item le sélectionne (bascule) :
 // le plateau passe alors en mode placement pour le joueur actif. Les items

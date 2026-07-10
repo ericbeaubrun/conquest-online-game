@@ -14,8 +14,8 @@ import {
     isBonusNotified,
     MIN_BONUS_LEVEL,
     MAX_BONUS_LEVEL,
-} from '@shared/data/soldier.js';
-import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from '@shared/engine/rules.js';
+} from '@conquest/shared-engine/data/soldier.js';
+import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from '@conquest/shared-engine/engine/rules.js';
 import UpkeepSpec from './UpkeepSpec.jsx';
 
 // Icône par affinité (ids définis dans AFFINITIES). Un soldat sans affinité

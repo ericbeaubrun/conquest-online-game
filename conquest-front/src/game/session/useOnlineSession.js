@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import { deserializeState } from '@shared/engine/serialize.js';
+import { deserializeState } from '@conquest/shared-engine/engine/serialize.js';
 
 const SERVER_URL = import.meta.env?.VITE_SERVER_URL || 'http://localhost:3000';
 

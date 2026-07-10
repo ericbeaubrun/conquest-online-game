@@ -6,10 +6,10 @@ import BuildingPanel from "./game/BuildingPanel.jsx";
 import TreePanel from "./game/TreePanel.jsx";
 import MergePreview from "./game/MergePreview.jsx";
 import CombatPreview from "./game/CombatPreview.jsx";
-import { MAPS } from "@shared/data/maps.js";
-import { setMap, endTurn, placeItem, buyBonus, resetGame } from "@shared/engine/actions.js";
-import { incomeFor } from "@shared/engine/selectors.js";
-import { BUILDING_STATS, canMerge, mergedSoldier } from "@shared/engine/rules.js";
+import { MAPS } from "@conquest/shared-engine/data/maps.js";
+import { setMap, endTurn, placeItem, buyBonus, resetGame } from "@conquest/shared-engine/engine/actions.js";
+import { incomeFor } from "@conquest/shared-engine/engine/selectors.js";
+import { BUILDING_STATS, canMerge, mergedSoldier } from "@conquest/shared-engine/engine/rules.js";
 
 const GameLayout = ({ session, onExit }) => {
     // État PARTAGÉ de la partie (tour, joueurs, possession, or...) fourni par la

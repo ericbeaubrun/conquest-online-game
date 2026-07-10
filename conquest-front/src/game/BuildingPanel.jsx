@@ -1,6 +1,6 @@
-import { ITEM_SRC } from '@shared/data/items.js';
+import { ITEM_SRC } from '@conquest/shared-engine/data/items.js';
 import { StatBar } from './SoldierPanel.jsx';
-import { maxHp, maxAtk } from '@shared/engine/rules.js';
+import { maxHp, maxAtk } from '@conquest/shared-engine/engine/rules.js';
 import UpkeepSpec from './UpkeepSpec.jsx';
 
 // Libellé et image par type de bâtiment. La base n'est pas un item de boutique :

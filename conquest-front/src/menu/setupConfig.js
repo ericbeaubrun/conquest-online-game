@@ -3,10 +3,10 @@
 // se contente de rendre ces données. Ajouter/retirer un réglage d'équilibrage
 // se fait donc en éditant les tableaux ci-dessous — aucun composant à toucher.
 
-import { MAPS, DEFAULT_MAP_ID } from '@shared/data/maps.js';
-import { DEFAULT_SETTINGS } from '@shared/engine/settings.js';
-import { ITEMS } from '@shared/data/items.js';
-import { BONUS_OFFERS } from '@shared/data/soldier.js';
+import { MAPS, DEFAULT_MAP_ID } from '@conquest/shared-engine/data/maps.js';
+import { DEFAULT_SETTINGS } from '@conquest/shared-engine/engine/settings.js';
+import { ITEMS } from '@conquest/shared-engine/data/items.js';
+import { BONUS_OFFERS } from '@conquest/shared-engine/data/soldier.js';
 
 // --- Palette de couleurs des joueurs ---
 // Choisies pour se distinguer entre elles ET des terrains (vert herbe, bleu

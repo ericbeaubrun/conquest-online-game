@@ -7,9 +7,9 @@
 // forme : GameLayout consomme indifféremment l'une ou l'autre (injectée en prop).
 
 import { useReducer } from 'react';
-import { gameReducer } from '@shared/engine/reducer.js';
-import { createInitialState } from '@shared/engine/board.js';
-import { DEFAULT_MAP_ID } from '@shared/data/maps.js';
+import { gameReducer } from '@conquest/shared-engine/engine/reducer.js';
+import { createInitialState } from '@conquest/shared-engine/engine/board.js';
+import { DEFAULT_MAP_ID } from '@conquest/shared-engine/data/maps.js';
 
 // Règle PURE partagée : ce client peut-il agir ? En hotseat (`localPlayerId ==
 // null`), toujours ; en online, seulement quand le joueur actif est le joueur local.
