@@ -7,22 +7,17 @@ import TreePanel from "./game/TreePanel.jsx";
 import MergePreview from "./game/MergePreview.jsx";
 import CombatPreview from "./game/CombatPreview.jsx";
 import { MAPS } from "./game/maps.js";
-import { useGameSession } from "./game/session/useGameSession.js";
 import { setMap, endTurn, placeItem, buyBonus, resetGame } from "./game/engine/actions.js";
 import { incomeFor } from "./game/engine/selectors.js";
 import { BUILDING_STATS, canMerge, mergedSoldier } from "./game/engine/rules.js";
 
-const GameLayout = ({ config = null, onExit }) => {
-    // État PARTAGÉ de la partie (tour, joueurs, possession, or...) via la
-    // session. `config` provient de la page hors-ligne (carte, joueurs, réglages)
-    // ou porte `online: true` pour rejoindre une partie serveur. Seul
-    // `useGameSession` change d'implémentation selon le mode ; le reste est identique.
-    const online = !!config?.online;
-    const { state, dispatch, isMyTurn, mode, ready, localPlayerId } = useGameSession(
-        online
-            ? { mode: "online", roomId: config?.roomId, mapId: config?.mapId }
-            : { mode: "local", mapId: config?.mapId, setup: config }
-    );
+const GameLayout = ({ session, onExit }) => {
+    // État PARTAGÉ de la partie (tour, joueurs, possession, or...) fourni par la
+    // SESSION, créée par le parent (hors-ligne : reducer local ; online : socket
+    // partagé du lobby). GameLayout ne connaît pas le transport : il lit l'état,
+    // dispatche des actions, et respecte `isMyTurn`. Identique dans les deux modes.
+    const { state, dispatch, isMyTurn, mode = "local", ready = true, localPlayerId = null } = session;
+    const online = mode === "online";
     const { players, activePlayerId, turn, mapId, gold, settings, status, winnerId, endReason } = state;
     const bonusesEnabled = settings?.bonusesEnabled !== false;
     // Ce client peut-il agir ? En hotseat local, toujours (le contrôle suit le

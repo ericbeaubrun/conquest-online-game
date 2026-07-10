@@ -32,7 +32,7 @@ const HomePage = ({ onPlayOffline, onPlayOnline, onLogin }) => {
                         onClick={onPlayOnline}
                     >
                         <span className="menu-btn__label">PLAY ONLINE</span>
-                        <span className="menu-btn__sub">Bientôt disponible</span>
+                        <span className="menu-btn__sub">Créez ou rejoignez une partie</span>
                     </button>
                 </div>
             </main>
