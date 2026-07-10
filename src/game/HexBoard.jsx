@@ -95,10 +95,10 @@ const Indicators = memo(function Indicators({moves, cellMap, size}) {
             <image
                 key={key}
                 href={href}
-                x={cell.cx - size / (2*1.25)}
-                y={cell.cy - size / (2*1.25)}
-                width={size*0.75}
-                height={size*0.75}
+                x={cell.cx - size / (2 * 1.25)}
+                y={cell.cy - size / (2 * 1.25)}
+                width={size * 0.75}
+                height={size * 0.75}
                 style={{imageRendering: 'pixelated'}}
                 pointerEvents="none"
             />
@@ -191,23 +191,24 @@ const BonusNotifications = memo(function BonusNotifications({
         );
     });
 });
-
-// Couche des bases, dessinée au-dessus des cases.
-const Bases = memo(function Bases({baseCells, size}) {
+// Couche des bases, dessinée au-dessus des cases. Une base détruite (assiégée
+// jusqu'à 0 PV) disparaît : sa case redevient une case normale.
+const Bases = memo(function Bases({baseCells, size, destroyedBases}) {
     // Base dessinée 1,20× plus grande, centrée sur sa case.
     const s = size * 1.2;
-    return baseCells.map((cell) => (
-        <image
-            key={cell.id}
-            href={BASE_SRC}
-            x={cell.cx - s / 2}
-            y={cell.cy - s / 2}
-            width={s}
-            height={s}
-            style={{imageRendering: 'pixelated'}}
-            pointerEvents="none"
-        />
-    ));
+    return baseCells
+        .filter((cell) => !destroyedBases?.has(cell.id))
+        .map((cell) => (<image
+                key={cell.id}
+                href={BASE_SRC}
+                x={cell.cx - s / 2}
+                y={cell.cy - s / 2}
+                width={s}
+                height={s}
+                style={{imageRendering: 'pixelated'}}
+                pointerEvents="none"
+            />
+        ));
 });
 
 // Couche des items posés (soldats, maisons, tours). Le niveau d'un soldat se
@@ -281,7 +282,7 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
 //   - 'tree'     : arbre (récompense d'abattage + coût de revenu)
 //   - 'tile'     : case vide du territoire actif (cible de pose depuis la boutique)
 // Renvoie `null` si la case n'est pas sélectionnable.
-function classifyCell(id, {placements, baseIds, ownership, activePlayerId, movedSoldiers}) {
+function classifyCell(id, {placements, baseIds, ownership, activePlayerId, movedSoldiers, destroyedBases}) {
     const placed = placements.get(id);
     if (placed?.type === 'soldier') {
         const actionable =
@@ -289,7 +290,9 @@ function classifyCell(id, {placements, baseIds, ownership, activePlayerId, moved
         return {id, kind: actionable ? 'soldier' : 'unit'};
     }
     if (placed?.type === 'tree') return {id, kind: 'tree'}; // infos de l'arbre
-    if (placed || baseIds.has(id)) return {id, kind: 'building'};
+// Base encore debout ou structure posée : panneau du bâtiment. Une base
+    // détruite n'est plus un bâtiment : elle retombe dans les cases normales.
+    if (placed || (baseIds.has(id) && !destroyedBases?.has(id))) return {id, kind: 'building'};
     if (ownership.get(id) === activePlayerId) return {id, kind: 'tile'};
     return null;
 }
@@ -300,8 +303,7 @@ function classifyCell(id, {placements, baseIds, ownership, activePlayerId, moved
 // toujours vrai : le comportement est inchangé.
 const HexBoard = ({game, dispatch, interactive = true, selectedItem, selection, onSelect, onHoverTarget}) => {
     const svgRef = useRef(null);
-    const {mapId, ownership, placements, movedSoldiers, activePlayerId, players, settings} = game;
-    // Bonus activés pour la partie (défaut vrai) : conditionne les notifications.
+    const {mapId, ownership, placements, movedSoldiers, activePlayerId, players, settings, destroyedBases} = game;    // Bonus activés pour la partie (défaut vrai) : conditionne les notifications.
     const bonusesEnabled = settings?.bonusesEnabled !== false;
 
     // Modèle logique (règles) et géométrie (rendu), mémoïsés par carte.
@@ -491,6 +493,7 @@ const HexBoard = ({game, dispatch, interactive = true, selectedItem, selection, 
                 ownership,
                 activePlayerId,
                 movedSoldiers,
+                destroyedBases,
             });
             // Clic droit : on ferme tout aperçu de survol pour qu'il ne
             // s'affiche pas par-dessus la boutique de bonus.
@@ -612,7 +615,7 @@ const HexBoard = ({game, dispatch, interactive = true, selectedItem, selection, 
                 {!selectedItem && selection?.kind === 'soldier' && (
                     <MoveHighlight moves={reachable.moves} cellMap={cellMap}/>
                 )}
-                <Bases baseCells={baseCells} size={baseSize}/>
+                <Bases baseCells={baseCells} size={baseSize} destroyedBases={destroyedBases}/>
                 <Buildings placements={placements} cellMap={cellMap} size={itemSize}/>
                 <BonusNotifications
                     placements={placements}

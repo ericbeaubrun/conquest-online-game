@@ -6,10 +6,10 @@ import BuildingPanel from "./game/BuildingPanel.jsx";
 import TreePanel from "./game/TreePanel.jsx";
 import MergePreview from "./game/MergePreview.jsx";
 import CombatPreview from "./game/CombatPreview.jsx";
-import { MAPS } from "./game/maps.js";
-import { setMap, endTurn, placeItem, buyBonus, resetGame } from "./game/engine/actions.js";
-import { incomeFor } from "./game/engine/selectors.js";
-import { BUILDING_STATS, canMerge, mergedSoldier } from "./game/engine/rules.js";
+import { MAPS } from "../shared-game/data/maps.js";
+import { setMap, endTurn, placeItem, buyBonus, resetGame } from "../shared-game/engine/actions.js";
+import { incomeFor } from "../shared-game/engine/selectors.js";
+import { BUILDING_STATS, canMerge, mergedSoldier } from "../shared-game/engine/rules.js";
 
 const GameLayout = ({ session, onExit }) => {
     // État PARTAGÉ de la partie (tour, joueurs, possession, or...) fourni par la
@@ -86,7 +86,12 @@ const GameLayout = ({ session, onExit }) => {
                       atk: selectedData.atk,
                       playerId: selectedData.playerId,
                   }
-                : { type: "base", hp: BUILDING_STATS.base.hp, playerId: state.ownership.get(selection.id) }
+                : {
+                      type: "base",
+                      // PV courants de la base (elle peut avoir été assiégée).
+                      hp: state.baseHp?.[selection.id] ?? BUILDING_STATS.base.hp,
+                      playerId: state.ownership.get(selection.id),
+                  }
             : null;
     // Arbre sélectionné : on affiche ses infos (récompense + coût) et le joueur
     // dont il occupe le territoire, le cas échéant.
@@ -102,10 +107,20 @@ const GameLayout = ({ session, onExit }) => {
     // Soldat sélectionné et unité survolée : servent aux aperçus de fusion et
     // de combat (affichés uniquement quand l'action est réellement valide).
     const hoverSoldier = selection?.kind === "soldier" ? selectedData : null;
+    // Cible survolée : un item posé (soldat, maison, tour) OU une base ennemie
+    // (absente de `placements`) synthétisée depuis ses PV courants, pour que
+    // l'aperçu de combat s'affiche aussi lors d'un siège de base.
+    const resolveTarget = (id) => {
+        const placed = state.placements.get(id);
+        if (placed) return placed;
+        return {
+            type: "base",
+            playerId: state.ownership.get(id),
+            hp: state.baseHp?.[id] ?? BUILDING_STATS.base.hp,
+        };
+    };
     const targetSoldier =
-        hoverTarget && hoverTarget.id !== selection?.id
-            ? state.placements.get(hoverTarget.id)
-            : null;
+        hoverTarget && hoverTarget.id !== selection?.id ? resolveTarget(hoverTarget.id) : null;
     const mergePreview =
         hoverTarget?.kind === "merge" && hoverSoldier && targetSoldier && canMerge(hoverSoldier, targetSoldier)
             ? { from: hoverSoldier, to: targetSoldier, result: mergedSoldier(hoverSoldier, targetSoldier) }

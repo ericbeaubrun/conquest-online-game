@@ -3,10 +3,10 @@
 // se contente de rendre ces données. Ajouter/retirer un réglage d'équilibrage
 // se fait donc en éditant les tableaux ci-dessous — aucun composant à toucher.
 
-import { MAPS, DEFAULT_MAP_ID } from '../game/maps.js';
-import { DEFAULT_SETTINGS } from '../game/engine/settings.js';
-import { ITEMS } from '../game/items.js';
-import { BONUS_OFFERS } from '../game/soldier.js';
+import { MAPS, DEFAULT_MAP_ID } from '../../shared-game/data/maps.js';
+import { DEFAULT_SETTINGS } from '../../shared-game/engine/settings.js';
+import { ITEMS } from '../../shared-game/data/items.js';
+import { BONUS_OFFERS } from '../../shared-game/data/soldier.js';
 
 // --- Palette de couleurs des joueurs ---
 // Choisies pour se distinguer entre elles ET des terrains (vert herbe, bleu
