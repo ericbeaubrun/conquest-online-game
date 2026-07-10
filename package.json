@@ -12,5 +12,8 @@
     "build": "npm run build -w conquest-front",
     "start": "npm start -w conquest-back",
     "lint": "npm run lint -w conquest-front"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.28.0"
   }
 }
