@@ -3,7 +3,7 @@
 // serveur du mode « online » partagent exactement les mêmes valeurs.
 
 export const MAX_MOVE = 2; // pas de déplacement maximum d'un soldat par tour
-export const MERGE_MAX = 4; // niveau maximum d'un soldat fusionné
+export const MERGE_MAX = 5; // niveau maximum d'un soldat fusionné
 export const BASE_INCOME = 10; // or gagné par tour avant le bonus de territoire
 export const STARTING_GOLD = 0; // or de départ de chaque joueur
 export const HOUSE_INCOME = 10; // or/tour rapporté par chaque maison possédée
@@ -13,7 +13,7 @@ export const HOUSE_INCOME = 10; // or/tour rapporté par chaque maison possédé
 // rapportent). Barème centralisé, partagé par le calcul de revenu et l'affichage
 // des panneaux. Le coût d'un soldat s'ajoute à celui de son bonus éventuel
 // (voir `upkeepFor` / `bonusUpkeep` dans soldier.js).
-export const SOLDIER_UPKEEP = { 1: 2, 2: 4, 3: 8, 4: 16 }; // par niveau de soldat
+export const SOLDIER_UPKEEP = {1: 2, 2: 4, 3: 8, 4: 16}; // par niveau de soldat
 export const SKELETON_UPKEEP = 1; // squelette invoqué (Mort-vivant / Démoniste)
 export const TOWER_UPKEEP = 10; // tour d'attaque ou de défense
 // Bâtiments : la maison rapporte (entretien négatif) ; base et arbres = 0.
@@ -70,8 +70,8 @@ export function combatResult(attacker, defender) {
     const atkHp = Math.max(0, (attacker.hp || 0) - (defender.atk || 0));
     const defHp = Math.max(0, (defender.hp || 0) - (attacker.atk || 0));
     return {
-        attacker: { ...attacker, hp: atkHp, dead: atkHp <= 0 },
-        defender: { ...defender, hp: defHp, dead: defHp <= 0 },
+        attacker: {...attacker, hp: atkHp, dead: atkHp <= 0},
+        defender: {...defender, hp: defHp, dead: defHp <= 0},
     };
 }
 
@@ -81,10 +81,10 @@ export function combatResult(attacker, defender) {
 // de `placements`) mais partage ce barème. Les tours possèdent une attaque :
 // elles ripostent quand un soldat les attaque (mêmes règles que le combat).
 export const BUILDING_STATS = {
-    base: { hp: 1000, hpMax: 1000 },
-    house: { hp: 20, hpMax: 20 },
-    attackTower: { hp: 50, hpMax: 50, atk: 10, atkMax: 100 },
-    defenseTower: { hp: 200, hpMax: 200, atk: 1, atkMax: 1 },
+    base: {hp: 1000, hpMax: 1000},
+    house: {hp: 20, hpMax: 20},
+    attackTower: {hp: 50, hpMax: 50, atk: 10, atkMax: 100},
+    defenseTower: {hp: 200, hpMax: 200, atk: 1, atkMax: 1},
 };
 
 // Plafonds de PV / d'attaque d'une unité quelconque (soldat ou bâtiment),
@@ -93,6 +93,7 @@ export function maxHp(unit) {
     if (!unit) return 0;
     return unit.type === 'soldier' ? SOLDIER_HP_MAX : BUILDING_STATS[unit.type]?.hpMax ?? unit.hp ?? 0;
 }
+
 export function maxAtk(unit) {
     if (!unit) return 0;
     return unit.type === 'soldier' ? SOLDIER_ATK_MAX : BUILDING_STATS[unit.type]?.atkMax ?? unit.atk ?? 0;

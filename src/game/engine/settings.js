@@ -7,9 +7,9 @@
 // Certaines valeurs par défaut sont dérivées des barèmes de base (prix boutique,
 // entretiens, prix/entretiens des bonus) pour rester alignées automatiquement.
 
-import { ITEM_COST } from '../items.js';
-import { SOLDIER_UPKEEP, TOWER_UPKEEP, SKELETON_UPKEEP } from './rules.js';
-import { BONUS_OFFERS } from '../soldier.js';
+import {ITEM_COST} from '../items.js';
+import {SOLDIER_UPKEEP, TOWER_UPKEEP, SKELETON_UPKEEP} from './rules.js';
+import {BONUS_OFFERS} from '../soldier.js';
 
 // --- Seuils par défaut des conditions de victoire (repli si non fournis) ---
 export const DOMINATION_PERCENT = 60; // % du territoire jouable à contrôler
@@ -26,7 +26,7 @@ export const DEFAULT_SETTINGS = {
     startingGold: 0,
     baseIncome: 10,
     houseIncome: 10,
-    itemCost: { ...ITEM_COST }, // prix de la boutique par item
+    itemCost: {...ITEM_COST}, // prix de la boutique par item
     // Entretien par tour (or prélevé sur le revenu) par type d'unité.
     upkeep: {
         soldier1: SOLDIER_UPKEEP[1],
@@ -45,8 +45,8 @@ export const DEFAULT_SETTINGS = {
     treeSpawnMax: 2, // nombre maximum d'arbres par vague
     // Unités
     bonusesEnabled: true,
-    soldierHp: 20,
-    soldierAtk: 10,
+    soldierHp: 10,
+    soldierAtk: 5,
     bonusEnabled: DEFAULT_BONUS_ENABLED, // bonus autorisés (activables un par un)
     bonusPrice: DEFAULT_BONUS_PRICE, // prix d'achat par bonus
     bonusUpkeep: DEFAULT_BONUS_UPKEEP, // entretien par tour par bonus
@@ -63,5 +63,5 @@ export const DEFAULT_SETTINGS = {
 // obtient toujours un objet de réglages entier (fusion superficielle, suffisante
 // puisque les sous-objets sont fournis d'un bloc par le menu).
 export function resolveSettings(partial) {
-    return { ...DEFAULT_SETTINGS, ...(partial || {}) };
+    return {...DEFAULT_SETTINGS, ...(partial || {})};
 }

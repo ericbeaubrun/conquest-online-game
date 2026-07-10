@@ -25,7 +25,7 @@ const Shop = ({ selectedItem, onSelect, activeColor, activeGold = 0, settings })
                     <img src={item.src} alt={item.name} className="shop-item__icon" />
                     <span className="shop-item__name">{item.name}</span>
                     <span className="shop-item__cost">
-                        <span role="img" aria-label="or">💰</span>
+                        <img src="/coin.png" alt="or" className="coin-icon" />
                         {cost}
                     </span>
                 </button>

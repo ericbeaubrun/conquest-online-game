@@ -13,9 +13,9 @@ import {
     SET_MAP,
     RESET_GAME,
 } from './actions.js';
-import { getLogicalBoard, createInitialState } from './board.js';
-import { makeRng } from './rng.js';
-import { computeReachable, incomeFor, checkVictory } from './selectors.js';
+import {getLogicalBoard, createInitialState} from './board.js';
+import {makeRng} from './rng.js';
+import {computeReachable, incomeFor, checkVictory} from './selectors.js';
 import {
     SOLDIER_HP_DEFAULT,
     SOLDIER_ATK_DEFAULT,
@@ -28,7 +28,7 @@ import {
     TREE_REWARD,
     TREE_MAX_RATIO,
 } from './rules.js';
-import { ITEM_COST } from '../items.js';
+import {ITEM_COST} from '../items.js';
 import {
     CHALLENGE_METRICS,
     BONUS_OFFERS,
@@ -52,8 +52,9 @@ import {
     SKELETON2_ATK,
     WARLOCK_SUMMON_CHANCE,
     PALADIN_HP_REGEN,
+    unlockedBonusIds,
 } from '../soldier.js';
-import { getNeighbors, hexId } from '../hex.js';
+import {getNeighbors, hexId} from '../hex.js';
 
 // Fabrique un soldat neuf avec ses caractéristiques par défaut. Centralisé ici
 // pour que toute création de soldat parte du même modèle (stats + specs).
@@ -66,7 +67,7 @@ function makeSoldier(playerId, uid, settings) {
         // PV / attaque de départ configurables (retombent sur les valeurs par défaut).
         hp: settings?.soldierHp ?? SOLDIER_HP_DEFAULT,
         atk: settings?.soldierAtk ?? SOLDIER_ATK_DEFAULT,
-        affinity: null, // feu | glace | foudre | null
+        affinity: null, // fire | ice | lightning | null
         bonus: null, // cupide | rapide | assaillant | protecteur | soigneur | bucheron | null
         behavior: null, // conquete | attaque | defense | arbre | renfort | null
         // Avancement des défis PROPRE à ce soldat (metric -> compteur). Sert à
@@ -81,7 +82,7 @@ function makeSoldier(playerId, uid, settings) {
 // (`skin`) et des statistiques réduites. Il ne porte aucun bonus et ne peut donc
 // pas en réinvoquer un autre. Les caractéristiques (skin/hp/atk) sont
 // paramétrables pour distinguer les deux invocations.
-function makeSkeleton(playerId, uid, { skin = SKELETON_SRC, hp = SKELETON_HP, atk = SKELETON_ATK } = {}) {
+function makeSkeleton(playerId, uid, {skin = SKELETON_SRC, hp = SKELETON_HP, atk = SKELETON_ATK} = {}) {
     return {
         type: 'soldier',
         unit: 'skeleton', // sous-type : occupe le plateau comme un soldat, mais
@@ -101,12 +102,12 @@ function makeSkeleton(playerId, uid, { skin = SKELETON_SRC, hp = SKELETON_HP, at
 // Renvoie une COPIE du soldat avec un compteur de défi incrémenté. Pur : ne
 // mute pas le soldat d'origine (l'objet `progress` est recréé).
 function withProgress(soldier, metric, amount = 1) {
-    const progress = { ...soldier.progress, [metric]: (soldier.progress?.[metric] || 0) + amount };
-    return { ...soldier, progress };
+    const progress = {...soldier.progress, [metric]: (soldier.progress?.[metric] || 0) + amount};
+    return {...soldier, progress};
 }
 
 // Déplacement (repositionnement dans le territoire ou conquête d'une case).
-function reduceMove(state, { fromId, toId }) {
+function reduceMove(state, {fromId, toId}) {
     const soldier = state.placements.get(fromId);
     if (!soldier || soldier.type !== 'soldier') return state;
     if (soldier.playerId !== state.activePlayerId) return state; // pas ton soldat
@@ -134,6 +135,16 @@ function reduceMove(state, { fromId, toId }) {
         moved = withProgress(moved, CHALLENGE_METRICS.CASES_TRAVELED_OWN, steps);
     }
 
+    // Orientation du sprite : le soldat regarde vers sa case de destination. Le
+    // `x` d'une case ne dépendant que de `q`, un `q` de destination plus grand
+    // signifie un déplacement vers la droite (sens par défaut), plus petit vers
+    // la gauche. Un déplacement purement vertical (même `q`) conserve le sens.
+    const fromQ = Number(fromId.split(',')[0]);
+    const toQ = Number(toId.split(',')[0]);
+    if (toQ !== fromQ) {
+        moved = {...moved, facing: toQ > fromQ ? 'right' : 'left'};
+    }
+
     const placements = new Map(state.placements);
     placements.delete(fromId);
     placements.set(toId, moved);
@@ -149,15 +160,15 @@ function reduceMove(state, { fromId, toId }) {
         if (soldier.bonus === 'thief' && isEnemyCase) reward += 1;
         if (reward > 0) {
             const purse = state.gold[state.activePlayerId] || 0;
-            gold = { ...state.gold, [state.activePlayerId]: purse + reward };
+            gold = {...state.gold, [state.activePlayerId]: purse + reward};
         }
     }
     const movedSoldiers = new Set(state.movedSoldiers).add(soldier.uid);
-    return { ...state, placements, ownership, gold, movedSoldiers };
+    return {...state, placements, ownership, gold, movedSoldiers};
 }
 
 // Fusion d'un soldat dans un soldat allié (niveau cumulé, plafonné).
-function reduceMerge(state, { fromId, toId }) {
+function reduceMerge(state, {fromId, toId}) {
     const from = state.placements.get(fromId);
     if (!from || from.type !== 'soldier') return state;
     if (from.playerId !== state.activePlayerId) return state;
@@ -187,14 +198,14 @@ function reduceMerge(state, { fromId, toId }) {
     placements.delete(fromId);
     placements.set(toId, merged);
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
-    return { ...state, placements, movedSoldiers };
+    return {...state, placements, movedSoldiers};
 }
 
 // Combat : le soldat actif attaque un soldat ennemi adjacent. Les deux unités
 // se retirent mutuellement des PV (égaux à l'attaque adverse) ; celles tombées
 // à 0 meurent (retirées du plateau). L'attaquant reste sur sa case et son tour
 // est consommé.
-function reduceAttack(state, { fromId, toId }) {
+function reduceAttack(state, {fromId, toId}) {
     const from = state.placements.get(fromId);
     if (!from || from.type !== 'soldier') return state;
     if (from.playerId !== state.activePlayerId) return state;
@@ -208,7 +219,7 @@ function reduceAttack(state, { fromId, toId }) {
     const to = state.placements.get(toId);
     if (!to || to.playerId === state.activePlayerId) return state;
 
-    const { attacker, defender } = combatResult(from, to);
+    const {attacker, defender} = combatResult(from, to);
     const placements = new Map(state.placements);
     let uidSeq = state.uidSeq;
 
@@ -217,7 +228,7 @@ function reduceAttack(state, { fromId, toId }) {
     // un squelette allié (5/10) sur sa case. Renvoie l'unité morte (ou null).
     const settle = (id, unit, outcome) => {
         if (!outcome.dead) {
-            let survivor = { ...unit, hp: outcome.hp };
+            let survivor = {...unit, hp: outcome.hp};
             // Défi « Guerrier » : chaque combat terminé en vie compte pour un soldat.
             if (unit.type === 'soldier') {
                 survivor = withProgress(survivor, CHALLENGE_METRICS.COMBATS_SURVIVED, 1);
@@ -273,16 +284,16 @@ function reduceAttack(state, { fromId, toId }) {
     let gold = state.gold;
     if (from.bonus === 'warrior' && !attacker.dead && deadDefender) {
         const purse = state.gold[state.activePlayerId] || 0;
-        gold = { ...state.gold, [state.activePlayerId]: purse + WARRIOR_KILL_REWARD };
+        gold = {...state.gold, [state.activePlayerId]: purse + WARRIOR_KILL_REWARD};
     }
 
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
-    return { ...state, placements, gold, movedSoldiers, uidSeq };
+    return {...state, placements, gold, movedSoldiers, uidSeq};
 }
 
 // Abattage d'un arbre : un soldat actif adjacent détruit l'arbre, le joueur
 // gagne aussitôt de l'or, et le tour du soldat est consommé.
-function reduceChop(state, { fromId, toId }) {
+function reduceChop(state, {fromId, toId}) {
     const from = state.placements.get(fromId);
     if (!from || from.type !== 'soldier') return state;
     if (from.playerId !== state.activePlayerId) return state;
@@ -310,9 +321,9 @@ function reduceChop(state, { fromId, toId }) {
     const baseReward = state.settings?.treeReward ?? TREE_REWARD;
     const reward = from.bonus === 'lumberjack' ? baseReward * 2 : baseReward;
     const purse = state.gold[state.activePlayerId] || 0;
-    const gold = { ...state.gold, [state.activePlayerId]: purse + reward };
+    const gold = {...state.gold, [state.activePlayerId]: purse + reward};
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
-    return { ...state, placements, gold, movedSoldiers };
+    return {...state, placements, gold, movedSoldiers};
 }
 
 // Apparition d'arbres en fin de tour. Chaque tour, une « vague » d'arbres a une
@@ -352,7 +363,7 @@ function spawnTrees(state, board, rng) {
     for (let i = 0; i < want && eligible.length; i += 1) {
         const idx = rng.int(eligible.length);
         const [cell] = eligible.splice(idx, 1);
-        placements.set(cell.id, { type: 'tree' });
+        placements.set(cell.id, {type: 'tree'});
     }
     return placements;
 }
@@ -388,7 +399,7 @@ function spawnFarmerTrees(state, board, placementsIn, rng) {
         for (let i = 0; i < want && eligible.length; i += 1) {
             const idx = rng.int(eligible.length);
             const [cell] = eligible.splice(idx, 1); // case consommée (un arbre max)
-            placements.set(cell.id, { type: 'tree' });
+            placements.set(cell.id, {type: 'tree'});
         }
     }
     return placements;
@@ -454,7 +465,7 @@ function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn, rng) {
             warlockCells.push(id);
         }
     }
-    if (!warlockCells.length) return { placements: placementsIn, uidSeq: uidSeqIn };
+    if (!warlockCells.length) return {placements: placementsIn, uidSeq: uidSeqIn};
 
     const placements = new Map(placementsIn);
     let uidSeq = uidSeqIn;
@@ -487,7 +498,7 @@ function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn, rng) {
             })
         );
     }
-    return { placements, uidSeq };
+    return {placements, uidSeq};
 }
 
 // Bonus « Paladin » : à la fin du tour de son propriétaire, chaque paladin
@@ -500,13 +511,13 @@ function healPaladins(state, placementsIn) {
         const healed = Math.min((p.hp || 0) + PALADIN_HP_REGEN, SOLDIER_HP_MAX);
         if (healed === p.hp) continue;
         if (!placements) placements = new Map(placementsIn);
-        placements.set(id, { ...p, hp: healed });
+        placements.set(id, {...p, hp: healed});
     }
     return placements || placementsIn;
 }
 
 // Pose d'un item (soldat, maison, tour) sur une case du territoire actif.
-function reducePlace(state, { cellId, itemType }) {
+function reducePlace(state, {cellId, itemType}) {
     const board = getLogicalBoard(state.mapId);
     const cell = board.cellMap.get(cellId);
     if (!cell || cell.blocked || board.baseIds.has(cellId)) return state;
@@ -527,19 +538,19 @@ function reducePlace(state, { cellId, itemType }) {
         item = makeSoldier(state.activePlayerId, `s${uidSeq}`, state.settings);
     } else {
         const stats = BUILDING_STATS[itemType];
-        item = { type: itemType, playerId: state.activePlayerId, hp: stats?.hp ?? 0 };
+        item = {type: itemType, playerId: state.activePlayerId, hp: stats?.hp ?? 0};
         if (stats?.atk != null) item.atk = stats.atk; // tours : attaque de riposte
     }
     placements.set(cellId, item);
-    const gold = { ...state.gold, [state.activePlayerId]: purse - cost };
-    return { ...state, placements, gold, uidSeq };
+    const gold = {...state.gold, [state.activePlayerId]: purse - cost};
+    return {...state, placements, gold, uidSeq};
 }
 
 // Achat/équipement d'un bonus pour un soldat. Conditions : c'est bien le soldat
 // du joueur actif, le défi du bonus est accompli, le soldat n'a pas déjà un
 // bonus (un seul par soldat) et le joueur a de quoi payer. Le prix est débité et
 // le soldat prend le bonus (son sprite change côté affichage).
-function reduceBuyBonus(state, { cellId, bonusId }) {
+function reduceBuyBonus(state, {cellId, bonusId}) {
     if (state.settings && state.settings.bonusesEnabled === false) return state; // bonus désactivés
     const soldier = state.placements.get(cellId);
     if (!soldier || soldier.type !== 'soldier') return state;
@@ -558,7 +569,7 @@ function reduceBuyBonus(state, { cellId, bonusId }) {
 
     // Bonus « Guerrier » : équiper le bonus porte aussitôt les statistiques du
     // soldat à leur nouveau palier.
-    const equipped = { ...soldier, bonus: bonusId };
+    const equipped = {...soldier, bonus: bonusId};
     if (bonusId === 'warrior') {
         equipped.hp = WARRIOR_HP;
         equipped.atk = WARRIOR_ATK;
@@ -569,15 +580,15 @@ function reduceBuyBonus(state, { cellId, bonusId }) {
 
     const placements = new Map(state.placements);
     placements.set(cellId, equipped);
-    const gold = { ...state.gold, [state.activePlayerId]: purse - price };
-    return { ...state, placements, gold };
+    const gold = {...state.gold, [state.activePlayerId]: purse - price};
+    return {...state, placements, gold};
 }
 
 // Fin de tour : le joueur actif encaisse son revenu, puis la main passe au
 // suivant. Un tour complet écoulé (retour au premier joueur) incrémente le
 // compteur, et chaque soldat retrouve son droit de déplacement.
 function reduceEndTurn(state) {
-    const { players, activePlayerId } = state;
+    const {players, activePlayerId} = state;
     const idx = players.findIndex((p) => p.id === activePlayerId);
     const nextIdx = (idx + 1) % players.length;
     let income = incomeFor(state, activePlayerId); // net de l'entretien des unités
@@ -605,12 +616,25 @@ function reduceEndTurn(state) {
     // Invocation « Démoniste » : un squelette fragile par démoniste.
     const summon = spawnWarlockSkeletons(state, board, placements, state.uidSeq, rng);
     placements = summon.placements;
+    // Acquittement des notifications de bonus : les bonus débloqués et réclamables
+    // des soldats du joueur qui vient de jouer rejoignent leur `bonusSeen`. La
+    // notification ne réapparaîtra donc plus, même si le bonus reste non réclamé.
+    const acked = new Map(placements);
+    for (const [id, p] of acked) {
+        if (p.type !== 'soldier' || p.playerId !== activePlayerId) continue;
+        const ids = unlockedBonusIds(p, state.settings, state.settings?.bonusesEnabled !== false);
+        const fresh = ids.filter((bid) => !p.bonusSeen?.includes(bid));
+        if (fresh.length) {
+            acked.set(id, {...p, bonusSeen: [...(p.bonusSeen || []), ...fresh]});
+        }
+    }
+    placements = acked;
     return {
         ...state,
         placements,
         uidSeq: summon.uidSeq,
         rngSeed: rng.seed, // graine avancée : la suite de la partie reste déterministe
-        gold: { ...state.gold, [activePlayerId]: (state.gold[activePlayerId] || 0) + income },
+        gold: {...state.gold, [activePlayerId]: (state.gold[activePlayerId] || 0) + income},
         turn: nextIdx === 0 ? state.turn + 1 : state.turn,
         activePlayerId: players[nextIdx].id,
         movedSoldiers: new Set(),
@@ -625,7 +649,7 @@ export function gameReducer(state, action) {
     if (action.type === RESET_GAME) {
         return createInitialState(
             state.mapId,
-            { players: state.players, settings: state.settings },
+            {players: state.players, settings: state.settings},
             action.seed
         );
     }

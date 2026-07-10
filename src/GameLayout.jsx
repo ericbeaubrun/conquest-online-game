@@ -219,7 +219,7 @@ const GameLayout = ({ session, onExit }) => {
                             />
                             <div className="player-stats">
                                 <div className="stat" title="Or en réserve">
-                                    <span role="img" aria-label="or">💰</span>
+                                    <img src="/coin.png" alt="or" className="stat__coin" />
                                     {gold[player.id] ?? 0}
                                 </div>
                                 <div className="stat" title="Or gagné par tour">

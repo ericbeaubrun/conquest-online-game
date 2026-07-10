@@ -18,16 +18,16 @@ export const END_TURN = 'END_TURN';
 export const SET_MAP = 'SET_MAP';
 export const RESET_GAME = 'RESET_GAME';
 
-export const moveSoldier = (fromId, toId) => ({ type: MOVE_SOLDIER, fromId, toId });
-export const mergeSoldier = (fromId, toId) => ({ type: MERGE_SOLDIER, fromId, toId });
-export const attackSoldier = (fromId, toId) => ({ type: ATTACK_SOLDIER, fromId, toId });
-export const chopTree = (fromId, toId) => ({ type: CHOP_TREE, fromId, toId });
-export const placeItem = (cellId, itemType) => ({ type: PLACE_ITEM, cellId, itemType });
-export const buyBonus = (cellId, bonusId) => ({ type: BUY_BONUS, cellId, bonusId });
-export const endTurn = () => ({ type: END_TURN });
+export const moveSoldier = (fromId, toId) => ({type: MOVE_SOLDIER, fromId, toId});
+export const mergeSoldier = (fromId, toId) => ({type: MERGE_SOLDIER, fromId, toId});
+export const attackSoldier = (fromId, toId) => ({type: ATTACK_SOLDIER, fromId, toId});
+export const chopTree = (fromId, toId) => ({type: CHOP_TREE, fromId, toId});
+export const placeItem = (cellId, itemType) => ({type: PLACE_ITEM, cellId, itemType});
+export const buyBonus = (cellId, bonusId) => ({type: BUY_BONUS, cellId, bonusId});
+export const endTurn = () => ({type: END_TURN});
 // `seed` (optionnel) fixe la graine de la nouvelle partie. En local elle est
 // omise (tirée au hasard) ; en mode « online » le serveur la renseignera pour
 // que tous les clients partent d'un état identique.
-export const setMap = (mapId, seed) => ({ type: SET_MAP, mapId, seed });
+export const setMap = (mapId, seed) => ({type: SET_MAP, mapId, seed});
 // Rejoue la partie courante avec la même configuration (joueurs + réglages).
-export const resetGame = (seed) => ({ type: RESET_GAME, seed });
+export const resetGame = (seed) => ({type: RESET_GAME, seed});

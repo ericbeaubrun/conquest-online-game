@@ -24,7 +24,7 @@ const BuildingPanel = ({ building, color, owner, settings }) => (
 
         <div className="soldier-panel__stats">
             <StatBar
-                icon="❤️"
+                icon={<img src="/heart.png" alt="" className="soldier-stat__img" />}
                 label="Points de vie"
                 value={building.hp}
                 max={maxHp(building)}

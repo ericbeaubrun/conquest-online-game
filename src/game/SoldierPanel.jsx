@@ -10,11 +10,21 @@ import {
     bonusPriceOf,
     bonusUpkeep,
     isSkeleton,
+    hasUnlockedBonus,
+    isBonusNotified,
     MIN_BONUS_LEVEL,
     MAX_BONUS_LEVEL,
 } from './soldier.js';
 import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from './engine/rules.js';
 import UpkeepSpec from './UpkeepSpec.jsx';
+
+// Icône par affinité (ids définis dans AFFINITIES). Un soldat sans affinité
+// (null) n'a pas d'entrée : on retombe alors sur le libellé texte « Aucune ».
+const AFFINITY_SRC = {
+    fire: '/fire.png',
+    ice: '/ice.png',
+    lightning: '/thunder.png',
+};
 
 // Petite jauge « valeur / max » avec barre de remplissage. Exportée pour être
 // réutilisée par le panneau des bâtiments (même style pixel).
@@ -43,6 +53,8 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
     // désactivés en configuration : le portrait n'ouvre alors rien.
     const skeleton = isSkeleton(soldier);
     const noBonusShop = skeleton || !bonusesEnabled;
+    // Un bonus est débloqué (défi accompli) et pas encore réclamé : notification.
+    const notify = hasUnlockedBonus(soldier, settings, bonusesEnabled);
     // La boutique de bonus est repliée par défaut : cliquer le portrait bascule
     // entre les caractéristiques du soldat et la boutique de bonus.
     const [bonusOpen, setBonusOpen] = useState(openBonus);
@@ -90,9 +102,11 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
                         return (
                         <div
                             key={bonus.id}
-                            className={`bonus-card ${unlocked ? 'bonus-card--unlocked' : ''} ${
+                            className={`bonus-card ${unlocked && viewingOwnLevel ? 'bonus-card--unlocked' : ''} ${
                                 equipped ? 'bonus-card--equipped' : ''
-                            } ${blocked ? 'bonus-card--blocked' : ''}`}
+                            } ${blocked ? 'bonus-card--blocked' : ''} ${
+                                viewingOwnLevel ? '' : 'bonus-card--preview'
+                            }`}
                         >
                             <div className="bonus-card__portrait">
                                 {bonus.src ? (
@@ -102,6 +116,15 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
                                     <span className="bonus-card__placeholder" aria-hidden="true">?</span>
                                 )}
                                 <span className="bonus-card__level">LVL {bonus.requiredLevel}</span>
+                                {/* Aperçu d'un autre niveau : cadenas de consultation. */}
+                                {!viewingOwnLevel && (
+                                    <img src="/lock.png" alt="Verrouillé" className="bonus-card__lock" />
+                                )}
+                                {/* Bonus débloqué, réclamable et pas encore acquitté : notification. */}
+                                {viewingOwnLevel && !equipped && !blocked &&
+                                    isBonusNotified(soldier, bonus, settings, bonusesEnabled) && (
+                                    <img src="/notif.png" alt="Débloqué" className="bonus-card__notif" />
+                                )}
                             </div>
                             <div className="bonus-card__body">
                                 <div className="bonus-card__header">
@@ -112,7 +135,11 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
                                                 price === 0 ? 'bonus-card__price--free' : ''
                                             }`}
                                         >
-                                            {price === 0 ? 'Gratuit' : `💰 ${price}`}
+                                            {price === 0 ? 'Gratuit' : (
+                                                <>
+                                                    <img src="/coin.png" alt="or" className="coin-icon" /> {price}
+                                                </>
+                                            )}
                                         </span>
                                         {upkeep ? (
                                             <span className="bonus-card__upkeep" title="Entretien par tour">
@@ -121,10 +148,14 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
                                         ) : null}
                                     </span>
                                 </div>
-                                <p className="bonus-card__challenge">
-                                    {unlocked ? '✅' : '🎯'} {challengeText(soldier, bonus)}
+                                <p className={`bonus-card__challenge ${unlocked ? 'bonus-card__challenge--done' : ''}`}>
+                                    <img src="/defi.png" alt="Défi" className="bonus-card__line-icon" />
+                                    <span className="bonus-card__line-text">{challengeText(soldier, bonus)}</span>
                                 </p>
-                                <p className="bonus-card__effect">✨ {bonus.effect}</p>
+                                <p className="bonus-card__effect">
+                                    <img src="/sword.png" alt="Effet" className="bonus-card__line-icon" />
+                                    <span className="bonus-card__line-text">{bonus.effect}</span>
+                                </p>
 
                                 {/* Action : équipé, achetable, ou message d'état. */}
                                 {!viewingOwnLevel ? null : equipped ? (
@@ -139,7 +170,11 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
                                         {price === 0
                                             ? 'Choisir'
                                             : affordable
-                                              ? `Acheter · 💰 ${price}`
+                                              ? (
+                                                  <>
+                                                      Acheter · <img src="/coin.png" alt="or" className="coin-icon" /> {price}
+                                                  </>
+                                              )
                                               : 'Or insuffisant'}
                                     </button>
                                 ) : null}
@@ -191,17 +226,36 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
         >
             <img src={soldierSprite(soldier)} alt={skeleton ? 'Squelette' : 'Soldat'} />
             <span className="soldier-panel__level">LVL {level}</span>
+            {/* Notification : un bonus est débloqué et attend d'être réclamé. */}
+            {notify && (
+                <img src="/notif.png" alt="Bonus débloqué" className="soldier-panel__notif" />
+            )}
         </button>
 
         <div className="soldier-panel__stats">
-            <StatBar icon="❤️" label="Points de vie" value={soldier.hp} max={SOLDIER_HP_MAX} kind="hp" />
-            <StatBar icon="⚔️" label="Attaque" value={soldier.atk} max={SOLDIER_ATK_MAX} kind="atk" />
+            <StatBar
+                icon={<img src="/heart.png" alt="" className="soldier-stat__img" />}
+                label="Points de vie" value={soldier.hp} max={SOLDIER_HP_MAX} kind="hp" />
+            <StatBar
+                icon={<img src="/sword.png" alt="" className="soldier-stat__img" />}
+                label="Attaque" value={soldier.atk} max={SOLDIER_ATK_MAX} kind="atk" />
         </div>
 
         <div className="soldier-panel__specs">
             <div className="soldier-spec">
                 <span className="soldier-spec__label">Affinité</span>
-                <span className="soldier-spec__value">{affinityLabel(soldier.affinity)}</span>
+                <span className="soldier-spec__value">
+                    {AFFINITY_SRC[soldier.affinity] ? (
+                        <img
+                            src={AFFINITY_SRC[soldier.affinity]}
+                            alt={affinityLabel(soldier.affinity)}
+                            title={affinityLabel(soldier.affinity)}
+                            className="soldier-spec__affinity"
+                        />
+                    ) : (
+                        affinityLabel(soldier.affinity)
+                    )}
+                </span>
             </div>
             <div className="soldier-spec">
                 <span className="soldier-spec__label">Comportement</span>

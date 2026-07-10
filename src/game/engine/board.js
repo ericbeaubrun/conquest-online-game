@@ -4,12 +4,12 @@
 // séparation permettra au serveur du mode « online » de raisonner sur l'état
 // sans jamais connaître la géométrie d'affichage.
 
-import { getMapById, DEFAULT_MAP_ID } from '../maps.js';
-import { playersForMap } from '../players.js';
-import { hexId, getNeighbors } from '../hex.js';
-import { BLOCKED_TERRAIN } from '../terrain.js';
-import { resolveSettings } from './settings.js';
-import { makeRng, randomSeed } from './rng.js';
+import {getMapById, DEFAULT_MAP_ID} from '../maps.js';
+import {playersForMap} from '../players.js';
+import {hexId, getNeighbors} from '../hex.js';
+import {BLOCKED_TERRAIN} from '../terrain.js';
+import {resolveSettings} from './settings.js';
+import {makeRng, randomSeed} from './rng.js';
 
 // Le modèle logique ne dépend que de l'identifiant de carte : on le mémoïse
 // une fois pour toutes (le reducer comme le rendu le réutilisent).
@@ -31,14 +31,14 @@ export function getLogicalBoard(mapId) {
         const id = hexId(s.q, s.r);
         if (cellMap.has(id)) baseIds.add(id);
     });
-    const board = { mapId, map, cells, cellMap, baseIds };
+    const board = {mapId, map, cells, cellMap, baseIds};
     boardCache.set(mapId, board);
     return board;
 }
 
 // Possession de départ : chaque base + ses voisines reviennent à son joueur.
 export function buildInitialOwnership(mapId, players) {
-    const { map, cellMap } = getLogicalBoard(mapId);
+    const {map, cellMap} = getLogicalBoard(mapId);
     const ownership = new Map();
     map.spawns.forEach((spawn, i) => {
         const player = players[i];
@@ -57,7 +57,7 @@ export function buildInitialOwnership(mapId, players) {
 // d'une configuration hors-ligne. Sans config, on retombe sur les joueurs par
 // défaut de la carte. Avec config, on prend les joueurs choisis (nom, couleur,
 // humain/bot, difficulté), tronqués au nombre de points de départ de la carte.
-const BOT_LABELS = { easy: 'Facile', normal: 'Normal', hard: 'Difficile' };
+const BOT_LABELS = {easy: 'Facile', normal: 'Normal', hard: 'Difficile'};
 
 function resolvePlayers(map, setup) {
     if (setup?.players?.length) {

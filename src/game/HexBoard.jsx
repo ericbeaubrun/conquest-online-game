@@ -2,7 +2,7 @@ import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {hexId, hexHeight, pixelToHex} from './hex.js';
 import {TERRAIN_COLORS} from './terrain.js';
 import {ITEM_SRC} from './items.js';
-import {soldierSprite} from './soldier.js';
+import {soldierSprite, hasUnlockedBonus} from './soldier.js';
 import {getLogicalBoard} from './engine/board.js';
 import {buildGeometry} from './render/geometry.js';
 import {computeReachable} from './engine/selectors.js';
@@ -15,9 +15,8 @@ const TREE_SRC = '/forestTree.png';
 // Images des items posés, arbres compris (les arbres ne sont pas en boutique).
 const PLACEMENT_SRC = {...ITEM_SRC, tree: TREE_SRC};
 const MERGE_SRC = '/mergeIndicator.png';
-const ALLIES_SRC = '/alliesIndicator.png';
 const ENEMIES_SRC = '/enemiesIndicator.png';
-const ACTION_SRC = '/possibleAction.png';
+const NOTIF_SRC = '/notif.png';
 const MIN_VIEW_RATIO = 0.14; // zoom avant max : on peut voir jusqu'à 14% de la carte
 const CLICK_THRESHOLD = 6; // px : en-deçà d'un déplacement, un pointeur = un clic
 
@@ -86,9 +85,9 @@ const MoveHighlight = memo(function MoveHighlight({moves, cellMap}) {
 });
 
 // Icônes superposées quand un soldat est sélectionné : fusion possible
-// (mergeIndicator) sur les soldats alliés fusionnables, blocage (alliesIndicator)
-// sur les bâtiments / bases alliés et les soldats alliés infusionnables.
-const Indicators = memo(function Indicators({moves, allies, cellMap, size}) {
+// (mergeIndicator) sur les soldats alliés fusionnables. Les cases bloquées par un
+// allié (bâtiment / base / soldat infusionnable) ne reçoivent AUCUN marqueur.
+const Indicators = memo(function Indicators({moves, cellMap, size}) {
     const icon = (id, href, key) => {
         const cell = cellMap.get(id);
         if (!cell) return null;
@@ -105,40 +104,83 @@ const Indicators = memo(function Indicators({moves, allies, cellMap, size}) {
             />
         );
     };
+    // « + » central dessiné pour chaque case conquérable.
+    const plus = (id) => {
+        const cell = cellMap.get(id);
+        if (!cell) return null;
+        const arm = size * 0.16;
+        return (
+            <g key={'p' + id} className="hex__conquer-plus" strokeWidth={size * 0.07}>
+                <line x1={cell.cx - arm} y1={cell.cy} x2={cell.cx + arm} y2={cell.cy}/>
+                <line x1={cell.cx} y1={cell.cy - arm} x2={cell.cx} y2={cell.cy + arm}/>
+            </g>
+        );
+    };
     return (
         <>
+            {[...moves.entries()]
+                .filter(([, info]) => info.kind === 'conquer')
+                .map(([id]) => plus(id))}
             {[...moves.entries()]
                 .filter(([, info]) => info.kind === 'merge')
                 .map(([id]) => icon(id, MERGE_SRC, 'm' + id))}
             {[...moves.entries()]
-                .filter(([, info]) => info.kind === 'combat')
+                .filter(([, info]) => info.kind === 'combat' || info.kind === 'chop')
                 .map(([id]) => icon(id, ENEMIES_SRC, 'c' + id))}
-            {allies.map((id) => icon(id, ALLIES_SRC, 'a' + id))}
         </>
     );
 });
 
-// Indicateur « action possible » (point d'exclamation) posé sur chaque soldat
-// du joueur actif qui n'a pas encore été déplacé durant ce tour. Placé dans le
-// coin haut-gauche du sprite (symétrique du badge de niveau).
+// Indicateur « action possible » posé sur chaque soldat du joueur actif qui n'a
+// pas encore été déplacé durant ce tour : la case reçoit le même hexagone en
+// pulsation que les cases de déplacement, afin de signaler qu'il reste jouable.
 const ActionIndicators = memo(function ActionIndicators({
                                                             placements,
                                                             cellMap,
-                                                            size,
                                                             movedSoldiers,
                                                             activePlayerId,
                                                             selectedId,
                                                         }) {
-    const badge = size * 0.45;
     return [...placements.entries()].map(([id, placed]) => {
         if (placed.type !== 'soldier' || placed.playerId !== activePlayerId) return null;
         if (movedSoldiers.has(placed.uid) || id === selectedId) return null;
         const cell = cellMap.get(id);
         if (!cell) return null;
         return (
-            <image
+            <polygon
                 key={'act' + id}
-                href={ACTION_SRC}
+                points={cell.points}
+                className="hex__actionable"
+                pointerEvents="none"
+            />
+        );
+    });
+});
+
+// Notification (pastille `notif.png`) posée dans le coin HAUT-GAUCHE du sprite
+// de tout soldat ayant un bonus débloqué à réclamer (défi accompli, aucun bonus
+// encore équipé). Signale au joueur qu'il peut ouvrir la boutique de bonus.
+const BonusNotifications = memo(function BonusNotifications({
+                                                                placements,
+                                                                cellMap,
+                                                                size,
+                                                                settings,
+                                                                bonusesEnabled,
+                                                                activePlayerId,
+                                                            }) {
+    const badge = size * 0.3;
+    return [...placements.entries()].map(([id, placed]) => {
+        if (placed.type !== 'soldier') return null;
+        // Uniquement pour les soldats du joueur actif : la notification disparaît
+        // dès que son tour est passé (le soldat n'est plus au joueur actif).
+        if (placed.playerId !== activePlayerId) return null;
+        if (!hasUnlockedBonus(placed, settings, bonusesEnabled)) return null;
+        const cell = cellMap.get(id);
+        if (!cell) return null;
+        return (
+            <image
+                key={'notif' + id}
+                href={NOTIF_SRC}
                 x={cell.cx - size * 0.3 - badge / 2}
                 y={cell.cy - size * 0.3 - badge / 2}
                 width={badge}
@@ -152,14 +194,16 @@ const ActionIndicators = memo(function ActionIndicators({
 
 // Couche des bases, dessinée au-dessus des cases.
 const Bases = memo(function Bases({baseCells, size}) {
+    // Base dessinée 1,20× plus grande, centrée sur sa case.
+    const s = size * 1.2;
     return baseCells.map((cell) => (
         <image
             key={cell.id}
             href={BASE_SRC}
-            x={cell.cx - size / 2}
-            y={cell.cy - size / 2}
-            width={size}
-            height={size}
+            x={cell.cx - s / 2}
+            y={cell.cy - s / 2}
+            width={s}
+            height={s}
             style={{imageRendering: 'pixelated'}}
             pointerEvents="none"
         />
@@ -179,6 +223,10 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
         const cell = cellMap.get(id);
         if (!cell) return null;
         const isSoldier = placed.type === 'soldier';
+        // Les tours (attaque / défense) sont dessinées 1,5× plus grandes, centrées
+        // sur leur case ; la barre de vie garde, elle, la taille standard.
+        const isTower = placed.type === 'attackTower' || placed.type === 'defenseTower';
+        const imgSize = isTower ? size * 1.5 : placed.type === 'house' ? size * 0.75 : size;
         const barX = cell.cx - barW / 2;
         const barY = cell.cy + size * 0.49;
         const ratio = Math.max(0, Math.min(1, (placed.hp ?? 0) / SOLDIER_HP_MAX));
@@ -186,11 +234,16 @@ const Buildings = memo(function Buildings({placements, cellMap, size}) {
             <g key={id} pointerEvents="none">
                 <image
                     href={isSoldier ? soldierSprite(placed) : PLACEMENT_SRC[placed.type]}
-                    x={cell.cx - size / 2}
-                    y={cell.cy - size / 2}
-                    width={size}
-                    height={size}
+                    x={cell.cx - imgSize / 2}
+                    y={cell.cy - imgSize / 2}
+                    width={imgSize}
+                    height={imgSize}
                     style={{imageRendering: 'pixelated'}}
+                    // Sprites orientés à droite par défaut : miroir horizontal
+                    // (autour du centre de la case) quand le soldat regarde à gauche.
+                    transform={isSoldier && placed.facing === 'left'
+                        ? `translate(${2 * cell.cx} 0) scale(-1 1)`
+                        : undefined}
                 />
                 {isSoldier && (
                     <>
@@ -247,7 +300,9 @@ function classifyCell(id, {placements, baseIds, ownership, activePlayerId, moved
 // toujours vrai : le comportement est inchangé.
 const HexBoard = ({game, dispatch, interactive = true, selectedItem, selection, onSelect, onHoverTarget}) => {
     const svgRef = useRef(null);
-    const {mapId, ownership, placements, movedSoldiers, activePlayerId, players} = game;
+    const {mapId, ownership, placements, movedSoldiers, activePlayerId, players, settings} = game;
+    // Bonus activés pour la partie (défaut vrai) : conditionne les notifications.
+    const bonusesEnabled = settings?.bonusesEnabled !== false;
 
     // Modèle logique (règles) et géométrie (rendu), mémoïsés par carte.
     const board = useMemo(() => getLogicalBoard(mapId), [mapId]);
@@ -559,10 +614,17 @@ const HexBoard = ({game, dispatch, interactive = true, selectedItem, selection, 
                 )}
                 <Bases baseCells={baseCells} size={baseSize}/>
                 <Buildings placements={placements} cellMap={cellMap} size={itemSize}/>
-                <ActionIndicators
+                <BonusNotifications
                     placements={placements}
                     cellMap={cellMap}
                     size={itemSize}
+                    settings={settings}
+                    bonusesEnabled={bonusesEnabled}
+                    activePlayerId={activePlayerId}
+                />
+                <ActionIndicators
+                    placements={placements}
+                    cellMap={cellMap}
                     movedSoldiers={movedSoldiers}
                     activePlayerId={activePlayerId}
                     selectedId={selectedItem || selection?.kind !== 'soldier' ? null : selection.id}
@@ -570,7 +632,6 @@ const HexBoard = ({game, dispatch, interactive = true, selectedItem, selection, 
                 {!selectedItem && selection?.kind === 'soldier' && (
                     <Indicators
                         moves={reachable.moves}
-                        allies={reachable.allies}
                         cellMap={cellMap}
                         size={itemSize}
                     />

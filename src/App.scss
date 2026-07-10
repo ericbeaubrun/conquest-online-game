@@ -227,11 +227,28 @@ body {
   font-size: 19px;
 }
 
+// Pièce d'or (image) inline dans les textes de prix (boutique, bonus).
+// Alignée sur la ligne de base du texte, rendu pixel net.
+.coin-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  image-rendering: pixelated;
+}
+
 .stat {
   display: flex;
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+
+  // Pièce d'or (image) alignée sur le texte, rendu pixel net.
+  &__coin {
+    width: 16px;
+    height: 16px;
+    display: block;
+    image-rendering: pixelated;
+  }
 }
 
 .end-turn-button {
@@ -471,6 +488,18 @@ body {
     border: 1px solid #4a4a4a;
   }
 
+  // Notification (bonus débloqué) en haut-gauche du portrait. Scindée sous
+  // `&__portrait` pour l'emporter sur la règle générique de l'image du sprite.
+  &__portrait &__notif {
+    position: absolute;
+    top: -6px;
+    left: -6px;
+    width: 22px;
+    height: 22px;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 0 2px #000);
+  }
+
   &__stats {
     display: flex;
     flex-direction: column;
@@ -503,16 +532,23 @@ body {
   background: #1c1c1c;
   border: 3px solid #000;
   box-shadow: 0 0 0 3px #4a4a4a; // même liseré « double bordure » pixel
-  overflow-y: auto;
+  // Colonne : la liste défile en interne, la nav reste ancrée en bas.
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   z-index: 13;
 
-  // Barre de navigation entre niveaux de bonus (consultation seule).
+  // Barre de navigation entre niveaux de bonus (consultation seule). Ancrée en
+  // bas du panneau : toujours visible même quand la liste doit défiler.
   &__nav {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: clamp(6px, 1.5vw, 10px);
+    margin-top: clamp(6px, 1.5vw, 10px);
+    padding-top: clamp(6px, 1.5vw, 10px);
+    border-top: 2px solid #000;
   }
 
   &__nav-label {
@@ -549,6 +585,9 @@ body {
 }
 
 .bonus-list {
+  flex: 1 1 auto;
+  min-height: 0; // autorise le rétrécissement pour que le défilement interne agisse
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: clamp(6px, 1.5vw, 10px);
@@ -654,6 +693,14 @@ body {
     font-size: 13px;
     color: #a9a9a9;
     line-height: 1.2;
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+
+    // Défi réussi : texte barré (l'icône n'est pas rayée).
+    &--done .bonus-card__line-text {
+      text-decoration: line-through;
+    }
   }
 
   &__effect {
@@ -661,27 +708,72 @@ body {
     font-size: 13px;
     color: #8fd0ff;
     line-height: 1.2;
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
   }
 
-  // Défi accompli : liseré vert et défi mis en avant.
+  // Icônes de ligne (défi = parchemin, effet = épée) : pixel net, non déformées.
+  &__line-icon {
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    margin-top: 1px;
+    image-rendering: pixelated;
+  }
+
+  // Badges superposés au portrait de la carte (au-dessus de l'image du bonus).
+  // Scindés sous `&__portrait` pour l'emporter sur la règle générique de l'image.
+  &__portrait &__lock,
+  &__portrait &__notif {
+    position: absolute;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 0 2px #000);
+  }
+  // Cadenas centré : aperçu d'un niveau autre que celui du soldat.
+  &__portrait &__lock {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 26px;
+    height: 26px;
+  }
+  // Notification en haut-gauche : bonus débloqué et réclamable.
+  &__portrait &__notif {
+    top: -6px;
+    left: -6px;
+    width: 20px;
+    height: 20px;
+  }
+
+  // Défi accompli : liseré vert + surbrillance pulsée (comme les cases jouables).
   &--unlocked {
     border-color: #5bd35b;
-    box-shadow: inset 0 0 0 1px #5bd35b;
+    animation: bonus-card-pulse 1.1s ease-in-out infinite;
 
     .bonus-card__challenge {
       color: #5bd35b;
     }
   }
 
-  // Bonus équipé sur ce soldat : liseré doré appuyé.
+  // Bonus équipé sur ce soldat : liseré doré appuyé (sans pulsation).
   &--equipped {
     border-color: #ffd766;
     box-shadow: inset 0 0 0 1px #ffd766;
+    animation: none;
   }
 
   // Un autre bonus est déjà équipé : carte grisée (un seul bonus par soldat).
   &--blocked {
     opacity: 0.5;
+    animation: none;
+  }
+
+  // Aperçu d'un niveau de bonus autre que celui du soldat : grisé + verrouillé.
+  &--preview {
+    opacity: 0.6;
+    filter: grayscale(0.65);
+    animation: none;
   }
 
   // Bouton d'achat / de choix du bonus.
@@ -715,6 +807,18 @@ body {
   }
 }
 
+// Surbrillance pulsée des cartes de bonus débloquées : même intention que
+// l'animation des hexagones de déplacement (halo vert qui respire).
+@keyframes bonus-card-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px #5bd35b, 0 0 3px rgba(91, 211, 91, 0.4);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px #5bd35b, 0 0 12px rgba(91, 211, 91, 0.85);
+  }
+}
+
 .soldier-stat {
   display: flex;
   align-items: center;
@@ -723,6 +827,14 @@ body {
   &__icon {
     font-size: 16px;
     line-height: 1;
+  }
+
+  // Icône image (coeur / épée) : rendu pixel net, alignée sur la piste.
+  &__img {
+    width: 18px;
+    height: 18px;
+    display: block;
+    image-rendering: pixelated;
   }
 
   // Piste : rainure sombre, bordure noire franche, coins carrés.
@@ -775,6 +887,13 @@ body {
   }
   &__value {
     color: #ffd766;
+  }
+  // Icône d'affinité (feu / glace / foudre) affichée à la place du libellé.
+  &__affinity {
+    display: block;
+    width: 20px;
+    height: 20px;
+    image-rendering: pixelated;
   }
   &__value--cost {
     color: #ff6b6b;

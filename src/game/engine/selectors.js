@@ -2,16 +2,16 @@
 // Partagés entre l'affichage (surbrillances, économie) et le reducer (qui les
 // réutilise pour valider les actions). Aucune dépendance à React ni au rendu.
 
-import { getNeighbors, hexId } from '../hex.js';
+import {getNeighbors, hexId} from '../hex.js';
 import {
     MAX_MOVE,
     BASE_INCOME,
     canMerge,
     isAttackable,
 } from './rules.js';
-import { upkeepFor } from '../soldier.js';
-import { getLogicalBoard } from './board.js';
-import { DOMINATION_PERCENT, ECONOMY_GOAL } from './settings.js';
+import {upkeepFor} from '../soldier.js';
+import {getLogicalBoard} from './board.js';
+import {DOMINATION_PERCENT, ECONOMY_GOAL} from './settings.js';
 
 // Cases atteignables par le soldat `startId`.
 // Règles : MAX_MOVE pas max, dont AU PLUS 1 case hors du territoire (conquête,
@@ -22,11 +22,11 @@ export function computeReachable(state, board, startId) {
     const moves = new Map(); // id -> { kind: 'move' | 'conquer' | 'merge' }
     const allies = []; // bâtiments / bases alliés bloquants
     const dist = new Map(); // id -> nombre de pas depuis `startId` (BFS)
-    if (!startId) return { moves, allies, dist };
-    const { cellMap, baseIds } = board;
+    if (!startId) return {moves, allies, dist};
+    const {cellMap, baseIds} = board;
     const start = cellMap.get(startId);
-    if (!start) return { moves, allies, dist };
-    const { placements, ownership, activePlayerId } = state;
+    if (!start) return {moves, allies, dist};
+    const {placements, ownership, activePlayerId} = state;
     const mover = placements.get(startId); // soldat qui se déplace (pour la fusion)
     // Bonus « Coureur » : portée de déplacement doublée à l'intérieur du
     // territoire (la conquête reste limitée à 1 case hors territoire).
@@ -47,7 +47,7 @@ export function computeReachable(state, board, startId) {
             const placed = placements.get(nid);
             // Arbre : infranchissable, mais abattable par un soldat adjacent.
             if (placed && placed.type === 'tree') {
-                if (!moves.has(nid)) moves.set(nid, { kind: 'chop' });
+                if (!moves.has(nid)) moves.set(nid, {kind: 'chop'});
                 continue;
             }
             const isBase = baseIds.has(nid);
@@ -62,14 +62,14 @@ export function computeReachable(state, board, startId) {
                         allies.push(nid);
                     }
                 } else if (isBuilding && isAttackable(placed) && !moves.has(nid)) {
-                    moves.set(nid, { kind: 'combat' });
+                    moves.set(nid, {kind: 'combat'});
                 }
                 continue;
             }
             const isSoldier = placed && placed.type === 'soldier';
             // Soldat ennemi : cible de combat (terminale, infranchissable).
             if (isSoldier && placed.playerId !== activePlayerId) {
-                if (!moves.has(nid)) moves.set(nid, { kind: 'combat' });
+                if (!moves.has(nid)) moves.set(nid, {kind: 'combat'});
                 continue;
             }
             const owned = ownership.get(nid) === activePlayerId;
@@ -86,7 +86,7 @@ export function computeReachable(state, board, startId) {
                         canMerge(mover, placed) &&
                         !moves.has(nid)
                     ) {
-                        moves.set(nid, { kind: 'merge' });
+                        moves.set(nid, {kind: 'merge'});
                     } else if (
                         placed.playerId === activePlayerId &&
                         !canMerge(mover, placed) &&
@@ -98,16 +98,16 @@ export function computeReachable(state, board, startId) {
                         allies.push(nid);
                     }
                 } else if (!moves.has(nid)) {
-                    moves.set(nid, { kind: 'move' }); // repositionnement
+                    moves.set(nid, {kind: 'move'}); // repositionnement
                 }
             } else if (!isSoldier) {
                 // Case hors territoire : conquête (1 seule, terminale).
-                if (!moves.has(nid)) moves.set(nid, { kind: 'conquer' });
+                if (!moves.has(nid)) moves.set(nid, {kind: 'conquer'});
             }
         }
     }
     moves.delete(startId);
-    return { moves, allies, dist };
+    return {moves, allies, dist};
 }
 
 // Nombre de cases possédées par un joueur.
@@ -157,8 +157,8 @@ export function playerAlive(state, playerId) {
 export function checkVictory(state) {
     const s = state.settings;
     if (!s || state.status === 'over') return state;
-    const { players } = state;
-    const finish = (winnerId, reason) => ({ ...state, status: 'over', winnerId, endReason: reason });
+    const {players} = state;
+    const finish = (winnerId, reason) => ({...state, status: 'over', winnerId, endReason: reason});
 
     const alive = players.filter((p) => playerAlive(state, p.id));
     if (alive.length <= 1) return finish(alive[0]?.id ?? null, 'elimination');

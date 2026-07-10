@@ -53,7 +53,7 @@ export const WARRIOR_KILL_REWARD = 20;
 // soldat sur sa case au moment de sa mort. Sprite et statistiques dédiés.
 export const SKELETON_SRC = '/characters/skeleton1.png';
 export const SKELETON_HP = 5;
-export const SKELETON_ATK = 10;
+export const SKELETON_ATK = 5;
 
 // Bonus « Démoniste » : en l'équipant, le soldat prend ces statistiques, et à
 // chaque fin de tour il invoque un squelette allié fragile (skeleton2) sur une
@@ -62,7 +62,7 @@ export const WARLOCK_HP = 100;
 export const WARLOCK_ATK = 10;
 export const SKELETON2_SRC = '/characters/skeleton2.png';
 export const SKELETON2_HP = 1;
-export const SKELETON2_ATK = 10;
+export const SKELETON2_ATK = 5;
 export const WARLOCK_SUMMON_CHANCE = 0.5; // proba d'invocation par tour et par démoniste
 
 // Bonus proposés dans le panneau du soldat. Chaque bonus est rattaché à UN seul
@@ -288,6 +288,33 @@ export const PALADIN_HP_REGEN = 2;
 export const bonusOffersForLevel = (level) =>
     BONUS_OFFERS.filter((b) => b.requiredLevel === (level || 1));
 
+// Identifiants des bonus DÉBLOQUÉS (défi accompli) et réclamables par CE soldat,
+// à son niveau : bonus activés en configuration, soldat sans bonus et non
+// squelette. Sert à la fois aux notifications et à leur acquittement.
+export const unlockedBonusIds = (soldier, settings, enabled = true) => {
+    if (!enabled || isSkeleton(soldier) || soldier?.bonus) return [];
+    return bonusOffersForLevel(soldier?.level || 1)
+        .filter((b) => settings?.bonusEnabled?.[b.id] !== false)
+        .filter((b) => isBonusUnlocked(soldier, b))
+        .map((b) => b.id);
+};
+
+// Le soldat a-t-il une notification de bonus à afficher ? Vrai quand un bonus
+// débloqué et réclamable n'a pas encore été « vu » (acquitté en fin de tour via
+// `bonusSeen`). Une fois le tour passé, ces bonus rejoignent `bonusSeen` et la
+// notification disparaît définitivement (voir reduceEndTurn).
+export const hasUnlockedBonus = (soldier, settings, enabled = true) => {
+    const seen = soldier?.bonusSeen;
+    return unlockedBonusIds(soldier, settings, enabled).some(
+        (id) => !seen || !seen.includes(id)
+    );
+};
+
+// Ce bonus précis est-il débloqué mais pas encore acquitté pour ce soldat ?
+export const isBonusNotified = (soldier, bonus, settings, enabled = true) =>
+    unlockedBonusIds(soldier, settings, enabled).includes(bonus.id) &&
+    !(soldier?.bonusSeen?.includes(bonus.id));
+
 // Plage des niveaux de bonus existants (pour naviguer d'un niveau à l'autre).
 export const MIN_BONUS_LEVEL = Math.min(...BONUS_OFFERS.map((b) => b.requiredLevel));
 export const MAX_BONUS_LEVEL = Math.max(...BONUS_OFFERS.map((b) => b.requiredLevel));
@@ -335,7 +362,7 @@ export const SOLDIER_SKINS = {
     1: '/characters/SoldierLVL1.png',
     2: '/characters/SoldierLVL2.png',
     3: '/characters/SoldierLVL3.png',
-    4: '/SoldierLVL4.png',
+    4: '/characters/SoldierLVL4.png',
 };
 export const soldierSkin = (level) => SOLDIER_SKINS[level] || SOLDIER_SKINS[1];
 

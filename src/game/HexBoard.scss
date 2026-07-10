@@ -87,15 +87,24 @@
     animation: hex-pulse 1s ease-in-out infinite;
   }
 
-  // Case conquérable par le soldat (hors territoire) : accent doré.
+  // Case conquérable par le soldat (hors territoire) : même blanc que le
+  // déplacement ; un « + » central (voir Indicators) marque la conquête.
   &__conquerable {
-    fill: #ffcf33;
-    fill-opacity: 0.28;
-    stroke: #ffcf33;
-    stroke-width: 3.5;
+    fill: #ffffff;
+    fill-opacity: 0.14;
+    stroke: #ffffff;
+    stroke-width: 3;
     stroke-linejoin: round;
     pointer-events: none;
-    animation: hex-pulse 0.9s ease-in-out infinite;
+    animation: hex-pulse 1s ease-in-out infinite;
+  }
+
+  // « + » central des cases conquérables.
+  &__conquer-plus {
+    stroke: #ffffff;
+    stroke-linecap: round;
+    pointer-events: none;
+    animation: hex-pulse 1s ease-in-out infinite;
   }
 
   // Case de fusion (soldat allié) : accent cyan.
@@ -120,15 +129,28 @@
     animation: hex-pulse 0.8s ease-in-out infinite;
   }
 
-  // Case d'un arbre abattable : accent vert forêt.
+  // Case d'un arbre abattable : même blanc que le déplacement ; l'icône ennemie
+  // (voir Indicators) marque l'action d'abattage.
   &__choppable {
-    fill: #4caf50;
-    fill-opacity: 0.3;
-    stroke: #2e7d32;
-    stroke-width: 3.5;
+    fill: #ffffff;
+    fill-opacity: 0.14;
+    stroke: #ffffff;
+    stroke-width: 3;
     stroke-linejoin: round;
     pointer-events: none;
-    animation: hex-pulse 0.9s ease-in-out infinite;
+    animation: hex-pulse 1s ease-in-out infinite;
+  }
+
+  // Soldat du joueur actif encore jouable : même hexagone pulsant que la portée
+  // de déplacement, en accent vert pour signaler « action disponible ».
+  &__actionable {
+    fill: #7cf76a;
+    fill-opacity: 0.16;
+    stroke: #7cf76a;
+    stroke-width: 3;
+    stroke-linejoin: round;
+    pointer-events: none;
+    animation: hex-pulse 1.2s ease-in-out infinite;
   }
 
   // Case du soldat sélectionné.
