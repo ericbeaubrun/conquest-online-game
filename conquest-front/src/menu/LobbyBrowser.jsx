@@ -1,13 +1,25 @@
-// Écran de navigation des parties en ligne : choisir une carte et CRÉER une
-// partie, REJOINDRE par code, ou piocher dans la liste des parties ouvertes.
-// Réutilise le style de la page de configuration hors-ligne pour la cohérence.
+// Écran de navigation des parties en ligne. Structure :
+//   1. Une barre d'actions : CRÉER une partie (à gauche) · REJOINDRE par code (à droite).
+//   2. Les parties EN ATTENTE (repliable, ouvert par défaut).
+//   3. Les parties EN COURS (repliable, fermé par défaut).
+// Créer une partie n'exige PLUS de choisir une carte : on ouvre directement un
+// lobby en attente (carte par défaut côté serveur) que l'on paramétrera ensuite
+// dans la salle d'attente. Réutilise le langage visuel des écrans de menu.
 
 import { useState } from "react";
-import { MAPS, DEFAULT_MAP_ID } from "@conquest/shared-engine/data/maps.js";
+import { MAPS } from "@conquest/shared-engine/data/maps.js";
 
 const LobbyBrowser = ({ lobbies = [], error, onCreate, onJoin, onRefresh, onBack }) => {
-    const [mapId, setMapId] = useState(DEFAULT_MAP_ID);
     const [code, setCode] = useState("");
+    const [showWaiting, setShowWaiting] = useState(true);
+    const [showPlaying, setShowPlaying] = useState(false);
+
+    const waiting = lobbies.filter((l) => l.status === "waiting");
+    const playing = lobbies.filter((l) => l.status === "playing");
+
+    const submitJoin = () => {
+        if (code.trim()) onJoin(code);
+    };
 
     return (
         <div className="setup-screen">
@@ -16,130 +28,106 @@ const LobbyBrowser = ({ lobbies = [], error, onCreate, onJoin, onRefresh, onBack
                     ← Retour
                 </button>
                 <h1 className="setup-topbar__title">Jouer en ligne</h1>
-                <span className="setup-topbar__spacer" />
+                <button
+                    className="menu-btn menu-btn--ghost"
+                    style={{ width: "96px" }}
+                    onClick={onRefresh}
+                >
+                    ⟳ Actualiser
+                </button>
             </header>
 
             <div className="setup-body">
-                {error && (
-                    <div
-                        style={{
-                            padding: ".6rem .8rem",
-                            borderRadius: "8px",
-                            background: "#d6454522",
-                            border: "1px solid #d64545",
-                        }}
-                    >
-                        {libelleErreur(error)}
-                    </div>
-                )}
+                {error && <div className="lobby-error">{libelleErreur(error)}</div>}
 
-                {/* Créer une partie */}
-                <section className="setup-section">
-                    <h2 className="setup-section__title">Créer une partie</h2>
-                    <div className="map-grid">
-                        {MAPS.map((m) => (
-                            <button
-                                key={m.id}
-                                type="button"
-                                className={`map-card ${m.id === mapId ? "map-card--active" : ""}`}
-                                onClick={() => setMapId(m.id)}
-                            >
-                                <span className="map-card__name">{m.name}</span>
-                                <span className="map-card__desc">{m.description}</span>
-                                <span className="map-card__cap">{m.spawns.length} joueurs max</span>
-                            </button>
-                        ))}
-                    </div>
-                    <div style={{ marginTop: "1rem" }}>
-                        <button className="menu-btn menu-btn--play" onClick={() => onCreate(mapId)}>
-                            Créer la partie
-                        </button>
-                    </div>
-                </section>
+                {/* Barre d'actions : créer (gauche) · rejoindre par code (droite) */}
+                <section className="lobby-actions">
+                    <button className="menu-btn menu-btn--online" onClick={() => onCreate()}>
+                        Créer une partie
+                    </button>
 
-                {/* Rejoindre par code */}
-                <section className="setup-section">
-                    <h2 className="setup-section__title">Rejoindre par code</h2>
-                    <div style={{ display: "flex", gap: ".6rem", flexWrap: "wrap" }}>
+                    <div className="lobby-join">
                         <input
+                            className="lobby-join__code"
                             value={code}
                             onChange={(e) => setCode(e.target.value.toUpperCase())}
+                            onKeyDown={(e) => e.key === "Enter" && submitJoin()}
                             placeholder="CODE"
                             maxLength={6}
-                            style={{
-                                textTransform: "uppercase",
-                                letterSpacing: ".15em",
-                                padding: ".5rem .8rem",
-                                borderRadius: "8px",
-                                border: "1px solid #8886",
-                                background: "#8882",
-                                font: "inherit",
-                                width: "8rem",
-                            }}
+                            aria-label="Code de la partie"
                         />
                         <button
-                            className="menu-btn menu-btn--ghost"
+                            className="menu-btn"
                             disabled={!code.trim()}
-                            onClick={() => onJoin(code)}
+                            onClick={submitJoin}
                         >
                             Rejoindre
                         </button>
                     </div>
                 </section>
 
-                {/* Parties ouvertes */}
-                <section className="setup-section">
-                    <h2 className="setup-section__title">
-                        Parties ouvertes
-                        <button
-                            className="menu-btn menu-btn--ghost"
-                            style={{ marginLeft: "auto", padding: ".3rem .7rem" }}
-                            onClick={onRefresh}
-                        >
-                            ⟳ Rafraîchir
-                        </button>
-                    </h2>
-                    {lobbies.length === 0 ? (
-                        <p style={{ opacity: 0.7 }}>Aucune partie ouverte. Crée la première !</p>
-                    ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: ".5rem" }}>
-                            {lobbies.map((l) => (
-                                <div
-                                    key={l.code}
-                                    style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                        gap: ".8rem",
-                                        padding: ".5rem .8rem",
-                                        border: "1px solid #8884",
-                                        borderRadius: "8px",
-                                    }}
-                                >
-                                    <span>
-                                        <strong style={{ letterSpacing: ".1em" }}>{l.code}</strong>
-                                        {" · "}
-                                        {mapName(l.mapId)}
-                                        {" · "}
-                                        <span style={{ opacity: 0.7 }}>
-                                            {statutLabel(l.status)} — {l.seatsTaken}/{l.seatsTotal}
-                                        </span>
-                                    </span>
-                                    <button className="menu-btn menu-btn--ghost" onClick={() => onJoin(l.code)}>
-                                        Rejoindre
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </section>
+                {/* Parties en attente (ouvert par défaut) */}
+                <LobbySection
+                    title="Parties en attente"
+                    open={showWaiting}
+                    onToggle={() => setShowWaiting((v) => !v)}
+                    count={waiting.length}
+                    lobbies={waiting}
+                    emptyLabel="Aucune partie en attente. Crée la première !"
+                    onJoin={onJoin}
+                />
+
+                {/* Parties en cours (fermé par défaut) */}
+                <LobbySection
+                    title="Parties en cours"
+                    open={showPlaying}
+                    onToggle={() => setShowPlaying((v) => !v)}
+                    count={playing.length}
+                    lobbies={playing}
+                    emptyLabel="Aucune partie en cours."
+                    onJoin={onJoin}
+                    joinLabel="Observer"
+                />
             </div>
         </div>
     );
 };
 
+// Section repliable listant des lobbies.
+const LobbySection = ({ title, open, onToggle, count, lobbies, emptyLabel, onJoin, joinLabel = "Rejoindre" }) => (
+    <section className="setup-section">
+        <button className="lobby-toggle" onClick={onToggle} aria-expanded={open}>
+            <span className="lobby-toggle__chevron">{open ? "▾" : "▸"}</span>
+            <span className="lobby-toggle__title">{title}</span>
+            <span className="lobby-toggle__count">{count}</span>
+        </button>
+
+        {open && (
+            <div className="lobby-list">
+                {lobbies.length === 0 ? (
+                    <p className="lobby-empty">{emptyLabel}</p>
+                ) : (
+                    lobbies.map((l) => (
+                        <div key={l.code} className="lobby-row">
+                            <span className="lobby-row__info">
+                                <strong className="lobby-row__code">{l.code}</strong>
+                                <span className="lobby-row__map">{mapName(l.mapId)}</span>
+                                <span className="lobby-row__seats">
+                                    {l.seatsTaken}/{l.seatsTotal} joueurs
+                                </span>
+                            </span>
+                            <button className="menu-btn menu-btn--ghost" onClick={() => onJoin(l.code)}>
+                                {joinLabel}
+                            </button>
+                        </div>
+                    ))
+                )}
+            </div>
+        )}
+    </section>
+);
+
 const mapName = (id) => MAPS.find((m) => m.id === id)?.name || id;
-const statutLabel = (s) => (s === "waiting" ? "en attente" : s === "playing" ? "en cours" : s);
 const libelleErreur = (reason) => {
     const table = {
         "not-found": "Partie introuvable (mauvais code ?).",

@@ -36,7 +36,13 @@ const OnlineFlow = ({ onExit }) => {
         return (
             <LobbyWaiting
                 lobby={s.lobby}
-                localPlayerId={s.localPlayerId}
+                memberId={s.memberId}
+                onConfigure={s.configureLobby}
+                onReorder={s.reorderSeat}
+                onSetIdentity={s.setIdentity}
+                onSetSeatKind={s.setSeatKind}
+                onSetBotColor={s.setBotColor}
+                onSetBotDifficulty={s.setBotDifficulty}
                 onStart={s.startLobby}
                 onQuit={onExit}
             />

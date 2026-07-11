@@ -52,3 +52,4 @@ export {randomSeed} from '@conquest/shared-engine/engine/rng.js';
 // lobby pour dériver les sièges d'une carte. Modules purs eux aussi.
 export {MAPS, getMapById, DEFAULT_MAP_ID} from '@conquest/shared-engine/data/maps.js';
 export {PLAYERS, playersForMap} from '@conquest/shared-engine/data/players.js';
+export {PALETTE_VALUES, colorName} from '@conquest/shared-engine/data/colors.js';

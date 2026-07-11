@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conquest · Éditeur de cartes</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>🗺️ Éditeur de cartes · Conquest</h1>
+        <p>Dessinez une carte, puis exportez-la pour l'ajouter au jeu.</p>
+    </header>
+
+    <main>
+        <!-- Colonne gauche : réglages + palette -->
+        <aside class="panel">
+            <section>
+                <h2>1 · Dimensions</h2>
+                <div class="row">
+                    <label>Largeur
+                        <input id="cols" type="number" min="2" max="40" value="9">
+                    </label>
+                    <label>Hauteur
+                        <input id="rows" type="number" min="2" max="40" value="7">
+                    </label>
+                    <label>Cases
+                        <output id="cellCount" class="readout">63</output>
+                    </label>
+                </div>
+                <button id="generate" class="primary">Générer la grille</button>
+                <p class="hint">Régénérer efface le dessin en cours.</p>
+            </section>
+
+            <section>
+                <h2>2 · Pinceau</h2>
+                <div id="palette" class="palette"></div>
+                <p class="hint">Cliquez une case, ou cliquez-glissez pour peindre plusieurs cases.</p>
+            </section>
+
+            <section>
+                <h2>3 · Identité</h2>
+                <label class="stack">Nom affiché
+                    <input id="mapName" type="text" value="Ma carte" maxlength="40">
+                </label>
+                <label class="stack">Identifiant (technique)
+                    <input id="mapId" type="text" value="ma-carte">
+                </label>
+                <p id="stats" class="hint"></p>
+            </section>
+
+            <section>
+                <h2>4 · Exporter</h2>
+                <button id="copy">📋 Copier le code</button>
+                <button id="download">💾 Télécharger (.txt)</button>
+                <p class="hint">Collez le code dans <code>shared-engine/data/customMaps.js</code>.</p>
+                <p id="warn" class="warn"></p>
+            </section>
+        </aside>
+
+        <!-- Colonne droite : la grille -->
+        <div class="board-wrap">
+            <div id="board"></div>
+        </div>
+    </main>
+
+    <!-- Sortie de code repliable -->
+    <details id="outputBox">
+        <summary>Voir / copier le code généré</summary>
+        <pre><code id="output"></code></pre>
+    </details>
+
+    <script src="editor.js"></script>
+</body>
+</html>

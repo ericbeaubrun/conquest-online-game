@@ -14,13 +14,33 @@ import { gameReducer } from '@conquest/shared-engine/engine/reducer.js';
 
 const SERVER_URL = import.meta.env?.VITE_SERVER_URL || 'http://localhost:3000';
 
+// Identité du joueur (nom + couleur) MÉMORISÉE côté client : elle pré-remplit le
+// nom à chaque création/jointure de partie. Stockée en localStorage.
+const IDENTITY_KEY = 'conquest.identity';
+function loadIdentity() {
+    try {
+        return JSON.parse(localStorage.getItem(IDENTITY_KEY)) || {};
+    } catch {
+        return {};
+    }
+}
+function saveIdentity(patch) {
+    const next = { ...loadIdentity(), ...patch };
+    try {
+        localStorage.setItem(IDENTITY_KEY, JSON.stringify(next));
+    } catch {
+        /* stockage indisponible : on ignore, la mémorisation est un bonus */
+    }
+    return next;
+}
+
 export function useOnlineSession() {
     const socketRef = useRef(null);
     const [phase, setPhase] = useState('connecting'); // 'connecting'|'browsing'|'error'
     const [error, setError] = useState(null);
     const [lobbies, setLobbies] = useState([]); // parties ouvertes (navigation)
-    const [lobby, setLobby] = useState(null); // salle rejointe { code, name, mapId, status, seats }
-    const [localPlayerId, setLocalPlayerId] = useState(null); // siège attribué (null = spectateur)
+    const [lobby, setLobby] = useState(null); // salle rejointe { code, name, mapId, status, hostMemberId, seats }
+    const [memberId, setMemberId] = useState(null); // identité stable de CE client dans la salle
     const [gameState, setGameState] = useState(null); // état de jeu (une fois la partie démarrée)
     const serverStateRef = useRef(null); // dernier état reçu du serveur (autorité), pour rollback
 
@@ -38,12 +58,16 @@ export function useOnlineSession() {
         });
         socket.on('lobby:list', setLobbies);
         socket.on('lobby:error', (e) => setError(e.reason || 'erreur lobby'));
-        socket.on('lobby:joined', ({ playerId, lobby: joined }) => {
-            setLocalPlayerId(playerId ?? null);
+        socket.on('lobby:joined', ({ memberId: mid, lobby: joined }) => {
+            setMemberId(mid ?? null);
             setLobby(joined);
         });
-        socket.on('lobby:update', ({ code, status, seats }) => {
-            setLobby((prev) => (prev && prev.code === code ? { ...prev, status, seats } : prev));
+        socket.on('lobby:update', ({ code, status, mapId, settings, hostMemberId, seats }) => {
+            setLobby((prev) =>
+                prev && prev.code === code
+                    ? { ...prev, status, mapId, settings, hostMemberId, seats }
+                    : prev
+            );
         });
         // État serveur = autorité. Il remplace tout état optimiste local et sert
         // de point de retour en cas de coup refusé.
@@ -67,13 +91,54 @@ export function useOnlineSession() {
     // --- Actions lobby ---
     const createLobby = useCallback((mapId, settings) => {
         setError(null);
-        socketRef.current?.emit('lobby:create', { mapId, settings });
+        // On envoie l'identité mémorisée : le serveur pré-attribue ce nom/couleur.
+        const { name, color } = loadIdentity();
+        socketRef.current?.emit('lobby:create', { mapId, settings, name, color });
     }, []);
     const refreshList = useCallback(() => socketRef.current?.emit('lobby:list'), []);
+    // Configuration de la partie en attente (hôte) : carte et/ou réglages.
+    const configureLobby = useCallback((patch) => {
+        setError(null);
+        socketRef.current?.emit('lobby:configure', { code: lobby?.code, ...patch });
+    }, [lobby?.code]);
+    // Réordonnancement des positions (hôte) : déplace un siège vers le haut/bas.
+    const reorderSeat = useCallback((playerId, direction) => {
+        socketRef.current?.emit('lobby:reorder', { code: lobby?.code, playerId, direction });
+    }, [lobby?.code]);
+    // Bascule une place libre entre « ouverte » (human) et « bot » (hôte).
+    const setSeatKind = useCallback((playerId, kind) => {
+        socketRef.current?.emit('lobby:seatkind', { code: lobby?.code, playerId, kind });
+    }, [lobby?.code]);
+    // Change la couleur d'un bot (hôte).
+    const setBotColor = useCallback((playerId, color) => {
+        socketRef.current?.emit('lobby:botcolor', { code: lobby?.code, playerId, color });
+    }, [lobby?.code]);
+    // Change la difficulté d'un bot (hôte).
+    const setBotDifficulty = useCallback((playerId, difficulty) => {
+        socketRef.current?.emit('lobby:botdifficulty', { code: lobby?.code, playerId, difficulty });
+    }, [lobby?.code]);
+
+    // Position (playerId) de CE client, DÉDUITE des sièges : elle suit le membre,
+    // donc elle change automatiquement quand l'hôte réordonne les joueurs.
+    const localPlayerId = useMemo(() => {
+        const seat = lobby?.seats?.find((s) => s.assignedMemberId === memberId);
+        return seat?.playerId ?? null;
+    }, [lobby?.seats, memberId]);
     const joinLobby = useCallback((code) => {
         setError(null);
-        socketRef.current?.emit('lobby:join', { code: (code || '').trim().toUpperCase() });
+        const { name, color } = loadIdentity();
+        socketRef.current?.emit('lobby:join', {
+            code: (code || '').trim().toUpperCase(),
+            name,
+            color,
+        });
     }, []);
+    // Modifie SON identité (nom / couleur) : mémorise côté client ET informe le
+    // serveur (qui rediffuse aux autres joueurs de la salle).
+    const setIdentity = useCallback((patch) => {
+        saveIdentity(patch);
+        socketRef.current?.emit('lobby:identity', { code: lobby?.code, ...patch });
+    }, [lobby?.code]);
     const startLobby = useCallback(() => {
         socketRef.current?.emit('lobby:start', { code: lobby?.code });
     }, [lobby?.code]);
@@ -109,5 +174,5 @@ export function useOnlineSession() {
         [gameState, dispatch, localPlayerId]
     );
 
-    return { phase, error, lobbies, lobby, localPlayerId, gameState, session, createLobby, refreshList, joinLobby, startLobby };
+    return { phase, error, lobbies, lobby, memberId, localPlayerId, gameState, session, createLobby, refreshList, joinLobby, setIdentity, configureLobby, reorderSeat, setSeatKind, setBotColor, setBotDifficulty, startLobby };
 }

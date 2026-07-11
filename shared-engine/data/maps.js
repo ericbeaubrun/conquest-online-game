@@ -3,6 +3,7 @@
 // spawns fixe le nombre de joueurs de la carte (entre 2 et 4).
 
 import { hexId, getNeighbors } from './hex.js';
+import { CUSTOM_MAPS } from './customMaps.js';
 
 // --- Bruit déterministe (0..1) pour distribuer les terrains ---
 function hash(x, y) {
@@ -140,6 +141,8 @@ export const MAPS = [
             { q: 19, r: 5 },
         ],
     }),
+    // Cartes personnalisées dessinées via l'outil ASCII (voir customMaps.js).
+    ...CUSTOM_MAPS,
 ];
 
 export const DEFAULT_MAP_ID = MAPS[0].id;

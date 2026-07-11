@@ -7,6 +7,20 @@
       "runtimeArgs": ["run", "dev"],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "conquest-back",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "--workspace", "conquest-back"],
+      "port": 3000,
+      "autoPort": false
+    },
+    {
+      "name": "map-editor",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8123", "--directory", "map-editor"],
+      "port": 8123,
+      "autoPort": true
     }
   ]
 }

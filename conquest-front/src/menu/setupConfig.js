@@ -9,18 +9,10 @@ import { ITEMS } from '@conquest/shared-engine/data/items.js';
 import { BONUS_OFFERS } from '@conquest/shared-engine/data/soldier.js';
 
 // --- Palette de couleurs des joueurs ---
-// Choisies pour se distinguer entre elles ET des terrains (vert herbe, bleu
-// eau, sable). Un joueur ne peut pas prendre une couleur déjà utilisée.
-export const COLOR_PALETTE = [
-    { name: 'Rouge', value: '#d64545' },
-    { name: 'Bleu', value: '#3f7fd8' },
-    { name: 'Violet', value: '#9b59b6' },
-    { name: 'Orange', value: '#e08e2b' },
-    { name: 'Rose', value: '#e06ab0' },
-    { name: 'Cyan', value: '#35c4c4' },
-    { name: 'Or', value: '#e0c93a' },
-    { name: 'Gris', value: '#b0b6bd' },
-];
+// Source de vérité partagée avec le serveur (voir shared-engine/data/colors.js).
+// Importée localement (utilisée par makeDefaultPlayer ci-dessous) PUIS ré-exportée.
+import { COLOR_PALETTE } from '@conquest/shared-engine/data/colors.js';
+export { COLOR_PALETTE };
 
 // --- Difficultés de bot ---
 export const BOT_DIFFICULTIES = [

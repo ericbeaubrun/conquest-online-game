@@ -1,0 +1,180 @@
+:root {
+    --bg: #1e2228;
+    --panel: #272c34;
+    --panel-2: #2f353e;
+    --border: #3a4048;
+    --text: #e6e9ed;
+    --muted: #9aa3ad;
+    --accent: #d64545;
+    --accent-2: #3f7fd8;
+    /* Couleurs de terrain identiques au jeu (shared-engine/data/terrain.js) */
+    --grass: #7cae5b;
+    --forest: #4d8c3f;
+    --sand: #d9c48c;
+    --mountain: #94897c;
+    --water: #5b93c7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+}
+header h1 { margin: 0; font-size: 20px; }
+header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+
+main {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 16px;
+    padding: 16px 24px;
+    align-items: start;
+}
+
+/* --- Panneau de gauche --- */
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+.panel section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+}
+.panel h2 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+}
+
+.row { display: flex; gap: 10px; }
+label { font-size: 13px; color: var(--muted); }
+label.stack { display: block; margin-bottom: 10px; }
+input {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    padding: 7px 9px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 14px;
+}
+
+.readout {
+    display: block;
+    margin-top: 4px;
+    padding: 7px 9px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 14px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+button {
+    width: 100%;
+    padding: 9px;
+    margin-top: 6px;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+}
+button:hover { background: #363d47; }
+button.primary { background: var(--accent-2); border-color: var(--accent-2); }
+button.primary:hover { filter: brightness(1.1); }
+
+.hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; line-height: 1.4; }
+.warn { font-size: 12px; color: #e0a13a; margin: 8px 0 0; min-height: 1em; }
+code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+/* --- Palette de pinceaux --- */
+.palette { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.brush {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    background: var(--panel-2);
+    user-select: none;
+}
+.brush:hover { border-color: var(--muted); }
+.brush.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+.swatch {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,.3);
+    flex: none;
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 700; color: #fff;
+}
+.swatch.hole { background: repeating-linear-gradient(45deg, #3a4048, #3a4048 3px, #2a2f36 3px, #2a2f36 6px); }
+
+/* --- Plateau --- */
+.board-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 400px;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+#board { max-width: 100%; }
+/* Taille naturelle fixée en px sur le <svg> ; on borne juste la réduction. */
+#board svg { display: block; max-width: 100%; height: auto; touch-action: none; }
+.hex { stroke: #1b1f24; stroke-width: 2; cursor: pointer; }
+.hex.hole { fill: transparent; stroke: #454c55; stroke-dasharray: 4 4; }
+.hex-label {
+    font-size: 26px; font-weight: 800; fill: #fff;
+    text-anchor: middle; dominant-baseline: central;
+    pointer-events: none;
+    paint-order: stroke; stroke: #1b1f24; stroke-width: 3px;
+}
+
+/* --- Sortie de code --- */
+#outputBox {
+    margin: 0 24px 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+}
+#outputBox summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+#outputBox pre {
+    margin: 12px 0 0;
+    padding: 12px;
+    background: #15181d;
+    border-radius: 8px;
+    overflow: auto;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+    main { grid-template-columns: 1fr; }
+}

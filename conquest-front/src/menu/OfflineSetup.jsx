@@ -9,73 +9,13 @@
 import { useMemo, useState } from 'react';
 import { MAPS } from '@conquest/shared-engine/data/maps.js';
 import {
-    COLOR_PALETTE,
     BOT_DIFFICULTIES,
-    GAME_SETTINGS,
-    SETTING_GROUPS,
     MIN_PLAYERS,
     mapCapacity,
     makeDefaultPlayer,
     defaultSettings,
 } from './setupConfig.js';
-
-// --- Toggle segmenté générique (deux valeurs ou plus) ---
-const Segmented = ({ options, value, onChange, size }) => (
-    <div className={`segmented ${size ? `segmented--${size}` : ''}`}>
-        {options.map((opt) => (
-            <button
-                key={opt.value}
-                type="button"
-                className={`segmented__opt ${value === opt.value ? 'segmented__opt--active' : ''}`}
-                onClick={() => onChange(opt.value)}
-            >
-                {opt.label}
-            </button>
-        ))}
-    </div>
-);
-
-// --- Sélecteur de couleur (pastille + menu de la palette) ---
-const ColorPicker = ({ value, used, onChange }) => {
-    const [open, setOpen] = useState(false);
-    return (
-        <div className="color-picker">
-            <button
-                type="button"
-                className="color-picker__swatch"
-                style={{ backgroundColor: value }}
-                onClick={() => setOpen((o) => !o)}
-                aria-label="Changer la couleur"
-                title="Changer la couleur"
-            />
-            {open && (
-                <>
-                    {/* Zone de fermeture au clic extérieur */}
-                    <div className="color-picker__scrim" onClick={() => setOpen(false)} />
-                    <div className="color-picker__menu">
-                        {COLOR_PALETTE.map((c) => {
-                            const taken = used.has(c.value) && c.value !== value;
-                            return (
-                                <button
-                                    key={c.value}
-                                    type="button"
-                                    className={`color-picker__chip ${c.value === value ? 'color-picker__chip--active' : ''} ${taken ? 'color-picker__chip--taken' : ''}`}
-                                    style={{ backgroundColor: c.value }}
-                                    disabled={taken}
-                                    title={taken ? `${c.name} (prise)` : c.name}
-                                    onClick={() => {
-                                        onChange(c.value);
-                                        setOpen(false);
-                                    }}
-                                />
-                            );
-                        })}
-                    </div>
-                </>
-            )}
-        </div>
-    );
-};
+import { Segmented, ColorPicker, AdvancedSettings } from './SetupControls.jsx';
 
 // --- Ligne d'un joueur ---
 const PlayerRow = ({ index, player, usedColors, canRemove, onChange, onRemove }) => {
@@ -128,143 +68,6 @@ const PlayerRow = ({ index, player, usedColors, canRemove, onChange, onRemove })
             >
                 ×
             </button>
-        </div>
-    );
-};
-
-// --- Contrôle numérique réutilisable (steppers − / +, bornes, unité) ---
-const NumberInput = ({ value, min = 0, max = 999, step = 1, unit, onChange }) => (
-    <div className="setting__number">
-        <button
-            type="button"
-            className="setting__step"
-            onClick={() => onChange(Math.max(min, value - step))}
-            disabled={value <= min}
-        >
-            −
-        </button>
-        <input
-            type="number"
-            className="setting__input"
-            value={value}
-            min={min}
-            max={max}
-            step={step}
-            onChange={(e) => {
-                const raw = Number(e.target.value);
-                if (Number.isNaN(raw)) return;
-                onChange(Math.min(max, Math.max(min, raw)));
-            }}
-        />
-        {unit && <span className="setting__unit">{unit}</span>}
-        <button
-            type="button"
-            className="setting__step"
-            onClick={() => onChange(Math.min(max, value + step))}
-            disabled={value >= max}
-        >
-            +
-        </button>
-    </div>
-);
-
-// --- Réglage « groupe » : sous-barème repliable (liste de champs numériques) ---
-const GroupField = ({ spec, value, onChange }) => {
-    const [open, setOpen] = useState(false);
-    return (
-        <div className={`setting setting--group ${open ? 'setting--open' : ''}`}>
-            <button type="button" className="setting__grouphead" onClick={() => setOpen((o) => !o)}>
-                <span className="setting__text">
-                    <span className="setting__label">{spec.label}</span>
-                    {spec.help && <span className="setting__help">{spec.help}</span>}
-                </span>
-                <span className="setting__chevron">{open ? '▲' : '▼'}</span>
-            </button>
-            {open && (
-                <div className="setting__grouplist">
-                    {spec.fields.map((f) => (
-                        <div className="setting__grouprow" key={f.key}>
-                            <span className="setting__grouplabel">{f.label}</span>
-                            {f.control === 'toggle' ? (
-                                <Segmented
-                                    size="sm"
-                                    options={[
-                                        { value: true, label: 'Oui' },
-                                        { value: false, label: 'Non' },
-                                    ]}
-                                    value={value?.[f.key] ?? f.default}
-                                    onChange={(v) => onChange({ ...value, [f.key]: v })}
-                                />
-                            ) : (
-                                <NumberInput
-                                    value={value?.[f.key] ?? f.default}
-                                    min={f.min}
-                                    max={f.max}
-                                    step={f.step}
-                                    unit={f.unit}
-                                    onChange={(v) => onChange({ ...value, [f.key]: v })}
-                                />
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-};
-
-// --- Champ de réglage générique, rendu depuis le schéma ---
-const SettingField = ({ spec, value, onChange }) => {
-    // Les groupes ont leur propre mise en page (repliable, pleine largeur).
-    if (spec.type === 'group') return <GroupField spec={spec} value={value} onChange={onChange} />;
-
-    let control;
-    if (spec.type === 'toggle') {
-        control = (
-            <Segmented
-                size="sm"
-                options={[
-                    { value: true, label: 'Oui' },
-                    { value: false, label: 'Non' },
-                ]}
-                value={value}
-                onChange={onChange}
-            />
-        );
-    } else if (spec.type === 'select') {
-        control = (
-            <select
-                className="setting__select"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-            >
-                {spec.options.map((o) => (
-                    <option key={o.value} value={o.value}>
-                        {o.label}
-                    </option>
-                ))}
-            </select>
-        );
-    } else {
-        control = (
-            <NumberInput
-                value={value}
-                min={spec.min}
-                max={spec.max}
-                step={spec.step || 1}
-                unit={spec.unit}
-                onChange={onChange}
-            />
-        );
-    }
-
-    return (
-        <div className="setting">
-            <div className="setting__text">
-                <span className="setting__label">{spec.label}</span>
-                {spec.help && <span className="setting__help">{spec.help}</span>}
-            </div>
-            <div className="setting__control">{control}</div>
         </div>
     );
 };
@@ -370,30 +173,10 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch }) => {
                     </button>
                 </section>
 
-                {/* --- Section RÉGLAGES --- */}
+                {/* --- Section RÉGLAGES (partagée avec la salle d'attente en ligne) --- */}
                 <section className="setup-section">
                     <h2 className="setup-section__title">Réglages avancés</h2>
-                    {SETTING_GROUPS.map((group) => (
-                        <div className="setting-group" key={group}>
-                            <h3 className="setting-group__title">{group}</h3>
-                            <div className="setting-group__list">
-                                {GAME_SETTINGS.filter((s) => s.group === group).map((spec) => {
-                                    // Réglage dépendant d'un toggle désactivé : masqué.
-                                    if (spec.dependsOn && !settings[spec.dependsOn]) return null;
-                                    // Condition d'affichage fine (ex. selon le mode de victoire).
-                                    if (spec.showWhen && !spec.showWhen(settings)) return null;
-                                    return (
-                                        <SettingField
-                                            key={spec.id}
-                                            spec={spec}
-                                            value={settings[spec.id]}
-                                            onChange={(v) => updateSetting(spec.id, v)}
-                                        />
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    ))}
+                    <AdvancedSettings settings={settings} onChange={updateSetting} />
                 </section>
             </div>
 

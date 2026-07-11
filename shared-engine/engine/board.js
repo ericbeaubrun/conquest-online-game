@@ -36,13 +36,16 @@ export function getLogicalBoard(mapId) {
     return board;
 }
 
-// Possession de départ : chaque base + ses voisines reviennent à son joueur.
+// Possession de départ : chaque base + ses voisines reviennent à son joueur. On
+// itère les JOUEURS (et non les spawns) et on place chacun sur son spawn via
+// `spawnIndex` (repli sur l'ordre du tableau). Cela permet des parties qui ne
+// remplissent pas tous les spawns : les positions sans joueur restent neutres.
 export function buildInitialOwnership(mapId, players) {
     const {map, cellMap} = getLogicalBoard(mapId);
     const ownership = new Map();
-    map.spawns.forEach((spawn, i) => {
-        const player = players[i];
-        if (!player) return;
+    players.forEach((player, idx) => {
+        const spawn = map.spawns[player.spawnIndex ?? idx];
+        if (!spawn) return;
         const baseId = hexId(spawn.q, spawn.r);
         if (cellMap.has(baseId)) ownership.set(baseId, player.id);
         getNeighbors(spawn.q, spawn.r).forEach((n) => {
@@ -71,6 +74,9 @@ function resolvePlayers(map, setup) {
                 color: p.color,
                 kind: p.kind || 'human',
                 botDifficulty: difficulty,
+                // Position (spawn) explicite : permet de laisser des spawns vides
+                // sans décaler les joueurs. Repli sur l'ordre du tableau.
+                spawnIndex: p.spawnIndex ?? i,
             };
         });
     }
