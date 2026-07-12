@@ -29,6 +29,7 @@ import {
     playersForMap,
     PALETTE_VALUES,
     colorName,
+    ownedCount,
 } from './exportEngine.js';
 
 // --- Identité d'un joueur (membre) : nom + couleur, CHOISIS par le joueur ---
@@ -124,6 +125,9 @@ async function persist(entry) {
                 seed: entry.seed,
                 seats: entry.seats,
                 state: entry.state ? serializeState(entry.state) : null,
+                autosave: entry.autosave,
+                savePassword: entry.savePassword,
+                emptiedAt: entry.emptiedAt,
                 updatedAt: new Date(),
             },
         }
@@ -145,6 +149,9 @@ function entryFromDoc(doc) {
         state: doc.state ? deserializeState(doc.state) : null,
         members: new Map(), // memberId -> { name, color }
         hostMemberId: null,
+        autosave: doc.autosave !== false, // défaut : activé
+        savePassword: doc.savePassword || '',
+        emptiedAt: doc.emptiedAt || null,
     };
 }
 
@@ -172,6 +179,13 @@ export async function createLobby({ mapId, settings = {}, name } = {}) {
         state: null,
         members: new Map(), // memberId -> { name, color }
         hostMemberId: null,
+        // Sauvegarde automatique : si activée, une partie EN COURS dont tous les
+        // joueurs sortent est conservée (statut 'saved') au lieu d'être supprimée,
+        // protégée par un mot de passe optionnel. `emptiedAt` = date/heure du dernier
+        // départ (quand plus aucun joueur n'est présent).
+        autosave: true,
+        savePassword: '',
+        emptiedAt: null,
     };
     cache.set(code, entry);
     await lobbiesCol().insertOne({
@@ -183,6 +197,9 @@ export async function createLobby({ mapId, settings = {}, name } = {}) {
         seed: entry.seed,
         seats: entry.seats,
         state: null,
+        autosave: entry.autosave,
+        savePassword: entry.savePassword,
+        emptiedAt: entry.emptiedAt,
         createdAt: new Date(),
         updatedAt: new Date(),
     });
@@ -210,6 +227,16 @@ export async function listLobbies(limit = 30) {
     return docs.map((d) => {
         const live = cache.get(d._id);
         const taken = live ? live.seats.filter((s) => s.assignedMemberId).length : 0;
+        // Partie EN COURS : reste-t-il une place (couleur) à REPRENDRE ? Détermine
+        // si le bouton doit dire « Rejoindre » (place libre) ou « Observer » (complet).
+        // Précis quand la partie est en mémoire ; sinon approximation (place non prise).
+        let joinable = false;
+        if (d.status === 'playing') {
+            joinable =
+                live && live.state
+                    ? joinableSeats(live).length > 0
+                    : taken < (d.seats?.length ?? 0);
+        }
         return {
             code: d._id,
             name: d.name,
@@ -217,6 +244,12 @@ export async function listLobbies(limit = 30) {
             status: d.status,
             seatsTotal: d.seats?.length ?? 0,
             seatsTaken: taken,
+            joinable,
+            // Métadonnées de sauvegarde (statut 'saved') : quand la partie a été
+            // quittée et si elle est protégée. Le mot de passe lui-même n'est JAMAIS
+            // exposé dans la liste publique — seul l'indicateur `hasPassword`.
+            savedAt: d.emptiedAt || null,
+            hasPassword: !!(d.savePassword && d.savePassword.length),
         };
     });
 }
@@ -226,7 +259,7 @@ export async function listLobbies(limit = 30) {
 // RE-DÉRIVE les sièges (leur nombre suit la capacité de la carte) : on préserve
 // l'occupation des sièges qui existent encore (p1..pN) et on libère ceux qui
 // disparaissent (leurs occupants redeviennent spectateurs). Persistance immédiate.
-export function configureLobby(entry, { mapId, settings } = {}) {
+export function configureLobby(entry, { mapId, settings, autosave, savePassword } = {}) {
     if (entry.status !== 'waiting') return entry; // partie déjà démarrée : figé
 
     if (mapId && mapId !== entry.mapId) {
@@ -252,6 +285,8 @@ export function configureLobby(entry, { mapId, settings } = {}) {
     }
 
     if (settings && typeof settings === 'object') entry.settings = settings;
+    if (typeof autosave === 'boolean') entry.autosave = autosave;
+    if (typeof savePassword === 'string') entry.savePassword = savePassword.slice(0, 64);
 
     schedulePersist(entry, { immediate: true });
     return entry;
@@ -273,6 +308,48 @@ export function claimSeat(entry, socketId, identity = {}) {
         }
     }
     return null; // partie pleine -> spectateur
+}
+
+// Enregistre un membre SANS lui attribuer de place (présence seule). Utilisé pour
+// rejoindre une partie EN COURS : le joueur choisira ensuite sa place/couleur
+// parmi les places libres (voir joinableSeats / claimSpecificSeat).
+export function registerMember(entry, socketId, identity = {}) {
+    const color = firstFreeColor(entry, identity.color);
+    const name = sanitizeName(identity.name) || colorName(color);
+    entry.members.set(socketId, { name, color });
+}
+
+// Places JOUEUR reprenables d'une partie EN COURS : sièges humains non pilotés
+// (membre déconnecté) dont le joueur existe encore dans l'état ET est en vie
+// (possède au moins une case). Renvoie [{ playerId, color, name }].
+export function joinableSeats(entry) {
+    if (!entry.state) return [];
+    const byId = new Map((entry.state.players || []).map((p) => [p.id, p]));
+    return entry.seats
+        .filter(
+            (s) =>
+                s.kind === 'human' &&
+                !s.assignedMemberId &&
+                byId.has(s.playerId) &&
+                ownedCount(entry.state, s.playerId) > 0
+        )
+        .map((s) => {
+            const p = byId.get(s.playerId);
+            return { playerId: s.playerId, color: p.color, name: p.name };
+        });
+}
+
+// Attribue une place PRÉCISE à un membre (choix explicite en rejoignant une
+// partie en cours). Vérifie que la place est bien humaine et libre. Aligne la
+// couleur du membre sur celle de la place (résumés cohérents). Renvoie le
+// playerId attribué, ou null si la place n'est pas (plus) disponible.
+export function claimSpecificSeat(entry, socketId, playerId) {
+    const seat = entry.seats.find((s) => s.playerId === playerId);
+    if (!seat || seat.kind !== 'human' || seat.assignedMemberId) return null;
+    seat.assignedMemberId = socketId;
+    const member = entry.members.get(socketId);
+    if (member) member.color = seat.color;
+    return seat.playerId;
 }
 
 // Met à jour l'identité d'un membre (son propre nom / sa propre couleur). La
@@ -306,6 +383,47 @@ export function releaseSeat(entry, socketId) {
     for (const seat of entry.seats) {
         if (seat.assignedMemberId === socketId) seat.assignedMemberId = null;
     }
+}
+
+// Supprime définitivement un lobby : annule toute écriture différée en attente,
+// le retire du cache mémoire ET de la base. Utilisé quand une partie EN ATTENTE
+// se vide de tous ses membres (plus personne pour la reprendre).
+export async function deleteLobby(entry) {
+    const t = persistTimers.get(entry.code);
+    if (t) {
+        clearTimeout(t);
+        persistTimers.delete(entry.code);
+    }
+    cache.delete(entry.code);
+    await lobbiesCol().deleteOne({ _id: entry.code });
+}
+
+// Sauvegarde une partie EN COURS que tous les joueurs ont quittée : on bascule en
+// statut 'saved', on note l'heure du dernier départ et on libère toute assignation
+// de siège résiduelle (plus aucun membre présent). Persistance immédiate.
+export async function saveLobby(entry) {
+    entry.status = 'saved';
+    entry.emptiedAt = new Date();
+    for (const seat of entry.seats) seat.assignedMemberId = null;
+    await persist(entry);
+    return entry;
+}
+
+// Reprend une partie sauvegardée : dès qu'un joueur la rejoint, elle redevient
+// 'playing' (elle réapparaît alors dans « parties en cours »). Persistance immédiate.
+export function resumeLobby(entry) {
+    if (entry.status !== 'saved') return entry;
+    entry.status = 'playing';
+    entry.emptiedAt = null;
+    schedulePersist(entry, { immediate: true });
+    return entry;
+}
+
+// Vérifie le mot de passe d'une partie sauvegardée. Un mot de passe vide côté
+// serveur = pas de protection (jointure libre).
+export function checkSavePassword(entry, password) {
+    if (!entry.savePassword) return true;
+    return String(password ?? '') === entry.savePassword;
 }
 
 // Bascule un siège LIBRE entre « humain (ouvert) » et « bot ». Interdit sur un

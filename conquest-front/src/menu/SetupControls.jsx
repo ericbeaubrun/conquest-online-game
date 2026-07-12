@@ -10,8 +10,8 @@ import { useState } from 'react';
 import { COLOR_PALETTE, GAME_SETTINGS, SETTING_GROUPS } from './setupConfig.js';
 
 // --- Toggle segmenté générique (deux valeurs ou plus) ---
-export const Segmented = ({ options, value, onChange, size, disabled }) => (
-    <div className={`segmented ${size ? `segmented--${size}` : ''} ${disabled ? 'segmented--disabled' : ''}`}>
+export const Segmented = ({ options, value, onChange, size, disabled, className = '' }) => (
+    <div className={`segmented ${size ? `segmented--${size}` : ''} ${disabled ? 'segmented--disabled' : ''} ${className}`}>
         {options.map((opt) => (
             <button
                 key={String(opt.value)}

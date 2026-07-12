@@ -42,6 +42,9 @@ export function useOnlineSession() {
     const [lobby, setLobby] = useState(null); // salle rejointe { code, name, mapId, status, hostMemberId, seats }
     const [memberId, setMemberId] = useState(null); // identité stable de CE client dans la salle
     const [gameState, setGameState] = useState(null); // état de jeu (une fois la partie démarrée)
+    // Choix de place en rejoignant une partie EN COURS : liste des couleurs libres
+    // à reprendre. `null` = aucun choix en attente (salle d'attente, ou déjà placé).
+    const [seatOptions, setSeatOptions] = useState(null);
     const serverStateRef = useRef(null); // dernier état reçu du serveur (autorité), pour rollback
 
     useEffect(() => {
@@ -58,14 +61,25 @@ export function useOnlineSession() {
         });
         socket.on('lobby:list', setLobbies);
         socket.on('lobby:error', (e) => setError(e.reason || 'erreur lobby'));
-        socket.on('lobby:joined', ({ memberId: mid, lobby: joined }) => {
+        socket.on('lobby:joined', ({ memberId: mid, lobby: joined, needsSeat, seatOptions: opts }) => {
             setMemberId(mid ?? null);
             setLobby(joined);
+            // Partie en cours à rejoindre : on doit choisir sa couleur parmi les
+            // places libres (modal). Sinon rien à choisir.
+            setSeatOptions(needsSeat ? opts || [] : null);
         });
-        socket.on('lobby:update', ({ code, status, mapId, settings, hostMemberId, seats }) => {
+        // Place confirmée après un choix : on referme le modal (la position est
+        // désormais déduite des sièges via lobby:update).
+        socket.on('lobby:seat-confirmed', () => setSeatOptions(null));
+        // Place prise entre-temps : on réaffiche les options restantes.
+        socket.on('lobby:seat-taken', ({ seatOptions: opts }) => {
+            setError('seat-taken');
+            setSeatOptions(opts || []);
+        });
+        socket.on('lobby:update', ({ code, status, mapId, settings, hostMemberId, seats, autosave, savePassword }) => {
             setLobby((prev) =>
                 prev && prev.code === code
-                    ? { ...prev, status, mapId, settings, hostMemberId, seats }
+                    ? { ...prev, status, mapId, settings, hostMemberId, seats, autosave, savePassword }
                     : prev
             );
         });
@@ -124,13 +138,14 @@ export function useOnlineSession() {
         const seat = lobby?.seats?.find((s) => s.assignedMemberId === memberId);
         return seat?.playerId ?? null;
     }, [lobby?.seats, memberId]);
-    const joinLobby = useCallback((code) => {
+    const joinLobby = useCallback((code, password) => {
         setError(null);
         const { name, color } = loadIdentity();
         socketRef.current?.emit('lobby:join', {
             code: (code || '').trim().toUpperCase(),
             name,
             color,
+            password,
         });
     }, []);
     // Modifie SON identité (nom / couleur) : mémorise côté client ET informe le
@@ -142,6 +157,13 @@ export function useOnlineSession() {
     const startLobby = useCallback(() => {
         socketRef.current?.emit('lobby:start', { code: lobby?.code });
     }, [lobby?.code]);
+    // Choisir sa place (couleur) en rejoignant une partie en cours.
+    const chooseSeat = useCallback((playerId) => {
+        setError(null);
+        socketRef.current?.emit('lobby:claimseat', { code: lobby?.code, playerId });
+    }, [lobby?.code]);
+    // Renoncer au choix et rester simple spectateur (referme le modal).
+    const spectate = useCallback(() => setSeatOptions(null), []);
 
     // --- Action de jeu : appliquée OPTIMISTE localement, puis émise au serveur ---
     // On rejoue le coup tout de suite avec le même moteur déterministe que le
@@ -174,5 +196,5 @@ export function useOnlineSession() {
         [gameState, dispatch, localPlayerId]
     );
 
-    return { phase, error, lobbies, lobby, memberId, localPlayerId, gameState, session, createLobby, refreshList, joinLobby, setIdentity, configureLobby, reorderSeat, setSeatKind, setBotColor, setBotDifficulty, startLobby };
+    return { phase, error, lobbies, lobby, memberId, localPlayerId, gameState, session, seatOptions, chooseSeat, spectate, createLobby, refreshList, joinLobby, setIdentity, configureLobby, reorderSeat, setSeatKind, setBotColor, setBotDifficulty, startLobby };
 }

@@ -78,6 +78,8 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch }) => {
         initialConfig?.players ?? [makeDefaultPlayer(0, []), makeDefaultPlayer(1, [makeDefaultPlayer(0, [])])]
     );
     const [settings, setSettings] = useState(initialConfig?.settings ?? defaultSettings());
+    // Section « Réglages avancés » repliable, fermée par défaut.
+    const [advancedOpen, setAdvancedOpen] = useState(false);
 
     const capacity = mapCapacity(mapId);
     const usedColors = useMemo(() => new Set(players.map((p) => p.color)), [players]);
@@ -175,8 +177,18 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch }) => {
 
                 {/* --- Section RÉGLAGES (partagée avec la salle d'attente en ligne) --- */}
                 <section className="setup-section">
-                    <h2 className="setup-section__title">Réglages avancés</h2>
-                    <AdvancedSettings settings={settings} onChange={updateSetting} />
+                    <button
+                        type="button"
+                        className={`setup-section__toggle ${advancedOpen ? "setup-section__toggle--open" : ""}`}
+                        onClick={() => setAdvancedOpen((o) => !o)}
+                        aria-expanded={advancedOpen}
+                    >
+                        <span className="setup-section__title">Réglages avancés</span>
+                        <span className="setup-section__chevron">{advancedOpen ? "▲" : "▼"}</span>
+                    </button>
+                    {advancedOpen && (
+                        <AdvancedSettings settings={settings} onChange={updateSetting} />
+                    )}
                 </section>
             </div>
 

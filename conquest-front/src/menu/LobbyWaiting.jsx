@@ -48,6 +48,8 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
     // Champ de nom : état LOCAL (frappe fluide, sans aller-retour serveur par
     // touche). Amorcé une fois depuis mon siège (nom pré-rempli via localStorage).
     const [nameDraft, setNameDraft] = useState("");
+    // Section « Réglages avancés » repliable, fermée par défaut.
+    const [advancedOpen, setAdvancedOpen] = useState(false);
     const seeded = useRef(false);
     useEffect(() => {
         if (!seeded.current && mySeat) {
@@ -55,6 +57,26 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
             seeded.current = true;
         }
     }, [mySeat]);
+
+    // Sauvegarde automatique (config hôte). L'activation est activée par défaut.
+    // Le mot de passe utilise un état LOCAL (frappe fluide), amorcé une fois depuis
+    // le lobby, puis diffusé au serveur à chaque frappe.
+    const autosave = lobby?.autosave !== false;
+    const [savePwDraft, setSavePwDraft] = useState("");
+    const pwSeeded = useRef(false);
+    useEffect(() => {
+        if (!pwSeeded.current && lobby) {
+            setSavePwDraft(lobby.savePassword || "");
+            pwSeeded.current = true;
+        }
+    }, [lobby]);
+    const changeAutosave = (v) => {
+        if (isHost) onConfigure?.({ autosave: v });
+    };
+    const changeSavePassword = (v) => {
+        setSavePwDraft(v);
+        if (isHost) onConfigure?.({ savePassword: v });
+    };
 
     const changeName = (v) => {
         setNameDraft(v);
@@ -143,7 +165,7 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                                     ) : (
                                         <span
                                             className={`seat__swatch ${filled ? "" : "seat__swatch--free"}`}
-                                            style={{ backgroundColor: s.color }}
+                                            style={filled ? { backgroundColor: s.color } : undefined}
                                         />
                                     )}
 
@@ -161,54 +183,61 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                                             onChange={(e) => changeName(e.target.value)}
                                         />
                                     ) : isHost && !s.taken ? (
-                                        <Segmented
-                                            size="sm"
-                                            options={[
-                                                { value: "human", label: "Ouvert" },
-                                                { value: "bot", label: "Bot" },
-                                            ]}
-                                            value={s.kind}
-                                            onChange={(kind) => onSetSeatKind?.(s.playerId, kind)}
-                                        />
-                                    ) : (
-                                        <span className="seat__name">
-                                            {isBot ? "Bot" : s.taken ? s.name : "Libre"}
-                                        </span>
-                                    )}
-                                    {you && <span className="seat__you">(vous)</span>}
-                                    {s.taken && s.assignedMemberId === lobby?.hostMemberId && (
-                                        <span className="seat__host">(Hôte)</span>
-                                    )}
-
-                                    <span className="seat__ctrls">
-                                        {/* Statut : « occupé » pour un joueur, « IA · niveau »
-                                            pour un bot vu par un non-hôte. Rien pour une place
-                                            libre (la bascule Ouvert/Bot suffit) ni pour un bot
-                                            côté hôte (il a son sélecteur de difficulté). */}
-                                        {(s.taken || (isBot && !isHost)) && (
-                                            <span
-                                                className={`seat__status ${s.taken ? "seat__status--on" : ""}`}
-                                            >
-                                                {isBot
-                                                    ? `IA · ${difficultyLabel(s.botDifficulty)}`
-                                                    : "occupé"}
-                                            </span>
-                                        )}
-
-                                        {/* Difficulté du bot : hôte uniquement. */}
-                                        {isHost && isBot && (
+                                        <div className="seat__slotctrl">
                                             <Segmented
                                                 size="sm"
-                                                options={BOT_DIFFICULTIES.map((d) => ({
-                                                    value: d.id,
-                                                    label: d.label,
-                                                }))}
-                                                value={s.botDifficulty}
-                                                onChange={(diff) =>
-                                                    onSetBotDifficulty?.(s.playerId, diff)
-                                                }
+                                                options={[
+                                                    { value: "human", label: "Joueur" },
+                                                    { value: "bot", label: "Bot" },
+                                                ]}
+                                                value={s.kind}
+                                                onChange={(kind) => onSetSeatKind?.(s.playerId, kind)}
                                             />
-                                        )}
+                                            {/* Difficulté du bot, juste à droite de la bascule. */}
+                                            {isBot && (
+                                                <Segmented
+                                                    size="sm"
+                                                    options={BOT_DIFFICULTIES.map((d) => ({
+                                                        value: d.id,
+                                                        label: d.label,
+                                                    }))}
+                                                    value={s.botDifficulty}
+                                                    onChange={(diff) =>
+                                                        onSetBotDifficulty?.(s.playerId, diff)
+                                                    }
+                                                />
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <span className="seat__name">
+                                            {isBot
+                                                ? `Bot (${difficultyLabel(s.botDifficulty)})`
+                                                : s.taken ? s.name : "Libre"}
+                                        </span>
+                                    )}
+                                    {s.taken && s.assignedMemberId === lobby?.hostMemberId && (
+                                        <img
+                                            className="seat__host-crown"
+                                            src="/crown.png"
+                                            alt="Hôte"
+                                            title="Hôte"
+                                        />
+                                    )}
+                                    {you && <span className="seat__you">(vous)</span>}
+
+                                    <span className="seat__ctrls">
+                                        {/* Statut à droite : « occupé » (vert) pour une place
+                                            pourvue (joueur ayant rejoint OU bot), sinon le libellé
+                                            d'attente pour une place Joueur restée libre. */}
+                                        {(s.taken || isBot) ? (
+                                            <span className="seat__status seat__status--on">
+                                                occupé
+                                            </span>
+                                        ) : isHost ? (
+                                            <span className="seat__waiting">
+                                                en attente de joueur…
+                                            </span>
+                                        ) : null}
 
                                         {isHost && (
                                             <span className="seat__reorder">
@@ -251,17 +280,80 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                     )}
                 </section>
 
+                {/* --- Section SAUVEGARDE AUTOMATIQUE --- */}
+                <section className="setup-section">
+                    <h2 className="setup-section__title">Sauvegarde automatique</h2>
+                    {!isHost && (
+                        <p className="lobby-hint">Réglée par l’hôte — lecture seule.</p>
+                    )}
+                    <div className="setting">
+                        <div className="setting__text">
+                            <span className="setting__label">Sauvegarder la partie</span>
+                            <span className="setting__help">
+                                Si activé, la partie est conservée quand tous les joueurs la
+                                quittent (reprise par mot de passe). Sinon elle est supprimée.
+                            </span>
+                        </div>
+                        <div className="setting__control">
+                            <Segmented
+                                size="sm"
+                                disabled={!isHost}
+                                options={[
+                                    { value: true, label: "Oui" },
+                                    { value: false, label: "Non" },
+                                ]}
+                                value={autosave}
+                                onChange={changeAutosave}
+                            />
+                        </div>
+                    </div>
+                    {autosave && (
+                        <div className="setting">
+                            <div className="setting__text">
+                                <span className="setting__label">Mot de passe</span>
+                                <span className="setting__help">
+                                    Demandé pour reprendre la partie sauvegardée (laisser vide =
+                                    aucun).
+                                </span>
+                            </div>
+                            <div className="setting__control">
+                                <input
+                                    className="seat__input"
+                                    type="text"
+                                    maxLength={64}
+                                    disabled={!isHost}
+                                    value={isHost ? savePwDraft : lobby?.savePassword || ""}
+                                    placeholder="(aucun)"
+                                    onChange={(e) => changeSavePassword(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </section>
+
                 {/* --- Section RÉGLAGES (partagée avec l'offline) --- */}
                 <section className="setup-section">
-                    <h2 className="setup-section__title">Réglages avancés</h2>
-                    {!isHost && (
-                        <p className="lobby-hint">Réglés par l’hôte — lecture seule.</p>
+                    <button
+                        type="button"
+                        className={`setup-section__toggle ${advancedOpen ? "setup-section__toggle--open" : ""}`}
+                        onClick={() => setAdvancedOpen((o) => !o)}
+                        aria-expanded={advancedOpen}
+                    >
+                        <span className="setup-section__title">Réglages avancés</span>
+                        <span className="setup-section__chevron">{advancedOpen ? "▲" : "▼"}</span>
+                    </button>
+                    {advancedOpen && (
+                        <>
+                            {!isHost && (
+                                <p className="lobby-hint">Réglés par l’hôte — lecture seule.</p>
+                            )}
+                            <AdvancedSettings
+                                settings={settings}
+                                onChange={updateSetting}
+                                disabled={!isHost}
+                            />
+                        </>
                     )}
-                    <AdvancedSettings
-                        settings={settings}
-                        onChange={updateSetting}
-                        disabled={!isHost}
-                    />
                 </section>
             </div>
 

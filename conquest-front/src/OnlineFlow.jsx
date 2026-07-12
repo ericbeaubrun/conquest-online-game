@@ -7,6 +7,7 @@
 import GameLayout from "./GameLayout.jsx";
 import LobbyBrowser from "./menu/LobbyBrowser.jsx";
 import LobbyWaiting from "./menu/LobbyWaiting.jsx";
+import SeatPickerModal from "./menu/SeatPickerModal.jsx";
 import { useOnlineSession } from "./game/session/useOnlineSession.js";
 
 // Petit écran plein centré (connexion / erreur).
@@ -28,8 +29,22 @@ const OnlineFlow = ({ onExit }) => {
     if (s.phase === "error")
         return <Centered text={s.error || "Erreur de connexion."} onCancel={onExit} cancelLabel="Retour" />;
 
-    // Partie démarrée (état de jeu reçu) : on affiche le jeu.
-    if (s.gameState) return <GameLayout session={s.session} onExit={onExit} />;
+    // Partie démarrée (état de jeu reçu) : on affiche le jeu. Si on vient de
+    // rejoindre une partie en cours, un modal de choix de couleur se superpose
+    // tant qu'aucune place n'a été prise.
+    if (s.gameState)
+        return (
+            <>
+                <GameLayout session={s.session} onExit={onExit} />
+                {s.seatOptions && (
+                    <SeatPickerModal
+                        options={s.seatOptions}
+                        onChoose={s.chooseSeat}
+                        onSpectate={s.spectate}
+                    />
+                )}
+            </>
+        );
 
     // Salle rejointe mais pas encore démarrée : salle d'attente.
     if (s.lobby)

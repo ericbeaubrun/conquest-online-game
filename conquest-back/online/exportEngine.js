@@ -47,6 +47,9 @@ export {gameReducer} from '@conquest/shared-engine/engine/reducer.js';
 export {createInitialState} from '@conquest/shared-engine/engine/board.js';
 export {serializeState, deserializeState} from '@conquest/shared-engine/engine/serialize.js';
 export {randomSeed} from '@conquest/shared-engine/engine/rng.js';
+// Sélecteur pur : nombre de cases possédées (sert à savoir si un joueur est
+// encore « en vie », donc reprenable par un joueur qui rejoint la partie).
+export {ownedCount} from '@conquest/shared-engine/engine/selectors.js';
 
 // Données de définition de partie (cartes, joueurs par défaut) : nécessaires au
 // lobby pour dériver les sièges d'une carte. Modules purs eux aussi.

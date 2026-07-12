@@ -31,7 +31,14 @@ import {
     getLobby,
     listLobbies,
     claimSeat,
+    registerMember,
+    joinableSeats,
+    claimSpecificSeat,
     releaseSeat,
+    deleteLobby,
+    saveLobby,
+    resumeLobby,
+    checkSavePassword,
     seatSummary,
     setMemberIdentity,
     setSeatKind,
@@ -68,6 +75,8 @@ function broadcastLobby(io, entry) {
         settings: entry.settings,
         hostMemberId: entry.hostMemberId,
         seats: seatSummary(entry),
+        autosave: entry.autosave,
+        savePassword: entry.savePassword,
     });
 }
 
@@ -91,12 +100,24 @@ function syncSocketSeats(io, entry) {
     }
 }
 
-// Fait entrer un socket dans un lobby : lui attribue un siège et l'abonne à la
-// salle. Facteur commun de create et join.
+// Fait entrer un socket dans un lobby et l'abonne à la salle. Facteur commun de
+// create et join.
+//  - Salle d'ATTENTE : on attribue automatiquement la 1re place libre (le joueur
+//    ajuste sa couleur dans la salle).
+//  - Partie EN COURS : on N'ATTRIBUE PAS de place ; le joueur devra CHOISIR sa
+//    couleur parmi les places libres (`seatOptions`) via un modal côté client.
+//    S'il n'y a aucune place libre, il rejoint en simple spectateur.
 function enterLobby(socket, entry, identity = {}) {
     socket.data.code = entry.code;
     socket.join(entry.code);
-    const playerId = claimSeat(entry, socket.id, identity);
+    let playerId = null;
+    let seatOptions = [];
+    if (entry.status === 'playing') {
+        registerMember(entry, socket.id, identity);
+        seatOptions = joinableSeats(entry);
+    } else {
+        playerId = claimSeat(entry, socket.id, identity);
+    }
     socket.data.playerId = playerId;
     // Le client s'identifie désormais par son MEMBRE (socket.id) et déduit sa
     // position (playerId) des sièges — car l'hôte peut la changer par la suite.
@@ -104,6 +125,10 @@ function enterLobby(socket, entry, identity = {}) {
         code: entry.code,
         memberId: socket.id,
         playerId,
+        // Partie en cours : la liste des places (couleurs) que le joueur peut
+        // reprendre. Vide = pas de choix à faire (salle d'attente ou aucune place).
+        needsSeat: seatOptions.length > 0,
+        seatOptions,
         lobby: {
             code: entry.code,
             name: entry.name,
@@ -112,6 +137,8 @@ function enterLobby(socket, entry, identity = {}) {
             settings: entry.settings,
             hostMemberId: entry.hostMemberId,
             seats: seatSummary(entry),
+            autosave: entry.autosave,
+            savePassword: entry.savePassword,
         },
     });
     // Partie déjà en cours : envoie l'état courant au nouvel arrivant.
@@ -188,12 +215,21 @@ export function attachGameServer(io) {
         });
 
         // --- Rejoindre une partie ---
-        socket.on('lobby:join', async ({ code, name, color } = {}) => {
+        socket.on('lobby:join', async ({ code, name, color, password } = {}) => {
             try {
                 const entry = await getLobby((code || '').toUpperCase());
                 if (!entry) {
                     socket.emit('lobby:error', { reason: 'not-found' });
                     return;
+                }
+                // Partie SAUVEGARDÉE : on vérifie le mot de passe puis on la reprend
+                // (elle redevient 'playing' et réapparaît dans « parties en cours »).
+                if (entry.status === 'saved') {
+                    if (!checkSavePassword(entry, password)) {
+                        socket.emit('lobby:error', { reason: 'bad-password' });
+                        return;
+                    }
+                    resumeLobby(entry);
                 }
                 const playerId = enterLobby(socket, entry, { name, color });
                 syncSocketSeats(io, entry);
@@ -205,8 +241,35 @@ export function attachGameServer(io) {
             }
         });
 
+        // --- Choisir sa place (couleur) en rejoignant une partie EN COURS ---
+        // Le joueur a reçu `seatOptions` à la jointure ; il en sélectionne une.
+        socket.on('lobby:claimseat', async ({ code, playerId } = {}) => {
+            try {
+                const entry = await getLobby(code || socket.data.code);
+                if (!entry) {
+                    socket.emit('lobby:error', { reason: 'not-found' });
+                    return;
+                }
+                const claimed = claimSpecificSeat(entry, socket.id, playerId);
+                if (!claimed) {
+                    // Place prise entre-temps : on renvoie les options à jour pour que
+                    // le joueur en choisisse une autre.
+                    socket.emit('lobby:seat-taken', { seatOptions: joinableSeats(entry) });
+                    return;
+                }
+                socket.data.playerId = claimed;
+                socket.emit('lobby:seat-confirmed', { playerId: claimed });
+                syncSocketSeats(io, entry);
+                broadcastLobby(io, entry);
+                // eslint-disable-next-line no-console
+                console.log(`[lobby] ${socket.id} prend la place ${claimed} dans '${entry.code}'`);
+            } catch (e) {
+                socket.emit('lobby:error', { reason: 'claimseat-failed', message: String(e.message || e) });
+            }
+        });
+
         // --- Configurer la partie en attente (hôte : carte + réglages) ---
-        socket.on('lobby:configure', async ({ code, mapId, settings } = {}) => {
+        socket.on('lobby:configure', async ({ code, mapId, settings, autosave, savePassword } = {}) => {
             try {
                 const entry = await getLobby(code || socket.data.code);
                 if (!entry) {
@@ -221,7 +284,7 @@ export function attachGameServer(io) {
                     socket.emit('lobby:error', { reason: 'already-started' });
                     return;
                 }
-                configureLobby(entry, { mapId, settings });
+                configureLobby(entry, { mapId, settings, autosave, savePassword });
                 syncSocketSeats(io, entry);
                 broadcastLobby(io, entry);
             } catch (e) {
@@ -397,13 +460,30 @@ export function attachGameServer(io) {
                     const entry = await getLobby(socket.data.code);
                     if (entry) {
                         releaseSeat(entry, socket.id);
-                        // Départ de l'hôte : on migre le rôle vers un membre restant
-                        // (le plus ancien), sinon plus d'hôte (null).
+                        // Départ de l'hôte : on migre le rôle vers un membre restant,
+                        // en PRIORISANT un joueur assis (repli : le plus ancien membre,
+                        // sinon plus d'hôte). NB : on lit les CLÉS de la Map (socketId),
+                        // pas les valeurs (l'identité { name, color }).
                         if (socket.id === entry.hostMemberId) {
-                            entry.hostMemberId = entry.members.values().next().value || null;
+                            const seated = entry.seats.find((s) => s.assignedMemberId)?.assignedMemberId;
+                            entry.hostMemberId = seated || entry.members.keys().next().value || null;
                         }
-                        syncSocketSeats(io, entry);
-                        broadcastLobby(io, entry);
+                        // Plus aucun membre présent : selon le statut, on nettoie.
+                        //  - EN ATTENTE : supprimée (personne pour la reprendre).
+                        //  - EN COURS + autosave : SAUVEGARDÉE (statut 'saved', on note
+                        //    l'heure du départ) pour pouvoir la reprendre plus tard.
+                        //  - EN COURS sans autosave : supprimée, comme une salle vidée.
+                        // Sinon (il reste des membres), on rediffuse l'état à la salle.
+                        if (entry.members.size === 0) {
+                            if (entry.status === 'playing' && entry.autosave) {
+                                await saveLobby(entry);
+                            } else if (entry.status === 'waiting' || entry.status === 'playing') {
+                                await deleteLobby(entry);
+                            }
+                        } else {
+                            syncSocketSeats(io, entry);
+                            broadcastLobby(io, entry);
+                        }
                     }
                 }
             } catch {
