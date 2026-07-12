@@ -3,7 +3,17 @@
 // aucune de ces caractéristiques (valeur `null`). Chaque liste sert à la fois
 // d'affichage (libellés) et de source de vérité pour de futures règles.
 
-import { SOLDIER_UPKEEP, SKELETON_UPKEEP, BUILDING_UPKEEP } from '../engine/rules.js';
+import {
+    SOLDIER_UPKEEP,
+    SKELETON_UPKEEP,
+    BUILDING_UPKEEP,
+    SOLDIER_HP_DEFAULT,
+    SOLDIER_ATK_DEFAULT,
+    SOLDIER_HP_MAX,
+    SOLDIER_ATK_MAX,
+    MERGE_MAX,
+} from '../engine/rules.js';
+import { ITEM_COST } from './items.js';
 
 export const AFFINITIES = [
     { id: 'fire', label: 'Feu' },
@@ -378,6 +388,39 @@ export const SOLDIER_SKINS = {
     4: '/characters/SoldierLVL4.png',
 };
 export const soldierSkin = (level) => SOLDIER_SKINS[level] || SOLDIER_SKINS[1];
+
+// ---- Achat direct d'un soldat de niveau supérieur (boutique) ----
+// Un soldat s'obtient normalement par fusions successives : deux soldats de
+// niveau N donnent un soldat de niveau N+1 (PV/attaque additionnés). La boutique
+// permet d'acheter directement ce résultat. Prix et statistiques suivent donc la
+// même progression que la fusion (doublement à chaque niveau), pour rester
+// équivalents en or au chemin par fusion. Plafond = niveau maximum de fusion.
+export const MAX_SOLDIER_PURCHASE_LEVEL = MERGE_MAX;
+
+const clampPurchaseLevel = (level) =>
+    Math.max(1, Math.min(MAX_SOLDIER_PURCHASE_LEVEL, Math.floor(level || 1)));
+
+// Statistiques d'un soldat acheté au niveau donné : PV et attaque de base
+// (configurables par partie) doublés à chaque niveau, plafonnés comme une fusion.
+export function purchasedSoldierStats(level, settings) {
+    const lvl = clampPurchaseLevel(level);
+    const baseHp = settings?.soldierHp ?? SOLDIER_HP_DEFAULT;
+    const baseAtk = settings?.soldierAtk ?? SOLDIER_ATK_DEFAULT;
+    const factor = 2 ** (lvl - 1);
+    return {
+        level: lvl,
+        hp: Math.min(baseHp * factor, SOLDIER_HP_MAX),
+        atk: Math.min(baseAtk * factor, SOLDIER_ATK_MAX),
+    };
+}
+
+// Prix d'un soldat au niveau donné : le prix de base de la boutique (configurable)
+// doublé à chaque niveau (lvl 2 = 2× lvl 1, lvl 3 = 2× lvl 2...).
+export function soldierCostForLevel(level, settings) {
+    const lvl = clampPurchaseLevel(level);
+    const base = settings?.itemCost?.soldier ?? ITEM_COST.soldier ?? 0;
+    return base * 2 ** (lvl - 1);
+}
 
 // Visuel (src) d'un bonus donné, ou `null` si l'asset n'existe pas encore.
 export const bonusSrc = (id) => BONUS_OFFERS.find((b) => b.id === id)?.src ?? null;

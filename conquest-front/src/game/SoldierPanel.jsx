@@ -28,7 +28,7 @@ const AFFINITY_SRC = {
 
 // Petite jauge « valeur / max » avec barre de remplissage. Exportée pour être
 // réutilisée par le panneau des bâtiments (même style pixel).
-export const StatBar = ({ icon, label, value, max, kind }) => (
+export const StatBar = ({ icon, label, value, max, kind, valueText, valueNode }) => (
     <div className={`soldier-stat soldier-stat--${kind}`}>
         <span className="soldier-stat__icon" role="img" aria-label={label}>
             {icon}
@@ -40,7 +40,7 @@ export const StatBar = ({ icon, label, value, max, kind }) => (
             />
         </div>
         <span className="soldier-stat__value">
-            {value}/{max}
+            {valueNode ?? valueText ?? `${value}/${max}`}
         </span>
     </div>
 );
@@ -234,11 +234,11 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
 
         <div className="soldier-panel__stats">
             <StatBar
-                icon={<img src="/heart.png" alt="" className="soldier-stat__img" />}
-                label="Points de vie" value={soldier.hp} max={SOLDIER_HP_MAX} kind="hp" />
-            <StatBar
                 icon={<img src="/sword.png" alt="" className="soldier-stat__img" />}
                 label="Attaque" value={soldier.atk} max={SOLDIER_ATK_MAX} kind="atk" />
+            <StatBar
+                icon={<img src="/heart.png" alt="" className="soldier-stat__img" />}
+                label="Points de vie" value={soldier.hp} max={SOLDIER_HP_MAX} kind="hp" />
         </div>
 
         <div className="soldier-panel__specs">

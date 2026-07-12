@@ -22,7 +22,9 @@ export const moveSoldier = (fromId, toId) => ({type: MOVE_SOLDIER, fromId, toId}
 export const mergeSoldier = (fromId, toId) => ({type: MERGE_SOLDIER, fromId, toId});
 export const attackSoldier = (fromId, toId) => ({type: ATTACK_SOLDIER, fromId, toId});
 export const chopTree = (fromId, toId) => ({type: CHOP_TREE, fromId, toId});
-export const placeItem = (cellId, itemType) => ({type: PLACE_ITEM, cellId, itemType});
+// `level` (soldats uniquement) : achète directement un soldat de ce niveau
+// (défaut 1). Ignoré pour les autres items. Voir `soldierCostForLevel`.
+export const placeItem = (cellId, itemType, level = 1) => ({type: PLACE_ITEM, cellId, itemType, level});
 export const buyBonus = (cellId, bonusId) => ({type: BUY_BONUS, cellId, bonusId});
 export const endTurn = () => ({type: END_TURN});
 // `seed` (optionnel) fixe la graine de la nouvelle partie. En local elle est

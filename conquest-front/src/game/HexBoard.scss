@@ -153,14 +153,26 @@
     animation: hex-pulse 1.2s ease-in-out infinite;
   }
 
-  // Case du soldat sélectionné.
+  // Case du soldat sélectionné : contour vert en « fourmis en marche »
+  // (pointillés animés qui défilent), dessiné AU-DESSUS des sprites (voir
+  // ordre de rendu) et renforcé d'une lueur pour rester bien visible au
+  // premier plan.
   &__selected {
     fill: none;
-    stroke: #ffffff;
-    stroke-width: 4;
+    stroke: #7cf76a;
+    stroke-width: 5;
     stroke-linejoin: round;
-    stroke-dasharray: 7 4;
+    stroke-dasharray: 4 5;
     pointer-events: none;
+    filter: drop-shadow(0 0 6px rgba(124, 247, 106, 0.9));
+    animation: hex-selected-march 0.6s linear infinite;
+  }
+
+  // Case sélectionnée sans action disponible (ennemi, bâtiment, arbre, case
+  // vide, ou soldat allié déjà joué) : même effet, en blanc neutre.
+  &__selected--neutral {
+    stroke: #ffffff;
+    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9));
   }
 }
 
@@ -178,6 +190,34 @@
   }
 }
 
+// Fine barre d'attaque collée sur le bord haut de la barre de vie (pas de
+// cadre propre : elle se superpose directement au cadre de la barre de vie).
+.atk-line__fill {
+  fill: #e8503a;
+  shape-rendering: crispEdges;
+}
+
+// Étiquette « attaque/pv » affichée au survol d'un soldat, au-dessus du sprite
+// (taille fixée en JS, proportionnelle à la case).
+.soldier-stat-label {
+  font-weight: 700;
+  fill: #ffffff;
+  paint-order: stroke;
+  stroke: #000000;
+  stroke-width: 1.4px;
+  stroke-linejoin: round;
+  pointer-events: none;
+  user-select: none;
+
+  &__atk {
+    fill: #ff9d3d;
+  }
+
+  &__hp {
+    fill: #5bd35b;
+  }
+}
+
 @keyframes hex-pulse {
   0%,
   100% {
@@ -185,5 +225,11 @@
   }
   50% {
     stroke-opacity: 1;
+  }
+}
+
+@keyframes hex-selected-march {
+  to {
+    stroke-dashoffset: -18;
   }
 }

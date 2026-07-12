@@ -77,7 +77,13 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch }) => {
     const [players, setPlayers] = useState(
         initialConfig?.players ?? [makeDefaultPlayer(0, []), makeDefaultPlayer(1, [makeDefaultPlayer(0, [])])]
     );
-    const [settings, setSettings] = useState(initialConfig?.settings ?? defaultSettings());
+    // On garnit toujours des valeurs par défaut : une config héritée (relance /
+    // ré-édition) peut précéder l'ajout d'un réglage — le champ manquant serait
+    // alors `undefined` (contrôle non éditable). Même garde que la salle en ligne.
+    const [settings, setSettings] = useState(() => ({
+        ...defaultSettings(),
+        ...(initialConfig?.settings || {}),
+    }));
     // Section « Réglages avancés » repliable, fermée par défaut.
     const [advancedOpen, setAdvancedOpen] = useState(false);
 

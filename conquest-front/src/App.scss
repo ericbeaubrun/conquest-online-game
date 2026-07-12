@@ -346,80 +346,227 @@ body {
   background: radial-gradient(circle at 50% 40%, #dfe9f3 0%, #b9c8dc 100%);
 }
 
-// ---- Boutique (barre du bas) ----
-.shop {
+// ---- Boutique : tiroir compact en bas de l'écran ----
+// Repliée par défaut : seul l'onglet dépasse. L'onglet la tire vers le haut ; le
+// corps (cartes d'items) se déploie en glissant. Style pixel : bordures franches,
+// coins carrés, police bitmap héritée.
+.shop-drawer {
   position: absolute;
   left: 50%;
-  bottom: 12px;
+  bottom: 0;
   transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-  max-width: calc(100% - 24px);
-  overflow-x: auto;
-  background: #1c1c1c;
-  border: 3px solid #000;
-  box-shadow: 0 0 0 3px #4a4a4a;
-  z-index: 12;
-}
-
-.shop-item {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  width: 78px;
-  padding: 6px;
-  border: 2px solid transparent;
-  background: rgba(255, 255, 255, 0.06);
+  max-width: calc(100% - 16px);
+  z-index: 12;
+
+  // Onglet toujours visible en bas : ▲ pour ouvrir, ▼ pour fermer, + or courant.
+  &__handle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 16px;
+    border: 3px solid #000;
+    background: #1c1c1c;
+    color: #fff;
+    font-family: inherit;
+    font-size: 17px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    box-shadow: 0 0 0 3px #4a4a4a;
+    position: relative;
+    z-index: 1; // l'onglet passe au-dessus du liseré du corps
+
+    &:hover {
+      background: #262626;
+    }
+  }
+  &__arrow {
+    font-size: 12px;
+    color: #ffd766;
+  }
+  &__label {
+    color: #e8e8e8;
+  }
+  &__gold {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    color: #ffd766;
+  }
+
+  // Corps replié : hauteur nulle, invisible. Il se déploie vers le HAUT (le
+  // tiroir est ancré en bas) à l'ouverture. Rendu avant l'onglet dans le DOM.
+  &__body {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    background: #1c1c1c;
+    transition: max-height 0.22s ease, opacity 0.18s ease;
+  }
+  &--open &__body {
+    max-height: 360px;
+    opacity: 1;
+    border: 3px solid #000;
+    border-bottom: none;
+    box-shadow: 0 0 0 3px #4a4a4a;
+  }
+
+  &__hint {
+    padding: 6px 10px 0;
+    text-align: center;
+    color: #ffd766;
+    font-size: 15px;
+  }
+}
+
+.shop {
+  display: flex;
+  align-items: stretch; // cartes de hauteur égale : prix/par-tour s'alignent
+  gap: 8px;
+  padding: 10px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+// Carte d'item : TOUT le container est cliquable pour acheter. Colonne à lignes
+// alignées entre cartes (icône, sélecteur/espaceur, stats, par-tour, prix), le
+// prix étant poussé en bas pour rester à la même hauteur partout.
+.shop-card {
+  flex: 0 0 auto;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border: 2px solid #3a3a3a;
+  background: rgba(255, 255, 255, 0.05);
   color: #fff;
   cursor: pointer;
-  transition: background 0.12s ease, transform 0.12s ease;
+  transition: background 0.12s ease, transform 0.1s ease;
 
-  &:hover {
-    background: rgba(255, 255, 255, 0.14);
+  &:hover:not(.shop-card--locked) {
+    background: rgba(255, 255, 255, 0.12);
   }
-  &:active {
-    transform: scale(0.96);
+  &:active:not(.shop-card--locked) {
+    transform: scale(0.97);
+  }
+  &:focus-visible {
+    outline: 2px solid #ffd766;
+    outline-offset: 1px;
+  }
+
+  &--active {
+    background: rgba(255, 255, 255, 0.16);
+    // Couleur de bordure (joueur actif) appliquée en style inline.
+  }
+  &--poor {
+    opacity: 0.5;
+  }
+  &--locked {
+    cursor: not-allowed;
   }
 
   &__icon {
-    width: 42px;
-    height: 42px;
+    width: 40px;
+    height: 40px;
     object-fit: contain;
     image-rendering: pixelated;
   }
 
-  &__name {
-    font-size: 15px;
-    text-align: center;
-    line-height: 1;
-  }
-
-  &__cost {
+  // Sélecteur de niveau (soldat) : ◀ Nv N ▶. L'espaceur réserve la même hauteur
+  // sur les cartes sans sélecteur pour aligner les lignes suivantes.
+  &__level {
     display: flex;
     align-items: center;
-    gap: 2px;
-    font-size: 16px;
+    justify-content: center;
+    gap: 4px;
+    height: 20px;
+
+    &--spacer {
+      // Rien à afficher : sert juste de cale verticale.
+    }
+  }
+  &__step {
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 2px solid #000;
+    background: #2c2c2c;
+    color: #ffd766;
+    font-size: 11px;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: #3a3a3a;
+    }
+    &:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+  }
+  &__level-label {
+    min-width: 44px;
+    text-align: center;
+    font-size: 15px;
     color: #ffd766;
   }
 
-  &--active {
-    background: rgba(255, 255, 255, 0.18);
-    // La couleur de bordure (joueur actif) est appliquée en style inline.
+  // Stats de combat (PV / attaque).
+  &__specs {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 6px;
+    min-height: 16px;
   }
 
-  &--disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+  // Ligne « par tour » dédiée : hauteur réservée même vide pour aligner le coût
+  // d'entretien / revenu (et donc le prix) d'une carte à l'autre.
+  &__perturn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 16px;
+  }
 
-    &:hover {
-      background: rgba(255, 255, 255, 0.06);
-    }
-    &:active {
-      transform: none;
-    }
+  // Prix : poussé tout en bas (mêmes hauteurs de carte => prix alignés).
+  &__price {
+    margin-top: auto;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px;
+    border: 2px solid #000;
+    background: #ffd766;
+    color: #1c1c1c;
+    font-size: 16px;
+  }
+}
+
+.shop-stat {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 14px;
+  color: #e8e8e8;
+
+  &__icon {
+    width: 13px;
+    height: 13px;
+    image-rendering: pixelated;
+  }
+  &--upkeep {
+    color: #ff9a9a;
+  }
+  &--income {
+    color: #7ee08a;
   }
 }
 
@@ -930,6 +1077,45 @@ body {
   }
 }
 
+// Variante combat : bandeau de résultat au-dessus de la rangée de cartes.
+.merge-preview--combat {
+  flex-direction: column;
+  gap: 8px;
+
+  .merge-preview__row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+}
+
+.merge-preview__outcome {
+  align-self: center;
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-shadow: 0 1px 0 #000;
+
+  &--win {
+    color: #5bd35b;
+  }
+
+  &--lose {
+    color: #ff6b6b;
+  }
+
+  // Aucune unité éliminée : issue neutre.
+  &--draw {
+    color: #ffd766;
+  }
+
+  // Les deux unités éliminées : issue neutre mais notable.
+  &--double-ko {
+    color: #b98cff;
+  }
+}
+
 .merge-card {
   display: flex;
   flex-direction: column;
@@ -969,18 +1155,25 @@ body {
     min-width: 150px;
   }
 
-  // Jauge PV du combat + annotation des dégâts subis (−X).
+  // Jauge PV du combat : les dégâts de l'adversaire sont épinglés en badge
+  // en haut à droite de l'icône cœur.
   &__hp {
     position: relative;
   }
 
-  &__dmg {
+  &__hp-icon-wrap {
+    position: relative;
+    display: inline-block;
+  }
+
+  &__atk-note-value {
     position: absolute;
-    right: 0;
-    top: -14px;
-    font-size: 14px;
+    top: -8px;
+    right: -8px;
+    font-size: 12px;
     color: #ff6b6b;
     letter-spacing: 0.04em;
+    white-space: nowrap;
   }
 
   // Badge de niveau, épinglé en bas à droite du portrait (même présentation
@@ -1004,8 +1197,9 @@ body {
     top: -10px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 20px;
-    line-height: 1;
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
   }
 
   // Unité éliminée : carte grisée.
@@ -1015,9 +1209,11 @@ body {
   }
 }
 
-// Aperçu de combat : opérateur en accent rouge.
-.merge-preview--combat .merge-preview__op {
-  color: #ff6b6b;
+// Aperçu de combat : icône d'épée entre les deux cartes.
+.merge-preview--combat .merge-preview__op-img {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
 }
 
 // ---- Adaptations mobile ----

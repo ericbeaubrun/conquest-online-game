@@ -40,15 +40,35 @@ export const SOLDIER_HP_MAX = 100;
 export const SOLDIER_ATK_DEFAULT = 10;
 export const SOLDIER_ATK_MAX = 100;
 
+// Les trois affinités possibles. Défini ici (et non importé de soldier.js) pour
+// éviter une dépendance circulaire : soldier.js importe déjà rules.js.
+export const AFFINITY_IDS = ['fire', 'ice', 'lightning'];
+
+// Affinité du soldat issu d'une fusion :
+//   - sans affinité + affinité X            => X
+//   - affinité X + affinité X               => X
+//   - affinité X + affinité Y (différentes) => la TROISIÈME affinité (ni X ni Y)
+// Fonction PURE, réutilisée par l'application comme par l'aperçu d'interface.
+export function mergeAffinity(a, b) {
+    if (!a) return b ?? null;
+    if (!b) return a;
+    if (a === b) return a;
+    return AFFINITY_IDS.find((id) => id !== a && id !== b) ?? null;
+}
+
 // Fusion de soldats : on ne fusionne QUE deux soldats de même niveau (lvl 1
-// avec lvl 1, lvl 2 avec lvl 2...), en-dessous du niveau maximum. Le résultat
-// monte d'un niveau et ADDITIONNE les points de vie et d'attaque (plafonnés).
-// Fonctions PURES partagées par le reducer (application), les sélecteurs
-// (cases de fusion valides) et l'aperçu d'interface — mêmes règles partout.
+// avec lvl 1, lvl 2 avec lvl 2...), en-dessous du niveau maximum, et AUCUN des
+// deux ne doit porter de bonus (un soldat à bonus n'est jamais fusionnable). Les
+// affinités, elles, n'empêchent jamais la fusion (voir `mergeAffinity`). Le
+// résultat monte d'un niveau et ADDITIONNE les points de vie et d'attaque
+// (plafonnés). Fonctions PURES partagées par le reducer (application), les
+// sélecteurs (cases de fusion valides) et l'aperçu d'interface — mêmes règles.
 export function canMerge(from, to) {
     if (!from || !to || from.type !== 'soldier' || to.type !== 'soldier') return false;
     // Les squelettes invoqués ne fusionnent jamais (ni comme source ni cible).
     if (from.unit === 'skeleton' || to.unit === 'skeleton') return false;
+    // Un soldat porteur d'un bonus n'est pas fusionnable (source comme cible).
+    if (from.bonus || to.bonus) return false;
     const lvl = from.level || 1;
     return (to.level || 1) === lvl && lvl < MERGE_MAX;
 }
@@ -59,6 +79,7 @@ export function mergedSoldier(from, to) {
         level: (to.level || 1) + 1,
         hp: Math.min((to.hp || 0) + (from.hp || 0), SOLDIER_HP_MAX),
         atk: Math.min((to.atk || 0) + (from.atk || 0), SOLDIER_ATK_MAX),
+        affinity: mergeAffinity(from.affinity, to.affinity),
     };
 }
 

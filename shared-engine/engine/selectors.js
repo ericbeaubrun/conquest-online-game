@@ -142,14 +142,27 @@ export function upkeepTotal(state, playerId) {
     return sum;
 }
 
+// Entretien des arbres : chaque arbre posé sur une case possédée par le joueur
+// prélève `treeUpkeep` or par tour (0 par défaut = neutre). Les arbres neutres
+// (hors territoire) ne coûtent rien.
+export function treeUpkeepTotal(state, playerId) {
+    const per = state.settings?.treeUpkeep ?? 0;
+    if (!per) return 0;
+    let n = 0;
+    for (const [id, placed] of state.placements) {
+        if (placed.type === 'tree' && state.ownership.get(id) === playerId) n += 1;
+    }
+    return per * n;
+}
+
 // Revenu d'un joueur pour un tour : base + 1 or par case possédée, moins
-// l'entretien de ses unités (jamais négatif). Les maisons ayant un entretien
-// négatif, elles augmentent au contraire ce revenu. Le revenu de base est
-// configurable (retombe sur `BASE_INCOME` sinon).
+// l'entretien de ses unités et de ses arbres (jamais négatif). Les maisons ayant
+// un entretien négatif, elles augmentent au contraire ce revenu. Le revenu de
+// base est configurable (retombe sur `BASE_INCOME` sinon).
 export function incomeFor(state, playerId) {
     const base = state.settings?.baseIncome ?? BASE_INCOME;
     const gross = base + ownedCount(state, playerId);
-    return Math.max(0, gross - upkeepTotal(state, playerId));
+    return Math.max(0, gross - upkeepTotal(state, playerId) - treeUpkeepTotal(state, playerId));
 }
 
 // Un joueur est « en vie » tant qu'il possède au moins une case OU un soldat sur

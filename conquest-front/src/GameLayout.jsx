@@ -28,6 +28,13 @@ const GameLayout = ({ session, onExit }) => {
     // État d'INTERFACE local à ce client (ne transite pas par le serveur).
     const [menuOpen, setMenuOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
+    // Tiroir de la boutique : replié par défaut, tiré vers le haut par son onglet.
+    // Il s'ouvre aussi automatiquement quand une case vide est sélectionnée (pose
+    // directe) — voir `placeTarget` plus bas.
+    const [shopOpen, setShopOpen] = useState(false);
+    // Niveau de soldat à acheter dans la boutique (1 = base). Piloté par le
+    // sélecteur de la boutique, il conditionne le prix, les stats et le placement.
+    const [soldierLevel, setSoldierLevel] = useState(1);
     // Sélection courante sur le plateau : { id, kind } où kind vaut 'soldier'
     // (soldat jouable), 'unit' (soldat ennemi / déjà joué), 'building' (base,
     // tour, maison) ou 'tile' (case vide de son territoire). Pilote le panneau
@@ -163,7 +170,7 @@ const GameLayout = ({ session, onExit }) => {
         if (!canAct) return; // hors de son tour : la boutique est en lecture seule
         if (placeTarget) {
             if (id) {
-                dispatch(placeItem(placeTarget, id));
+                dispatch(placeItem(placeTarget, id, id === "soldier" ? soldierLevel : 1));
                 setSelection(null);
             }
             return;
@@ -286,6 +293,7 @@ const GameLayout = ({ session, onExit }) => {
                     dispatch={dispatch}
                     interactive={canAct}
                     selectedItem={selectedItem}
+                    soldierLevel={soldierLevel}
                     selection={selection}
                     onSelect={setSelection}
                     onHoverTarget={setHoverTarget}
@@ -341,6 +349,14 @@ const GameLayout = ({ session, onExit }) => {
                         activeColor={activeColor}
                         activeGold={gold[activePlayerId] ?? 0}
                         settings={settings}
+                        soldierLevel={soldierLevel}
+                        onSoldierLevel={setSoldierLevel}
+                        // Tiroir : ouvert par l'onglet, ou forcé ouvert en pose
+                        // directe (case vide sélectionnée).
+                        open={shopOpen || !!placeTarget}
+                        placeMode={!!placeTarget}
+                        onToggle={() => setShopOpen((o) => !o)}
+                        canAct={canAct}
                     />
                 )}
             </div>

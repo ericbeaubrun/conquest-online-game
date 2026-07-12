@@ -53,6 +53,8 @@ import {
     WARLOCK_SUMMON_CHANCE,
     PALADIN_HP_REGEN,
     unlockedBonusIds,
+    purchasedSoldierStats,
+    soldierCostForLevel,
 } from '../data/soldier.js';
 import {getNeighbors, hexId} from '../data/hex.js';
 
@@ -201,10 +203,33 @@ function reduceMerge(state, {fromId, toId}) {
     return {...state, placements, movedSoldiers};
 }
 
-// Combat : le soldat actif attaque un soldat ennemi adjacent. Les deux unités
-// se retirent mutuellement des PV (égaux à l'attaque adverse) ; celles tombées
-// à 0 meurent (retirées du plateau). L'attaquant reste sur sa case et son tour
-// est consommé.
+// Case d'approche au CORPS À CORPS : la plus proche case *où le soldat peut se
+// tenir* (cases parcourues par le BFS, `dist`) qui soit adjacente à la cible
+// `toId`. Comme la case de départ est dans `dist` (distance 0), un soldat déjà
+// collé à la cible garde sa case ; sinon on renvoie la case libre voisine la
+// plus proche. Renvoie `null` si aucune case d'approche n'est atteignable.
+function approachCell(board, reachable, fromId, toId) {
+    const target = board.cellMap.get(toId);
+    if (!target) return fromId;
+    let bestId = null;
+    let bestDist = Infinity;
+    for (const n of getNeighbors(target.q, target.r)) {
+        const nid = hexId(n.q, n.r);
+        const d = reachable.dist.get(nid);
+        if (d != null && d < bestDist) {
+            bestDist = d;
+            bestId = nid;
+        }
+    }
+    return bestId;
+}
+
+// Combat : le soldat actif attaque une cible ennemie. Le combat est au CORPS À
+// CORPS — si le soldat n'est pas déjà collé à la cible, il se déplace d'abord
+// sur la case libre adjacente à la cible la plus proche qu'il puisse atteindre
+// (plus d'attaque à distance). Les deux unités se retirent alors mutuellement
+// des PV (égaux à l'attaque adverse) ; celles tombées à 0 meurent (retirées du
+// plateau). L'attaquant frappe depuis sa case d'approche et son tour est consommé.
 function reduceAttack(state, {fromId, toId}) {
     const from = state.placements.get(fromId);
     if (!from || from.type !== 'soldier') return state;
@@ -212,8 +237,21 @@ function reduceAttack(state, {fromId, toId}) {
     if (state.movedSoldiers.has(from.uid)) return state;
 
     const board = getLogicalBoard(state.mapId);
-    const dest = computeReachable(state, board, fromId).moves.get(toId);
+    const reachable = computeReachable(state, board, fromId);
+    const dest = reachable.moves.get(toId);
     if (!dest || dest.kind !== 'combat') return state;
+
+    const target = board.cellMap.get(toId);
+    const attackFromId = approachCell(board, reachable, fromId, toId);
+    if (attackFromId == null) return state; // aucune approche possible
+    const movedToAttack = attackFromId !== fromId;
+
+    // Oriente le soldat vers sa cible depuis sa case d'approche (comme un déplacement).
+    let mover = from;
+    const attackQ = Number(attackFromId.split(',')[0]);
+    if (target && target.q !== attackQ) {
+        mover = {...mover, facing: target.q > attackQ ? 'right' : 'left'};
+    }
 
     // La cible peut être un soldat, une structure posée (maison / tour) OU une
     // base ennemie. La base n'est pas un item de `placements` : on synthétise son
@@ -230,8 +268,10 @@ function reduceAttack(state, {fromId, toId}) {
         if (!to || to.playerId === state.activePlayerId) return state;
     }
 
-    const {attacker, defender} = combatResult(from, to);
+    const {attacker, defender} = combatResult(mover, to);
     const placements = new Map(state.placements);
+    // Le soldat quitte sa case de départ s'il a dû s'approcher au corps à corps.
+    if (movedToAttack) placements.delete(fromId);
     let uidSeq = state.uidSeq;
 
     // Applique l'issue du combat sur une case : l'unité survivante garde ses PV
@@ -256,7 +296,7 @@ function reduceAttack(state, {fromId, toId}) {
         return unit;
     };
 
-    settle(fromId, from, attacker);
+    settle(attackFromId, mover, attacker);
     // Règlement de la cible : une base met à jour ses PV persistants (`baseHp`) et
     // rejoint `destroyedBases` si elle tombe — sa case redeviendra alors normale
     // (conquérable). Les autres structures et les soldats passent par `settle`.
@@ -283,9 +323,9 @@ function reduceAttack(state, {fromId, toId}) {
         deadDefender?.type === 'soldier' &&
         (deadDefender.level || 1) >= 2
     ) {
-        const alive = placements.get(fromId);
+        const alive = placements.get(attackFromId);
         if (alive?.uid === from.uid) {
-            placements.set(fromId, withProgress(alive, CHALLENGE_METRICS.ENEMIES_KILLED_L2, 1));
+            placements.set(attackFromId, withProgress(alive, CHALLENGE_METRICS.ENEMIES_KILLED_L2, 1));
         }
     }
 
@@ -293,7 +333,7 @@ function reduceAttack(state, {fromId, toId}) {
     // (débloque le bonus), et un chevalier noir équipé ABSORBE ses statistiques
     // (les additionne aux siennes, comme une fusion, plafonnées).
     if (!attacker.dead && isSkeleton(deadDefender)) {
-        const alive = placements.get(fromId);
+        const alive = placements.get(attackFromId);
         if (alive?.uid === from.uid) {
             let knight = withProgress(alive, CHALLENGE_METRICS.SKELETONS_KILLED, 1);
             if (from.bonus === 'blackKnight') {
@@ -303,7 +343,7 @@ function reduceAttack(state, {fromId, toId}) {
                     atk: Math.min((knight.atk || 0) + (to.atk || 0), SOLDIER_ATK_MAX),
                 };
             }
-            placements.set(fromId, knight);
+            placements.set(attackFromId, knight);
         }
     }
 
@@ -319,8 +359,10 @@ function reduceAttack(state, {fromId, toId}) {
     return {...state, placements, gold, movedSoldiers, uidSeq, baseHp, destroyedBases};
 }
 
-// Abattage d'un arbre : un soldat actif adjacent détruit l'arbre, le joueur
-// gagne aussitôt de l'or, et le tour du soldat est consommé.
+// Abattage d'un arbre : comme le combat, c'est une action au CORPS À CORPS. Si
+// le soldat n'est pas déjà collé à l'arbre, il se déplace d'abord sur la case
+// libre adjacente la plus proche, puis abat l'arbre. Le joueur gagne aussitôt de
+// l'or et le tour du soldat est consommé.
 function reduceChop(state, {fromId, toId}) {
     const from = state.placements.get(fromId);
     if (!from || from.type !== 'soldier') return state;
@@ -328,11 +370,18 @@ function reduceChop(state, {fromId, toId}) {
     if (state.movedSoldiers.has(from.uid)) return state;
 
     const board = getLogicalBoard(state.mapId);
-    const dest = computeReachable(state, board, fromId).moves.get(toId);
+    const reachable = computeReachable(state, board, fromId);
+    const dest = reachable.moves.get(toId);
     if (!dest || dest.kind !== 'chop') return state;
 
     const tree = state.placements.get(toId);
     if (!tree || tree.type !== 'tree') return state;
+
+    // Case d'où abattre l'arbre : la case du soldat s'il est déjà collé, sinon la
+    // case libre adjacente à l'arbre la plus proche qu'il puisse atteindre.
+    const chopFromId = approachCell(board, reachable, fromId, toId);
+    if (chopFromId == null) return state; // aucune approche possible
+    const movedToChop = chopFromId !== fromId;
 
     // Avancement des défis : +1 arbre abattu, et +1 si l'arbre était sur une
     // case possédée par un adversaire (territoire ennemi).
@@ -342,9 +391,17 @@ function reduceChop(state, {fromId, toId}) {
         chopper = withProgress(chopper, CHALLENGE_METRICS.ENEMY_TREES_CHOPPED, 1);
     }
 
+    // Oriente le bûcheron vers l'arbre depuis sa case d'approche.
+    const target = board.cellMap.get(toId);
+    const chopQ = Number(chopFromId.split(',')[0]);
+    if (target && target.q !== chopQ) {
+        chopper = {...chopper, facing: target.q > chopQ ? 'right' : 'left'};
+    }
+
     const placements = new Map(state.placements);
     placements.delete(toId);
-    placements.set(fromId, chopper); // le soldat reste sur place, progression à jour
+    if (movedToChop) placements.delete(fromId); // le soldat a quitté sa case de départ
+    placements.set(chopFromId, chopper); // le soldat se tient sur sa case d'approche
     // Récompense configurable ; le bonus « Bûcheron » la double.
     const baseReward = state.settings?.treeReward ?? TREE_REWARD;
     const reward = from.bonus === 'lumberjack' ? baseReward * 2 : baseReward;
@@ -545,7 +602,7 @@ function healPaladins(state, placementsIn) {
 }
 
 // Pose d'un item (soldat, maison, tour) sur une case du territoire actif.
-function reducePlace(state, {cellId, itemType}) {
+function reducePlace(state, {cellId, itemType, level = 1}) {
     const board = getLogicalBoard(state.mapId);
     const cell = board.cellMap.get(cellId);
     if (!cell || cell.blocked || board.baseIds.has(cellId)) return state;
@@ -553,8 +610,11 @@ function reducePlace(state, {cellId, itemType}) {
     if (state.placements.has(cellId)) return state; // case déjà occupée
 
     // Achat : le joueur actif doit avoir assez d'or ; le coût est débité. Le prix
-    // de chaque item est configurable (retombe sur le barème par défaut).
-    const cost = state.settings?.itemCost?.[itemType] ?? ITEM_COST[itemType] ?? 0;
+    // de chaque item est configurable (retombe sur le barème par défaut). Pour un
+    // soldat, le niveau acheté fixe le prix (doublé à chaque niveau).
+    const cost = itemType === 'soldier'
+        ? soldierCostForLevel(level, state.settings)
+        : (state.settings?.itemCost?.[itemType] ?? ITEM_COST[itemType] ?? 0);
     const purse = state.gold[state.activePlayerId] || 0;
     if (purse < cost) return state; // fonds insuffisants
 
@@ -564,6 +624,12 @@ function reducePlace(state, {cellId, itemType}) {
     if (itemType === 'soldier') {
         uidSeq += 1;
         item = makeSoldier(state.activePlayerId, `s${uidSeq}`, state.settings);
+        // Soldat de niveau > 1 acheté directement : on lui applique les stats du
+        // niveau (équivalentes à des fusions successives).
+        const stats = purchasedSoldierStats(level, state.settings);
+        item.level = stats.level;
+        item.hp = stats.hp;
+        item.atk = stats.atk;
     } else {
         const stats = BUILDING_STATS[itemType];
         item = {type: itemType, playerId: state.activePlayerId, hp: stats?.hp ?? 0};

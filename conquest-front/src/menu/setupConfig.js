@@ -219,6 +219,18 @@ export const GAME_SETTINGS = [
         dependsOn: 'treesEnabled',
     },
     {
+        id: 'treeUpkeep',
+        label: 'Coût d’entretien par arbre',
+        group: 'Monde',
+        type: 'number',
+        min: 0,
+        max: 50,
+        step: 1,
+        unit: '💰',
+        help: 'Or prélevé chaque tour pour chaque arbre présent sur votre territoire.',
+        dependsOn: 'treesEnabled',
+    },
+    {
         id: 'treeDensity',
         label: 'Densité maximale d’arbres',
         group: 'Monde',

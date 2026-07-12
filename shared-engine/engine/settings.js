@@ -39,6 +39,7 @@ export const DEFAULT_SETTINGS = {
     // Monde
     treesEnabled: true,
     treeReward: 10,
+    treeUpkeep: 2, // or prélevé par tour pour chaque arbre sur le territoire du joueur
     treeDensity: 10, // % des cases pouvant porter un arbre (plafond global)
     treeSpawnChance: 50, // % de chance qu'une vague d'arbres apparaisse par tour
     treeSpawnMin: 0, // nombre minimum d'arbres par vague
