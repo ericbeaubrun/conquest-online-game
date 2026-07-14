@@ -1,6 +1,7 @@
 import { ITEM_SRC } from '@conquest/shared-engine/data/items.js';
 import { StatBar } from './SoldierPanel.jsx';
 import { maxHp, maxAtk } from '@conquest/shared-engine/engine/rules.js';
+import { DEV_CONFIG } from '../config/devConfig.js';
 import UpkeepSpec from './UpkeepSpec.jsx';
 
 // Libellé et image par type de bâtiment. La base n'est pas un item de boutique :
@@ -29,6 +30,7 @@ const BuildingPanel = ({ building, color, owner, settings }) => (
                 value={building.hp}
                 max={maxHp(building)}
                 kind="hp"
+                hideValue={!DEV_CONFIG.showPanelStatValues}
             />
             {building.atk != null && (
                 <StatBar
@@ -37,6 +39,7 @@ const BuildingPanel = ({ building, color, owner, settings }) => (
                     value={building.atk}
                     max={maxAtk(building)}
                     kind="atk"
+                    hideValue={!DEV_CONFIG.showPanelStatValues}
                 />
             )}
         </div>

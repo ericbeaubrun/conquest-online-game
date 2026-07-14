@@ -12,10 +12,16 @@ import {
     isSkeleton,
     hasUnlockedBonus,
     isBonusNotified,
+    bonusLabel,
+    atkRankLabel,
+    atkHalfStarsFlat,
+    hpHalfHearts,
+    levelRankLabel,
     MIN_BONUS_LEVEL,
     MAX_BONUS_LEVEL,
 } from '@conquest/shared-engine/data/soldier.js';
-import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from '@conquest/shared-engine/engine/rules.js';
+import { SOLDIER_ATK_MAX, SOLDIER_HP_MAX } from '@conquest/shared-engine/engine/rules.js';
+import { DEV_CONFIG } from '../config/devConfig.js';
 import UpkeepSpec from './UpkeepSpec.jsx';
 
 // Icône par affinité (ids définis dans AFFINITIES). Un soldat sans affinité
@@ -27,22 +33,107 @@ const AFFINITY_SRC = {
 };
 
 // Petite jauge « valeur / max » avec barre de remplissage. Exportée pour être
-// réutilisée par le panneau des bâtiments (même style pixel).
-export const StatBar = ({ icon, label, value, max, kind, valueText, valueNode }) => (
-    <div className={`soldier-stat soldier-stat--${kind}`}>
-        <span className="soldier-stat__icon" role="img" aria-label={label}>
-            {icon}
-        </span>
-        <div className="soldier-stat__track">
-            <div
-                className="soldier-stat__fill"
-                style={{ width: `${Math.max(0, Math.min(100, (value / max) * 100))}%` }}
-            />
+// réutilisée par le panneau des bâtiments (même style pixel). `beforeValue`
+// (optionnel) : valeur AVANT un combat — le segment entre `value` et
+// `beforeValue` est dessiné en rouge sur la piste pour visualiser les PV
+// perdus dans l'échange.
+export const StatBar = ({ icon, label, value, max, kind, valueText, valueNode, hideValue = false, beforeValue }) => {
+    const currentPct = Math.max(0, Math.min(100, (value / max) * 100));
+    const beforePct =
+        beforeValue != null ? Math.max(0, Math.min(100, (beforeValue / max) * 100)) : currentPct;
+    return (
+        <div className={`soldier-stat soldier-stat--${kind}`}>
+            <span className="soldier-stat__icon" role="img" aria-label={label}>
+                {icon}
+            </span>
+            <div className="soldier-stat__track">
+                {beforePct > currentPct && (
+                    <div
+                        className="soldier-stat__damage"
+                        style={{ left: `${currentPct}%`, width: `${beforePct - currentPct}%` }}
+                    />
+                )}
+                <div className="soldier-stat__fill" style={{ width: `${currentPct}%` }} />
+            </div>
+            {!hideValue && (
+                <span className="soldier-stat__value">
+                    {valueNode ?? valueText ?? `${value}/${max}`}
+                </span>
+            )}
         </div>
-        <span className="soldier-stat__value">
-            {valueNode ?? valueText ?? `${value}/${max}`}
-        </span>
-    </div>
+    );
+};
+
+// Rangée générique de 5 icônes (pleine / moitié / vide) pour représenter une
+// note sur 5 en demi-crans. `halfCount` va de 0 à 10. `percentText` (optionnel) :
+// texte déjà formaté (ex. « 42% » ou « 42 → 20% ») affiché avant la rangée.
+// `percentWide` : élargit la case du pourcentage (panneau de combat) pour que
+// le texte plus long « avant% → après% » ne déborde pas sur les icônes.
+const IconRating = ({ kind, alt, srcSet, halfCount, percentText, percentWide }) => {
+    const full = Math.floor(halfCount / 2);
+    const hasHalf = halfCount % 2 === 1;
+    return (
+        <div className={`soldier-stat soldier-stat--${kind}`} role="img" aria-label={alt}>
+            {percentText != null && (
+                <span
+                    className={`soldier-stars__percent ${percentWide ? 'soldier-stars__percent--wide' : ''}`}
+                >
+                    {percentText}
+                </span>
+            )}
+            <div className="soldier-stars">
+                {Array.from({ length: 5 }, (_, i) => {
+                    const state = i < full ? 'full' : i === full && hasHalf ? 'half' : 'empty';
+                    return (
+                        <img key={i} src={srcSet[state]} alt="" className="soldier-stars__item" />
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+const STAR_SRC = { full: '/epeePlein.png', half: '/epeeMoitie.png', empty: '/epeeVide.png' };
+const HEART_SRC = { full: '/coeurPlein.png', half: '/coeurMoitie.png', empty: '/coeurVide.png' };
+
+// Pas de plafond à 100 % : une structure dont le vrai maximum dépasse le
+// plafond d'affichage (voir `PREVIEW_STAT_MAX`) montre un pourcentage > 100 %
+// (ex. base à 1000 PV -> 1000 %, tour de défense à 200 PV -> 200 %).
+const ratioPercent = (value, max) => Math.round(Math.max(0, value / max) * 100);
+
+// Note d'attaque en épées : une demi-épée par tranche de 10 points d'attaque
+// (même échelle absolue que les cœurs de vie, indépendante du maximum réel),
+// précédée du pourcentage d'attaque (`atk` rapporté à `max`). Exportée pour
+// être réutilisée par le panneau de combat.
+export const AtkStars = ({ atk, max, wide }) => (
+    <IconRating
+        kind="atk"
+        alt="Attaque"
+        srcSet={STAR_SRC}
+        halfCount={atkHalfStarsFlat(atk)}
+        percentText={`${ratioPercent(atk, max)}%`}
+        percentWide={wide}
+    />
+);
+
+// Note de vie en cœurs : un demi-cœur par tranche de 10 PV, précédée du
+// pourcentage de vie restante (`hp` rapporté à `max`). `beforeHp` (optionnel,
+// panneau de combat) : affiche « avant% → après% » au lieu du seul pourcentage
+// courant — dans ce cas, passer `wide` pour que la case élargie n'empiète pas
+// sur les cœurs. Exportée pour être réutilisée par le panneau de combat.
+export const HpHearts = ({ hp, max = SOLDIER_HP_MAX, beforeHp, wide }) => (
+    <IconRating
+        kind="hp"
+        alt="Points de vie"
+        srcSet={HEART_SRC}
+        halfCount={hpHalfHearts(hp)}
+        percentText={
+            beforeHp != null
+                ? `${ratioPercent(beforeHp, max)}% → ${ratioPercent(hp, max)}%`
+                : `${ratioPercent(hp, max)}%`
+        }
+        percentWide={wide}
+    />
 );
 
 // Menu des caractéristiques du soldat sélectionné. Prend la place de la
@@ -213,32 +304,51 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
             </div>
         )}
 
-        {/* Le portrait fait office de bouton : il porte le niveau du soldat et
-            ouvre/ferme la boutique de bonus au-dessus. */}
-        <button
-            type="button"
-            className={`soldier-panel__portrait ${bonusOpen ? 'soldier-panel__portrait--active' : ''}`}
-            style={{ borderColor: color }}
-            onClick={() => !noBonusShop && setBonusOpen((v) => !v)}
-            aria-expanded={noBonusShop ? undefined : bonusOpen}
-            disabled={noBonusShop}
-            title={skeleton ? 'Squelette invoqué' : bonusesEnabled ? 'Voir les bonus' : 'Bonus désactivés'}
-        >
-            <img src={soldierSprite(soldier)} alt={skeleton ? 'Squelette' : 'Soldat'} />
-            <span className="soldier-panel__level">LVL {level}</span>
-            {/* Notification : un bonus est débloqué et attend d'être réclamé. */}
-            {notify && (
-                <img src="/notif.png" alt="Bonus débloqué" className="soldier-panel__notif" />
-            )}
-        </button>
+        {/* Colonne portrait : étoiles de niveau (1 à 5) au-dessus du portrait. */}
+        <div className="soldier-panel__portrait-col">
+            <div className="soldier-panel__level-stars">
+                {Array.from({ length: 5 }, (_, i) => (
+                    <img
+                        key={i}
+                        src={i < level ? '/etoilePleine.png' : '/etoileVide.png'}
+                        alt=""
+                        className="soldier-panel__level-star"
+                    />
+                ))}
+            </div>
+            {/* Le portrait fait office de bouton : il ouvre/ferme la boutique de
+                bonus au-dessus. */}
+            <button
+                type="button"
+                className={`soldier-panel__portrait ${bonusOpen ? 'soldier-panel__portrait--active' : ''}`}
+                style={{ borderColor: color }}
+                onClick={() => !noBonusShop && setBonusOpen((v) => !v)}
+                aria-expanded={noBonusShop ? undefined : bonusOpen}
+                disabled={noBonusShop}
+                title={skeleton ? 'Squelette invoqué' : bonusesEnabled ? 'Voir les bonus' : 'Bonus désactivés'}
+            >
+                <img src={soldierSprite(soldier)} alt={skeleton ? 'Squelette' : 'Soldat'} />
+                {DEV_CONFIG.showSoldierPanelLevel && (
+                    <span className="soldier-panel__level">LVL {level}</span>
+                )}
+                {/* Notification : un bonus est débloqué et attend d'être réclamé. */}
+                {notify && (
+                    <img src="/notif.png" alt="Bonus débloqué" className="soldier-panel__notif" />
+                )}
+            </button>
+        </div>
 
         <div className="soldier-panel__stats">
-            <StatBar
-                icon={<img src="/sword.png" alt="" className="soldier-stat__img" />}
-                label="Attaque" value={soldier.atk} max={SOLDIER_ATK_MAX} kind="atk" />
-            <StatBar
-                icon={<img src="/heart.png" alt="" className="soldier-stat__img" />}
-                label="Points de vie" value={soldier.hp} max={SOLDIER_HP_MAX} kind="hp" />
+            {DEV_CONFIG.showAtkRankLabel && (
+                <span className="soldier-panel__atk-rank">
+                    {atkRankLabel(soldier.atk, SOLDIER_ATK_MAX)}{' '}
+                    <span className="soldier-panel__atk-race">
+                        {soldier.bonus ? bonusLabel(soldier.bonus) : levelRankLabel(level)}
+                    </span>
+                </span>
+            )}
+            <AtkStars atk={soldier.atk} max={SOLDIER_ATK_MAX} />
+            <HpHearts hp={soldier.hp} />
         </div>
 
         <div className="soldier-panel__specs">

@@ -23,7 +23,7 @@ const DEFAULT_BONUS_ENABLED = Object.fromEntries(BONUS_OFFERS.map((b) => [b.id, 
 
 export const DEFAULT_SETTINGS = {
     // Économie
-    startingGold: 0,
+    startingGold: 100,
     baseIncome: 10,
     houseIncome: 10,
     itemCost: {...ITEM_COST}, // prix de la boutique par item

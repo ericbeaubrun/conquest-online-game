@@ -588,13 +588,33 @@ body {
   box-shadow: 0 0 0 3px #4a4a4a; // liseré « double bordure » pixel
   z-index: 12;
 
+  // Colonne portrait : étoiles de niveau au-dessus du bouton portrait.
+  &__portrait-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  // Rangée de 5 étoiles représentant le niveau du soldat (1 à 5).
+  &__level-stars {
+    display: flex;
+    gap: 2px;
+  }
+
+  &__level-star {
+    width: 20px;
+    height: 20px;
+    image-rendering: pixelated;
+  }
+
   // Le portrait est un bouton (reset des styles natifs) : il bascule entre
   // les specs et la boutique de bonus, et affiche le niveau du soldat.
   &__portrait {
     position: relative;
     flex: 0 0 auto;
-    width: 64px;
-    height: 64px;
+    width: 78px;
+    height: 78px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -613,8 +633,8 @@ body {
     }
 
     img {
-      width: 52px;
-      height: 52px;
+      width: 64px;
+      height: 64px;
       object-fit: contain;
       image-rendering: pixelated;
     }
@@ -650,8 +670,29 @@ body {
   &__stats {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
     min-width: 190px;
+  }
+
+  // Rang d'attaque (RPG) affiché au-dessus de la barre d'attaque, séparé des
+  // barres atk/pv par un petit filet.
+  &__atk-rank {
+    align-self: flex-start;
+    width: 100%;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    font-size: 17px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #cfcfcf;
+    text-shadow: 0 1px 0 #000;
+  }
+
+  // Race / bonus (« Humain », « Bûcheron »…) à gauche du rang d'attaque.
+  &__atk-race {
+    color: #eed222;
   }
 
   &__specs {
@@ -969,7 +1010,7 @@ body {
 .soldier-stat {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
 
   &__icon {
     font-size: 16px;
@@ -986,6 +1027,7 @@ body {
 
   // Piste : rainure sombre, bordure noire franche, coins carrés.
   &__track {
+    position: relative;
     flex: 1;
     height: 14px;
     background: #111;
@@ -993,6 +1035,16 @@ body {
     box-shadow: inset 0 0 0 1px #3a3a3a;
     overflow: hidden;
     image-rendering: pixelated;
+  }
+
+  // Segment des PV perdus lors d'un combat : positionné juste après le
+  // remplissage courant, jusqu'à l'ancien niveau de vie (voir `beforeValue`).
+  &__damage {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background-color: #ff4d4d;
+    opacity: 0.7;
   }
 
   // Remplissage segmenté en « blocs » via un dégradé répété, avancée par paliers.
@@ -1022,6 +1074,63 @@ body {
     font-size: 18px;
     letter-spacing: 0.04em;
   }
+}
+
+// Note d'attaque en étoiles (remplace la barre d'attaque dans le panneau du
+// soldat) : 5 étoiles pixel, alignées sur toute la largeur de la piste.
+.soldier-stars {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  // Même taille que les épées (voir plus bas) pour que chaque cœur reste
+  // aligné avec l'épée correspondante entre les deux rangées.
+  &__item {
+    width: 26px;
+    height: 26px;
+    image-rendering: pixelated;
+  }
+
+  // Pourcentage affiché avant la rangée d'icônes (épées / cœurs). Largeur
+  // FIXE (et non min-width) et identique entre les deux rangées, pour que la
+  // rangée d'icônes démarre toujours à la même position malgré des textes de
+  // longueur différente (« 42% » vs « 42% → 20% »). Volontairement resserrée
+  // pour coller les icônes au texte ; un texte plus long (fusion/combat)
+  // déborde du cadre sans être coupé (pas d'overflow:hidden).
+  // Même police pixel que les nombres PV/ATK affichés sur le terrain ; la
+  // couleur est fixée par variante (attaque / vie) juste en dessous.
+  &__percent {
+    width: 40px;
+    flex: 0 0 auto;
+    text-align: left;
+    font-family: "Press Start 2P", monospace;
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: 0;
+    white-space: nowrap;
+    paint-order: stroke;
+    -webkit-text-stroke: 2px #000000;
+    text-shadow: 0 0 2px #000000;
+    position: relative;
+    top: 3px;
+  }
+
+  // Variante élargie (panneau de combat) : assez large pour « 100% → 100% »
+  // sans déborder sur les icônes. Les deux rangées (attaque et vie) passent
+  // par cette même variante pour rester alignées entre elles.
+  &__percent--wide {
+    width: 108px;
+    font-size: 10px;
+  }
+}
+
+.soldier-stat--atk .soldier-stars__percent {
+  color: #ffcc00;
+}
+
+.soldier-stat--hp .soldier-stars__percent {
+  color: #ff3b3b;
 }
 
 .soldier-spec {
@@ -1071,14 +1180,16 @@ body {
   pointer-events: none; // ne gêne pas le survol du plateau
 
   &__op {
-    font-size: 28px;
+    font-size: 52px;
+    font-weight: 800;
     line-height: 1;
     color: #ffd766;
   }
 }
 
-// Variante combat : bandeau de résultat au-dessus de la rangée de cartes.
-.merge-preview--combat {
+// Variante combat / fusion : bandeau de résultat au-dessus de la rangée de cartes.
+.merge-preview--combat,
+.merge-preview--fusion {
   flex-direction: column;
   gap: 8px;
 
@@ -1114,6 +1225,11 @@ body {
   &--double-ko {
     color: #b98cff;
   }
+
+  // Fusion d'alliés : bleu clair.
+  &--fusion {
+    color: #6bc8ff;
+  }
 }
 
 .merge-card {
@@ -1127,6 +1243,28 @@ body {
     color: #a9a9a9;
     text-transform: uppercase;
     letter-spacing: 0.06em;
+  }
+
+  // Status (rang d'attaque) affiché sous le label de la carte.
+  &__rank {
+    margin-top: -4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #ffd766;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  // Étoiles de niveau (1 à 5), à la place du status texte.
+  &__level-stars {
+    display: flex;
+    gap: 2px;
+  }
+
+  &__level-star {
+    width: 14px;
+    height: 14px;
+    image-rendering: pixelated;
   }
 
   &__portrait {
@@ -1152,7 +1290,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    min-width: 150px;
+    min-width: 178px;
   }
 
   // Jauge PV du combat : les dégâts de l'adversaire sont épinglés en badge
@@ -1209,11 +1347,13 @@ body {
   }
 }
 
-// Aperçu de combat : icône d'épée entre les deux cartes.
-.merge-preview--combat .merge-preview__op-img {
-  width: 24px;
-  height: 24px;
-  image-rendering: pixelated;
+// Aperçu de combat : « VS » entre les deux cartes.
+.merge-preview--combat .merge-preview__vs {
+  font-size: 26px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 0 #000;
+  letter-spacing: 0.02em;
 }
 
 // ---- Adaptations mobile ----

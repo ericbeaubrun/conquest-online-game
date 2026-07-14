@@ -386,6 +386,7 @@ export const SOLDIER_SKINS = {
     2: '/characters/SoldierLVL2.png',
     3: '/characters/SoldierLVL3.png',
     4: '/characters/SoldierLVL4.png',
+    5: '/characters/SoldierLVL5.png',
 };
 export const soldierSkin = (level) => SOLDIER_SKINS[level] || SOLDIER_SKINS[1];
 
@@ -477,3 +478,54 @@ export const upkeepFor = (unit, settings) => {
 export const affinityLabel = (id) => AFFINITIES.find((a) => a.id === id)?.label ?? 'Aucune';
 export const bonusLabel = (id) => BONUS_OFFERS.find((b) => b.id === id)?.label ?? 'Aucun';
 export const behaviorLabel = (id) => BEHAVIORS.find((b) => b.id === id)?.label ?? 'Aucun';
+
+// Rangs d'attaque (RPG) : chaque tranche de 10 % de l'attaque maximale d'un
+// soldat lui attribue un titre, du plus faible (« Novice ») au plus fort
+// (« Légendaire »). Le seuil est le plafond EXCLU de la tranche, en pourcentage
+// (ex. < 10 % -> Novice, < 20 % -> Adepte, … ≥ 100 % -> Légendaire).
+export const ATK_RANKS = [
+    {maxPct: 10, label: 'Novice'},
+    {maxPct: 20, label: 'Adepte'},
+    {maxPct: 30, label: 'Vétéran'},
+    {maxPct: 40, label: 'Élite'},
+    {maxPct: 50, label: 'Maître'},
+    {maxPct: 60, label: 'Prodige'},
+    {maxPct: 70, label: 'Virtuose'},
+    {maxPct: 80, label: 'Souverain'},
+    {maxPct: 90, label: 'Seigneur'},
+    {maxPct: 100, label: 'Mythique'},
+];
+
+// Titre du rang d'attaque pour une valeur d'attaque donnée rapportée à son max.
+export const atkRankLabel = (atk, max) => {
+    const pct = max > 0 ? (atk / max) * 100 : 0;
+    return (ATK_RANKS.find((r) => pct < r.maxPct) ?? {label: 'Légendaire'}).label;
+};
+
+// Nombre de DEMI-ÉTOILES (0 à 10) correspondant au rang d'attaque : chaque rang
+// vaut une demi-étoile de plus que le précédent (Novice = 0, Adepte = 1, …
+// Mythique = 9, Légendaire = 10 = 5 étoiles pleines à 100 % d'attaque).
+export const atkHalfStars = (atk, max) => {
+    const pct = max > 0 ? (atk / max) * 100 : 0;
+    const idx = ATK_RANKS.findIndex((r) => pct < r.maxPct);
+    return idx === -1 ? ATK_RANKS.length : idx;
+};
+
+// Nombre de DEMI-ÉPÉES (0 à 10) pour une valeur d'attaque donnée : même
+// principe que `hpHalfHearts` (une tranche de 10 points d'attaque vaut une
+// demi-épée), indépendant du maximum réel de l'unité — évite que les
+// structures à faible attaque relative (ex. tour de défense) n'affichent
+// que des épées vides malgré une attaque significative en points bruts.
+export const atkHalfStarsFlat = (atk) => Math.max(0, Math.min(10, Math.ceil((atk ?? 0) / 10)));
+
+// Nombre de DEMI-CŒURS (0 à 10) pour un total de PV : une tranche de 10 PV vaut
+// un demi-cœur (≤ 10 PV = 1 demi-cœur, ≤ 20 = 1 cœur, … ≤ 100 = 5 cœurs pleins).
+export const hpHalfHearts = (hp) => Math.max(0, Math.min(10, Math.ceil((hp ?? 0) / 10)));
+
+// Titres liés au NIVEAU du soldat (indexés à 1) : remplace le générique
+// « Humain » par un titre qui progresse avec le niveau du soldat.
+export const LEVEL_RANKS = ['Ignorant', 'Initié', 'Érudit', 'Stratège', 'Éveillé'];
+
+// Titre de niveau pour un soldat donné (borné aux niveaux définis).
+export const levelRankLabel = (level) =>
+    LEVEL_RANKS[Math.max(1, Math.min(LEVEL_RANKS.length, level || 1)) - 1];

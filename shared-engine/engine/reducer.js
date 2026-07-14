@@ -244,7 +244,6 @@ function reduceAttack(state, {fromId, toId}) {
     const target = board.cellMap.get(toId);
     const attackFromId = approachCell(board, reachable, fromId, toId);
     if (attackFromId == null) return state; // aucune approche possible
-    const movedToAttack = attackFromId !== fromId;
 
     // Oriente le soldat vers sa cible depuis sa case d'approche (comme un déplacement).
     let mover = from;
@@ -270,8 +269,10 @@ function reduceAttack(state, {fromId, toId}) {
 
     const {attacker, defender} = combatResult(mover, to);
     const placements = new Map(state.placements);
-    // Le soldat quitte sa case de départ s'il a dû s'approcher au corps à corps.
-    if (movedToAttack) placements.delete(fromId);
+    // Le soldat quitte toujours sa case de départ : il a pu s'approcher au corps
+    // à corps et/ou il va AVANCER sur la case de la cible qu'il tue (voir plus
+    // bas). `settle` le repositionne ensuite sur sa case finale.
+    placements.delete(fromId);
     let uidSeq = state.uidSeq;
 
     // Applique l'issue du combat sur une case : l'unité survivante garde ses PV
@@ -296,9 +297,9 @@ function reduceAttack(state, {fromId, toId}) {
         return unit;
     };
 
-    settle(attackFromId, mover, attacker);
-    // Règlement de la cible : une base met à jour ses PV persistants (`baseHp`) et
-    // rejoint `destroyedBases` si elle tombe — sa case redeviendra alors normale
+    // Règlement de la cible D'ABORD (avant l'attaquant) pour savoir si sa case se
+    // libère : une base met à jour ses PV persistants (`baseHp`) et rejoint
+    // `destroyedBases` si elle tombe — sa case redeviendra alors normale
     // (conquérable). Les autres structures et les soldats passent par `settle`.
     let baseHp = state.baseHp;
     let destroyedBases = state.destroyedBases;
@@ -316,6 +317,22 @@ function reduceAttack(state, {fromId, toId}) {
         deadDefender = settle(toId, to, defender);
     }
 
+    // Avancée : si la cible meurt et que sa case est désormais LIBRE (aucun
+    // squelette « mort-vivant » laissé sur place, base rasée), l'attaquant
+    // survivant s'y installe au lieu de rester sur sa case d'approche. Sinon il
+    // reste collé à la cible.
+    const targetFreed = !attacker.dead && defender.dead && !placements.has(toId);
+    const attackerFinalId = targetFreed ? toId : attackFromId;
+    settle(attackerFinalId, mover, attacker);
+
+    // La case prise en avançant devient la propriété de l'attaquant : un soldat
+    // se tient toujours sur son propre territoire (même invariant qu'une conquête).
+    let ownership = state.ownership;
+    if (targetFreed && state.ownership.get(toId) !== state.activePlayerId) {
+        ownership = new Map(state.ownership);
+        ownership.set(toId, state.activePlayerId);
+    }
+
     // Défi « Mort-vivant » : tuer un soldat ennemi de niveau ≥ 2. Crédité à
     // l'attaquant seulement s'il survit (sinon sa progression disparaît avec lui).
     if (
@@ -323,9 +340,9 @@ function reduceAttack(state, {fromId, toId}) {
         deadDefender?.type === 'soldier' &&
         (deadDefender.level || 1) >= 2
     ) {
-        const alive = placements.get(attackFromId);
+        const alive = placements.get(attackerFinalId);
         if (alive?.uid === from.uid) {
-            placements.set(attackFromId, withProgress(alive, CHALLENGE_METRICS.ENEMIES_KILLED_L2, 1));
+            placements.set(attackerFinalId, withProgress(alive, CHALLENGE_METRICS.ENEMIES_KILLED_L2, 1));
         }
     }
 
@@ -333,7 +350,7 @@ function reduceAttack(state, {fromId, toId}) {
     // (débloque le bonus), et un chevalier noir équipé ABSORBE ses statistiques
     // (les additionne aux siennes, comme une fusion, plafonnées).
     if (!attacker.dead && isSkeleton(deadDefender)) {
-        const alive = placements.get(attackFromId);
+        const alive = placements.get(attackerFinalId);
         if (alive?.uid === from.uid) {
             let knight = withProgress(alive, CHALLENGE_METRICS.SKELETONS_KILLED, 1);
             if (from.bonus === 'blackKnight') {
@@ -343,7 +360,7 @@ function reduceAttack(state, {fromId, toId}) {
                     atk: Math.min((knight.atk || 0) + (to.atk || 0), SOLDIER_ATK_MAX),
                 };
             }
-            placements.set(attackFromId, knight);
+            placements.set(attackerFinalId, knight);
         }
     }
 
@@ -356,7 +373,7 @@ function reduceAttack(state, {fromId, toId}) {
     }
 
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
-    return {...state, placements, gold, movedSoldiers, uidSeq, baseHp, destroyedBases};
+    return {...state, placements, ownership, gold, movedSoldiers, uidSeq, baseHp, destroyedBases};
 }
 
 // Abattage d'un arbre : comme le combat, c'est une action au CORPS À CORPS. Si
@@ -381,7 +398,6 @@ function reduceChop(state, {fromId, toId}) {
     // case libre adjacente à l'arbre la plus proche qu'il puisse atteindre.
     const chopFromId = approachCell(board, reachable, fromId, toId);
     if (chopFromId == null) return state; // aucune approche possible
-    const movedToChop = chopFromId !== fromId;
 
     // Avancement des défis : +1 arbre abattu, et +1 si l'arbre était sur une
     // case possédée par un adversaire (territoire ennemi).
@@ -399,16 +415,23 @@ function reduceChop(state, {fromId, toId}) {
     }
 
     const placements = new Map(state.placements);
-    placements.delete(toId);
-    if (movedToChop) placements.delete(fromId); // le soldat a quitté sa case de départ
-    placements.set(chopFromId, chopper); // le soldat se tient sur sa case d'approche
+    placements.delete(toId); // l'arbre abattu disparaît
+    placements.delete(fromId); // le soldat quitte sa case de départ
+    placements.set(toId, chopper); // il AVANCE sur la case de l'arbre abattu
+    // La case prise devient sa propriété : un soldat se tient toujours sur son
+    // propre territoire (même invariant qu'une conquête).
+    let ownership = state.ownership;
+    if (state.ownership.get(toId) !== state.activePlayerId) {
+        ownership = new Map(state.ownership);
+        ownership.set(toId, state.activePlayerId);
+    }
     // Récompense configurable ; le bonus « Bûcheron » la double.
     const baseReward = state.settings?.treeReward ?? TREE_REWARD;
     const reward = from.bonus === 'lumberjack' ? baseReward * 2 : baseReward;
     const purse = state.gold[state.activePlayerId] || 0;
     const gold = {...state.gold, [state.activePlayerId]: purse + reward};
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
-    return {...state, placements, gold, movedSoldiers};
+    return {...state, placements, ownership, gold, movedSoldiers};
 }
 
 // Apparition d'arbres en fin de tour. Chaque tour, une « vague » d'arbres a une

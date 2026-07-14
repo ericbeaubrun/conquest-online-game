@@ -2,20 +2,92 @@ import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {hexId, hexHeight, pixelToHex} from '@conquest/shared-engine/data/hex.js';
 import {TERRAIN_COLORS} from '@conquest/shared-engine/data/terrain.js';
 import {ITEM_SRC} from '@conquest/shared-engine/data/items.js';
-import {soldierSprite, hasUnlockedBonus} from '@conquest/shared-engine/data/soldier.js';
+import {soldierSprite, soldierSkin, hasUnlockedBonus} from '@conquest/shared-engine/data/soldier.js';
 import {getLogicalBoard} from '@conquest/shared-engine/engine/board.js';
 import {buildGeometry} from '@conquest/shared-engine/render/geometry.js';
 import {computeReachable} from '@conquest/shared-engine/engine/selectors.js';
 import {moveSoldier, mergeSoldier, attackSoldier, chopTree, placeItem} from '@conquest/shared-engine/engine/actions.js';
-import {SOLDIER_HP_MAX, SOLDIER_ATK_MAX, BUILDING_STATS} from '@conquest/shared-engine/engine/rules.js';
+import {SOLDIER_HP_MAX, BUILDING_STATS, combatResult} from '@conquest/shared-engine/engine/rules.js';
 import './HexBoard.scss';
 
 const BASE_SRC = '/base.png';
 const TREE_SRC = '/forestTree.png';
 // Images des items posés, arbres compris (les arbres ne sont pas en boutique).
 const PLACEMENT_SRC = {...ITEM_SRC, tree: TREE_SRC};
-const MERGE_SRC = '/mergeIndicator.png';
-const ENEMIES_SRC = '/enemiesIndicator.png';
+// Indicateur de fusion sur un allié fusionnable (étoile pleine).
+const MERGE_SRC = '/etoilePleine.png';
+// Indicateurs de combat, selon l'issue prévue du point de vue de l'attaquant :
+// victoire (vert), défaite (rouge), égalité (jaune), double élimination (violet).
+const FIGHT_SRC = {
+    win: '/fightIndicatorGreen.png',
+    lose: '/fightIndicatorRed.png',
+    draw: '/fightIndicatorYellow.png',
+    doubleKo: '/fightIndicatorPurple.png',
+};
+// Abattage d'un arbre : action neutre (bleu, comme la fusion avant son
+// changement de visuel).
+const CHOP_SRC = '/fightIndicatorBlue.png';
+// Icône d'affinité (feu / glace / foudre) affichée à gauche de la barre de vie
+// d'un soldat sur le terrain, quand il en a une (même correspondance que le
+// panneau du soldat).
+const AFFINITY_SRC = {
+    fire: '/fire.png',
+    ice: '/ice.png',
+    lightning: '/thunder.png',
+};
+// Cœurs de vie des bâtiments (bases, maisons, tours) : 3 cœurs par demi-crans
+// (même jeu d'images que le panneau du soldat), alignés en bas de la case.
+// Format compact (3 caractères max) pour un nombre de points de vie élevé
+// (ex. la base) : 1000 -> « 1k », 1200 -> « 1k2 », 2000 -> « 2k »… seule la
+// tranche des centaines est gardée, les dizaines/unités sont tronquées.
+const formatStatValue = (value) => {
+    if (value < 1000) return String(value);
+    const thousands = Math.floor(value / 1000);
+    const hundreds = Math.floor((value % 1000) / 100);
+    return hundreds > 0 ? `${thousands}k${hundreds}` : `${thousands}k`;
+};
+
+// Nombres d'attaque / points de vie aux coins d'une case (même visuel que les
+// soldats : attaque en haut à droite, vie en bas à droite). `atk` à `null`
+// n'affiche aucun nombre d'attaque (ex. la base, qui n'attaque pas). La
+// position est calée sur la CASE (`size`) et non sur le sprite : les tours,
+// dessinées plus grandes que leur case, gardent ainsi leurs nombres dans la
+// case, exactement comme les soldats.
+const StatCornerLabels = ({cx, cy, size, atk, hp, hpYOffset = 0.11, hpXOffset = 0.16}) => (
+    <>
+        {atk != null && (
+            <text
+                x={cx + size / 2 - size * 0.16}
+                y={cy - size / 2 + size * 0.1}
+                textAnchor="end"
+                className="soldier-stat-label"
+                style={{fontSize: size * 0.19}}
+            >
+                <tspan className="soldier-stat-label__atk">{formatStatValue(atk)}</tspan>
+            </text>
+        )}
+        <text
+            x={cx + size / 2 - size * hpXOffset}
+            y={cy + size / 2 + size * hpYOffset}
+            textAnchor="end"
+            className="soldier-stat-label"
+            style={{fontSize: size * 0.19}}
+        >
+            <tspan className="soldier-stat-label__hp">{formatStatValue(hp)}</tspan>
+        </text>
+    </>
+);
+
+// Issue d'un combat du point de vue de l'attaquant (mêmes règles que l'aperçu
+// de combat), utilisée pour choisir la couleur de l'indicateur sur la cible.
+const fightKind = (mover, target) => {
+    if (!mover || !target) return 'draw';
+    const res = combatResult(mover, target);
+    if (res.attacker.dead && res.defender.dead) return 'doubleKo';
+    if (res.defender.dead) return 'win';
+    if (res.attacker.dead) return 'lose';
+    return 'draw';
+};
 const NOTIF_SRC = '/notif.png';
 const MIN_VIEW_RATIO = 0.14; // zoom avant max : on peut voir jusqu'à 14% de la carte
 const CLICK_THRESHOLD = 6; // px : en-deçà d'un déplacement, un pointeur = un clic
@@ -65,21 +137,39 @@ const Highlight = memo(function Highlight({cells}) {
     ));
 });
 
-// Surbrillance de la portée d'un soldat selon le type de case :
-// déplacement (blanc), conquête (or) ou fusion (cyan).
+// Surbrillance de la portée d'un soldat selon le type de case : déplacement
+// (blanc), conquête (or) ou fusion (cyan). Le combat n'y figure pas : sa
+// couleur dépend de l'issue prévue (voir `MoveHighlight`).
 const MOVE_CLASS = {
     move: 'hex__reachable',
     conquer: 'hex__conquerable',
     merge: 'hex__mergeable',
-    combat: 'hex__attackable',
     chop: 'hex__choppable',
 };
-const MoveHighlight = memo(function MoveHighlight({moves, cellMap}) {
+// Unité présente sur une case cible (item posé, ou base ennemie synthétisée
+// depuis ses PV courants), pour prévoir l'issue d'un combat sur cette case.
+const resolveTarget = (id, {placements, ownership, baseHp}) => {
+    const placed = placements.get(id);
+    if (placed) return placed;
+    return {
+        type: 'base',
+        playerId: ownership.get(id),
+        hp: baseHp?.[id] ?? BUILDING_STATS.base.hp,
+    };
+};
+
+const MoveHighlight = memo(function MoveHighlight({moves, cellMap, mover, placements, ownership, baseHp}) {
     return [...moves.entries()].map(([id, info]) => {
         const cell = cellMap.get(id);
         if (!cell) return null;
+        // Case de combat : couleur tenue par l'issue prévue (victoire / défaite
+        // / égalité / double élimination), même code couleur que l'icône (voir
+        // `FIGHT_SRC`).
+        const className = info.kind === 'combat'
+            ? `hex__attackable hex__attackable--${fightKind(mover, resolveTarget(id, {placements, ownership, baseHp}))}`
+            : MOVE_CLASS[info.kind];
         return (
-            <polygon key={id} points={cell.points} className={MOVE_CLASS[info.kind]}/>
+            <polygon key={id} points={cell.points} className={className}/>
         );
     });
 });
@@ -87,19 +177,23 @@ const MoveHighlight = memo(function MoveHighlight({moves, cellMap}) {
 // Icônes superposées quand un soldat est sélectionné : fusion possible
 // (mergeIndicator) sur les soldats alliés fusionnables. Les cases bloquées par un
 // allié (bâtiment / base / soldat infusionnable) ne reçoivent AUCUN marqueur.
-const Indicators = memo(function Indicators({moves, cellMap, size}) {
-    const icon = (id, href, key) => {
+const Indicators = memo(function Indicators({moves, cellMap, size, mover, placements, ownership, baseHp}) {
+    // `anchor` : 'center' (défaut) ou 'top-left' (coin haut-gauche de la case).
+    const icon = (id, href, key, iconRatio = 0.75, anchor = 'center', opacity = 1) => {
         const cell = cellMap.get(id);
         if (!cell) return null;
+        const iconSize = size * iconRatio;
+        const x = anchor === 'top-left' ? cell.cx - size / 2 + size * 0.1 : cell.cx - iconSize / 2;
+        const y = anchor === 'top-left' ? cell.cy - size / 2 - size * 0.06 : cell.cy - iconSize / 2;
         return (
             <image
                 key={key}
                 href={href}
-                x={cell.cx - size / (2 * 1.25)}
-                y={cell.cy - size / (2 * 1.25)}
-                width={size * 0.75}
-                height={size * 0.75}
-                style={{imageRendering: 'pixelated'}}
+                x={x}
+                y={y}
+                width={iconSize}
+                height={iconSize}
+                style={{imageRendering: 'pixelated', opacity}}
                 pointerEvents="none"
             />
         );
@@ -123,10 +217,17 @@ const Indicators = memo(function Indicators({moves, cellMap, size}) {
                 .map(([id]) => plus(id))}
             {[...moves.entries()]
                 .filter(([, info]) => info.kind === 'merge')
-                .map(([id]) => icon(id, MERGE_SRC, 'm' + id))}
+                .map(([id]) => icon(id, MERGE_SRC, 'm' + id, 0.75, 'center', 0.6))}
             {[...moves.entries()]
-                .filter(([, info]) => info.kind === 'combat' || info.kind === 'chop')
-                .map(([id]) => icon(id, ENEMIES_SRC, 'c' + id))}
+                .filter(([, info]) => info.kind === 'combat')
+                .map(([id]) => icon(id, FIGHT_SRC[fightKind(mover, resolveTarget(id, {
+                    placements,
+                    ownership,
+                    baseHp
+                }))], 'c' + id, 0.7))}
+            {[...moves.entries()]
+                .filter(([, info]) => info.kind === 'chop')
+                .map(([id]) => icon(id, CHOP_SRC, 'h' + id))}
         </>
     );
 });
@@ -194,19 +295,13 @@ const BonusNotifications = memo(function BonusNotifications({
 });
 // Couche des bases, dessinée au-dessus des cases. Une base détruite (assiégée
 // jusqu'à 0 PV) disparaît : sa case redevient une case normale.
-const Bases = memo(function Bases({baseCells, size, destroyedBases, baseHp, hoveredId}) {
+const Bases = memo(function Bases({baseCells, size, destroyedBases, baseHp, visibleStatIds}) {
     // Base dessinée 1,20× plus grande, centrée sur sa case.
     const s = size * 1.2;
-    const barW = size * 0.6;
-    const barH = size * 0.11;
-    const barPad = Math.max(0.6, size * 0.025);
     return baseCells
         .filter((cell) => !destroyedBases?.has(cell.id))
         .map((cell) => {
             const hp = baseHp?.[cell.id] ?? BUILDING_STATS.base.hp;
-            const ratio = Math.max(0, Math.min(1, hp / BUILDING_STATS.base.hpMax));
-            const barX = cell.cx - barW / 2;
-            const barY = cell.cy + size * 0.39;
             return (
                 <g key={cell.id}>
                     <image
@@ -218,45 +313,55 @@ const Bases = memo(function Bases({baseCells, size, destroyedBases, baseHp, hove
                         style={{imageRendering: 'pixelated'}}
                         pointerEvents="none"
                     />
-                    {hoveredId === cell.id && (
-                        <>
-                            <rect
-                                x={barX}
-                                y={barY}
-                                width={barW}
-                                height={barH}
-                                className="hp-bar__frame"
-                                pointerEvents="none"
-                            />
-                            <rect
-                                x={barX + barPad}
-                                y={barY + barPad}
-                                width={(barW - barPad * 2) * ratio}
-                                height={barH - barPad * 2}
-                                className="hp-bar__fill"
-                                pointerEvents="none"
-                            />
-                        </>
+                    {visibleStatIds.has(cell.id) && (
+                        <StatCornerLabels cx={cell.cx} cy={cell.cy} size={size} atk={null} hp={hp} hpYOffset={-0.05}
+                                          hpXOffset={0.2}/>
                     )}
                 </g>
             );
         });
 });
 
+// Taille d'affichage d'un item posé selon son type (mêmes proportions que la
+// couche `Buildings`) : tours 1,5×, maison 0,75×, soldat 1×.
+const placementImgSize = (type, size) =>
+    type === 'attackTower' || type === 'defenseTower'
+        ? size * 1.5
+        : type === 'house'
+            ? size * 0.75
+            : size;
+
+// Aperçu « fantôme » de l'item choisi en boutique, dessiné grisé et translucide
+// sur la case survolée quand elle est un emplacement de pose valide : le joueur
+// voit ce qu'il s'apprête à placer avant de valider (soldat, maison, tour).
+const PlacementPreview = ({cell, type, soldierLevel, size}) => {
+    const href = type === 'soldier' ? soldierSkin(soldierLevel) : PLACEMENT_SRC[type];
+    if (!cell || !href) return null;
+    const imgSize = placementImgSize(type, size);
+    return (
+        <image
+            href={href}
+            x={cell.cx - imgSize / 2}
+            y={cell.cy - imgSize / 2}
+            width={imgSize}
+            height={imgSize}
+            style={{imageRendering: 'pixelated', opacity: 0.45, filter: 'grayscale(1)'}}
+            pointerEvents="none"
+        />
+    );
+};
+
 // Couche des items posés (soldats, maisons, tours). Le niveau d'un soldat se
-// lit désormais à son sprite (skin par niveau) plutôt qu'à un badge numérique ;
-// les soldats portent en plus une barre de vie sous leurs pieds.
-const Buildings = memo(function Buildings({placements, cellMap, size, hoveredId, selectedId}) {
-    // Géométrie de la barre de vie, en unités du sprite. Le bas de la barre
-    // (~0.6·size sous le centre) reste au-dessus du bord de la case (0.625·size).
+// lit désormais à son sprite (skin par niveau) plutôt qu'à un badge numérique.
+const Buildings = memo(function Buildings({placements, cellMap, size, visibleStatIds}) {
+    // Géométrie de repère pour l'icône d'affinité, en unités du sprite.
     const barW = size * 0.6;
     const barH = size * 0.11;
-    const barPad = Math.max(0.6, size * 0.025); // cadre noir « pixel »
     return [...placements.entries()].map(([id, placed]) => {
         const cell = cellMap.get(id);
         if (!cell) return null;
         const isSoldier = placed.type === 'soldier';
-        // Maison / tours : la barre de vie ne s'affiche qu'au survol.
+        // Maison / tours : la vie est affichée en permanence, en cœurs.
         const isBuilding = placed.type === 'house' || placed.type === 'attackTower' || placed.type === 'defenseTower';
         // Les tours (attaque / défense) sont dessinées 1,5× plus grandes, centrées
         // sur leur case ; la barre de vie garde, elle, la taille standard.
@@ -264,13 +369,7 @@ const Buildings = memo(function Buildings({placements, cellMap, size, hoveredId,
         const imgSize = isTower ? size * 1.5 : placed.type === 'house' ? size * 0.75 : size;
         const barX = cell.cx - barW / 2;
         const barY = cell.cy + size * 0.49;
-        const hpMax = isSoldier ? SOLDIER_HP_MAX : BUILDING_STATS[placed.type]?.hpMax ?? 1;
-        const ratio = Math.max(0, Math.min(1, (placed.hp ?? 0) / hpMax));
-        // Fine barre d'attaque, collée et superposée sur le bord haut de la
-        // barre de vie (même largeur intérieure, sans cadre propre).
-        const atkLineH = Math.max(0.6, size * 0.035);
-        const atkLineY = barY + barPad - atkLineH;
-        const atkRatio = Math.max(0, Math.min(1, (placed.atk ?? 0) / SOLDIER_ATK_MAX));
+        const buildingAtk = BUILDING_STATS[placed.type]?.atk;
         return (
             <g key={id} pointerEvents="none">
                 <image
@@ -286,60 +385,46 @@ const Buildings = memo(function Buildings({placements, cellMap, size, hoveredId,
                         ? `translate(${2 * cell.cx} 0) scale(-1 1)`
                         : undefined}
                 />
-                {isSoldier && (
-                    <>
-                        <rect
-                            x={barX}
-                            y={barY}
-                            width={barW}
-                            height={barH}
-                            className="hp-bar__frame"
-                        />
-                        <rect
-                            x={barX + barPad}
-                            y={barY + barPad}
-                            width={(barW - barPad * 2) * ratio}
-                            height={barH - barPad * 2}
-                            className="hp-bar__fill"
-                        />
-                        <rect
-                            x={barX + barPad}
-                            y={atkLineY}
-                            width={(barW - barPad * 2) * atkRatio}
-                            height={atkLineH}
-                            className="atk-line__fill"
-                        />
-                    </>
+                {isSoldier && AFFINITY_SRC[placed.affinity] && (
+                    <image
+                        href={AFFINITY_SRC[placed.affinity]}
+                        x={barX - barH * 0.8}
+                        y={barY - barH * 1.6}
+                        width={barH * 1.6}
+                        height={barH * 1.6}
+                        style={{imageRendering: 'pixelated'}}
+                    />
                 )}
-                {isBuilding && hoveredId === id && (
-                    <>
-                        <rect
-                            x={barX}
-                            y={barY}
-                            width={barW}
-                            height={barH}
-                            className="hp-bar__frame"
-                        />
-                        <rect
-                            x={barX + barPad}
-                            y={barY + barPad}
-                            width={(barW - barPad * 2) * ratio}
-                            height={barH - barPad * 2}
-                            className="hp-bar__fill"
-                        />
-                    </>
+                {isBuilding && visibleStatIds.has(id) && (
+                    <StatCornerLabels
+                        cx={cell.cx}
+                        cy={cell.cy}
+                        size={size}
+                        atk={buildingAtk ?? null}
+                        hp={placed.hp ?? 0}
+                    />
                 )}
-                {isSoldier && (hoveredId === id || selectedId === id) && (
-                    <text
-                        x={cell.cx}
-                        y={cell.cy - imgSize / 2 + size * 0.09}
-                        textAnchor="middle"
-                        className="soldier-stat-label"
-                        style={{fontSize: size * 0.22}}
-                    >
-                        <tspan className="soldier-stat-label__atk">{placed.atk ?? 0}</tspan>
-                        <tspan className="soldier-stat-label__hp" dx={size * 0.12}>{placed.hp ?? 0}</tspan>
-                    </text>
+                {isSoldier && visibleStatIds.has(id) && (
+                    <>
+                        <text
+                            x={cell.cx + imgSize / 2 - size * 0.16}
+                            y={cell.cy - imgSize / 2 + size * 0.13}
+                            textAnchor="end"
+                            className="soldier-stat-label"
+                            style={{fontSize: size * 0.19}}
+                        >
+                            <tspan className="soldier-stat-label__atk">{placed.atk ?? 0}</tspan>
+                        </text>
+                        <text
+                            x={cell.cx + imgSize / 2 - size * 0.16}
+                            y={cell.cy + imgSize / 2 + size * 0.08}
+                            textAnchor="end"
+                            className="soldier-stat-label"
+                            style={{fontSize: size * 0.19}}
+                        >
+                            <tspan className="soldier-stat-label__hp">{placed.hp ?? 0}</tspan>
+                        </text>
+                    </>
                 )}
             </g>
         );
@@ -378,9 +463,28 @@ function classifyCell(id, {placements, baseIds, ownership, activePlayerId, moved
 // joueur local — le plateau reste consultable (pan, zoom, sélection pour
 // inspecter) mais AUCUNE action de jeu n'est émise. En hotseat local il vaut
 // toujours vrai : le comportement est inchangé.
-const HexBoard = ({game, dispatch, interactive = true, selectedItem, soldierLevel = 1, selection, onSelect, onHoverTarget}) => {
+const HexBoard = ({
+                      game,
+                      dispatch,
+                      interactive = true,
+                      selectedItem,
+                      soldierLevel = 1,
+                      selection,
+                      onSelect,
+                      onHoverTarget
+                  }) => {
     const svgRef = useRef(null);
-    const {mapId, ownership, placements, movedSoldiers, activePlayerId, players, settings, destroyedBases, baseHp} = game;    // Bonus activés pour la partie (défaut vrai) : conditionne les notifications.
+    const {
+        mapId,
+        ownership,
+        placements,
+        movedSoldiers,
+        activePlayerId,
+        players,
+        settings,
+        destroyedBases,
+        baseHp
+    } = game;    // Bonus activés pour la partie (défaut vrai) : conditionne les notifications.
     const bonusesEnabled = settings?.bonusesEnabled !== false;
 
     // Modèle logique (règles) et géométrie (rendu), mémoïsés par carte.
@@ -416,6 +520,8 @@ const HexBoard = ({game, dispatch, interactive = true, selectedItem, soldierLeve
                 !placements.has(c.id)
         );
     }, [selectedItem, cells, ownership, activePlayerId, baseIds, placements]);
+    // Ids des cases posables (recherche O(1) pour l'aperçu de pose au survol).
+    const placeableIds = useMemo(() => new Set(placeableCells.map((c) => c.id)), [placeableCells]);
 
     // Portée du soldat sélectionné (surbrillances + indicateurs). Calculée par
     // le sélecteur partagé avec le reducer, garantissant des règles identiques.
@@ -423,6 +529,24 @@ const HexBoard = ({game, dispatch, interactive = true, selectedItem, soldierLeve
         if (selectedItem || selection?.kind !== 'soldier') return {moves: new Map(), allies: []};
         return computeReachable(game, board, selection.id);
     }, [selectedItem, selection, game, board]);
+
+    // Case actuellement survolée (pour n'afficher les stats chiffrées que sur
+    // l'unité pointée). `null` hors du plateau.
+    const [hoveredCellId, setHoveredCellId] = useState(null);
+
+    // Cases dont les stats chiffrées (attaque / points de vie) doivent
+    // s'afficher : la case survolée, et — quand un soldat est sélectionné — le
+    // soldat lui-même ainsi que toutes ses cibles atteignables. Ailleurs, les
+    // unités du terrain ne montrent aucun nombre.
+    const visibleStatIds = useMemo(() => {
+        const ids = new Set();
+        if (hoveredCellId != null) ids.add(hoveredCellId);
+        if (!selectedItem && selection?.kind === 'soldier') {
+            ids.add(selection.id);
+            for (const id of reachable.moves.keys()) ids.add(id);
+        }
+        return ids;
+    }, [hoveredCellId, selectedItem, selection, reachable]);
 
     // --- Écran -> coordonnées SVG (compatible preserveAspectRatio="meet") ---
     const clientToSvg = useCallback((clientX, clientY, v = viewRef.current) => {
@@ -532,9 +656,7 @@ const HexBoard = ({game, dispatch, interactive = true, selectedItem, soldierLeve
         onSelect(next); // `next` peut être null : la case n'est pas sélectionnable.
     };
 
-    // --- Survol : case pointée (barres de vie des bâtiments) + aperçu de
-    // fusion ou de combat selon la cible pointée. ---
-    const [hoveredCellId, setHoveredCellId] = useState(null);
+    // --- Survol : aperçu de fusion ou de combat selon la cible pointée. ---
     const onHover = (e) => {
         const {x, y} = clientToSvg(e.clientX, e.clientY);
         const {q, r} = pixelToHex({x, y});
@@ -689,16 +811,31 @@ const HexBoard = ({game, dispatch, interactive = true, selectedItem, soldierLeve
                 <Tiles cells={cells}/>
                 <Territory cells={cells} ownership={ownership} colors={colors}/>
                 {selectedItem && <Highlight cells={placeableCells}/>}
-                {!selectedItem && selection?.kind === 'soldier' && (
-                    <MoveHighlight moves={reachable.moves} cellMap={cellMap}/>
+                {selectedItem && hoveredCellId != null && placeableIds.has(hoveredCellId) && (
+                    <PlacementPreview
+                        cell={cellMap.get(hoveredCellId)}
+                        type={selectedItem}
+                        soldierLevel={soldierLevel}
+                        size={itemSize}
+                    />
                 )}
-                <Bases baseCells={baseCells} size={baseSize} destroyedBases={destroyedBases} baseHp={baseHp} hoveredId={hoveredCellId}/>
+                {!selectedItem && selection?.kind === 'soldier' && (
+                    <MoveHighlight
+                        moves={reachable.moves}
+                        cellMap={cellMap}
+                        mover={placements.get(selection.id)}
+                        placements={placements}
+                        ownership={ownership}
+                        baseHp={baseHp}
+                    />
+                )}
+                <Bases baseCells={baseCells} size={baseSize} destroyedBases={destroyedBases} baseHp={baseHp}
+                       visibleStatIds={visibleStatIds}/>
                 <Buildings
                     placements={placements}
                     cellMap={cellMap}
                     size={itemSize}
-                    hoveredId={hoveredCellId}
-                    selectedId={selection?.kind === 'soldier' || selection?.kind === 'unit' ? selection.id : null}
+                    visibleStatIds={visibleStatIds}
                 />
                 <BonusNotifications
                     placements={placements}
@@ -721,6 +858,10 @@ const HexBoard = ({game, dispatch, interactive = true, selectedItem, soldierLeve
                         moves={reachable.moves}
                         cellMap={cellMap}
                         size={itemSize}
+                        mover={placements.get(selection.id)}
+                        placements={placements}
+                        ownership={ownership}
+                        baseHp={baseHp}
                     />
                 )}
                 {!selectedItem && selection && cellMap.get(selection.id) && (

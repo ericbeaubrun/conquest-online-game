@@ -1,3 +1,7 @@
+$stroke_width_2: 3;
+$stroke_width_4: 5;
+
+
 .hex-board {
   position: relative;
   width: 100%;
@@ -45,6 +49,7 @@
       &:hover {
         background: rgba(30, 30, 30, 0.9);
       }
+
       &:active {
         transform: scale(0.94);
       }
@@ -56,13 +61,6 @@
   &__tile {
     stroke: rgba(0, 0, 0, 0.3);
     stroke-width: 1.5;
-    // Survol géré en CSS pur -> aucune re-render React (fluide sur grande carte).
-    transition: filter 0.1s ease;
-  }
-
-  // Surbrillance uniquement sur les cases jouables.
-  &:not(.hex--blocked):hover .hex__tile {
-    filter: brightness(1.12);
   }
 
   // Surbrillance des cases où l'on peut poser l'item sélectionné.
@@ -70,7 +68,7 @@
     fill: #ffffff;
     fill-opacity: 0.18;
     stroke: #ffffff;
-    stroke-width: 3;
+    stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
     animation: hex-pulse 1s ease-in-out infinite;
@@ -81,7 +79,7 @@
     fill: #ffffff;
     fill-opacity: 0.14;
     stroke: #ffffff;
-    stroke-width: 3;
+    stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
     animation: hex-pulse 1s ease-in-out infinite;
@@ -93,7 +91,7 @@
     fill: #ffffff;
     fill-opacity: 0.14;
     stroke: #ffffff;
-    stroke-width: 3;
+    stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
     animation: hex-pulse 1s ease-in-out infinite;
@@ -107,35 +105,56 @@
     animation: hex-pulse 1s ease-in-out infinite;
   }
 
-  // Case de fusion (soldat allié) : accent cyan.
+  // Case de fusion (soldat allié) : même blanc que le déplacement.
   &__mergeable {
-    fill: #33e0e0;
-    fill-opacity: 0.28;
-    stroke: #33e0e0;
-    stroke-width: 3.5;
+    fill: #ffffff;
+    fill-opacity: 0.14;
+    stroke: #ffffff;
+    stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
     animation: hex-pulse 0.9s ease-in-out infinite;
   }
 
-  // Case d'un soldat ennemi attaquable : accent rouge.
+  // Case attaquable : couleur tenue par issue prévue du combat (voir
+  // `fightKind`/`MoveHighlight`), même code couleur que l'icône de combat
+  // (voir `FIGHT_SRC`) : victoire (vert), défaite (rouge), égalité (jaune),
+  // double élimination (violet).
   &__attackable {
-    fill: #ff4d4d;
     fill-opacity: 0.3;
-    stroke: #ff4d4d;
-    stroke-width: 3.5;
+    stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
     animation: hex-pulse 0.8s ease-in-out infinite;
+
+    &--win {
+      fill: #4dd25b;
+      stroke: #4dd25b;
+    }
+
+    &--lose {
+      fill: #ff4d4d;
+      stroke: #ff4d4d;
+    }
+
+    &--draw {
+      fill: #e8d24d;
+      stroke: #e8d24d;
+    }
+
+    &--doubleKo {
+      fill: #b04dff;
+      stroke: #b04dff;
+    }
   }
 
-  // Case d'un arbre abattable : même blanc que le déplacement ; l'icône ennemie
+  // Case d'un arbre abattable : même blanc que le déplacement ; l'icône dédiée
   // (voir Indicators) marque l'action d'abattage.
   &__choppable {
     fill: #ffffff;
     fill-opacity: 0.14;
     stroke: #ffffff;
-    stroke-width: 3;
+    stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
     animation: hex-pulse 1s ease-in-out infinite;
@@ -147,7 +166,7 @@
     fill: #7cf76a;
     fill-opacity: 0.16;
     stroke: #7cf76a;
-    stroke-width: 3;
+    stroke-width: $stroke_width_4;
     stroke-linejoin: round;
     pointer-events: none;
     animation: hex-pulse 1.2s ease-in-out infinite;
@@ -160,11 +179,13 @@
   &__selected {
     fill: none;
     stroke: #7cf76a;
+    stroke: #fff;
     stroke-width: 5;
     stroke-linejoin: round;
     stroke-dasharray: 4 5;
     pointer-events: none;
     filter: drop-shadow(0 0 6px rgba(124, 247, 106, 0.9));
+    filter: drop-shadow(0 0 6px rgb(255 255 255 / 0.9));
     animation: hex-selected-march 0.6s linear infinite;
   }
 
@@ -176,45 +197,25 @@
   }
 }
 
-// Barre de vie sous les pieds d'un soldat (style pixel : cadre noir + jauge).
-.hp-bar {
-  &__frame {
-    fill: #111111;
-    stroke: #000000;
-    stroke-width: 1;
-    shape-rendering: crispEdges;
-  }
-  &__fill {
-    fill: #5bd35b;
-    shape-rendering: crispEdges;
-  }
-}
-
-// Fine barre d'attaque collée sur le bord haut de la barre de vie (pas de
-// cadre propre : elle se superpose directement au cadre de la barre de vie).
-.atk-line__fill {
-  fill: #e8503a;
-  shape-rendering: crispEdges;
-}
-
-// Étiquette « attaque/pv » affichée au survol d'un soldat, au-dessus du sprite
-// (taille fixée en JS, proportionnelle à la case).
+// Étiquette « attaque/pv » affichée en permanence aux coins d'un soldat
+// (attaque en haut à droite, points de vie en bas à droite ; taille fixée en
+// JS, proportionnelle à la case).
 .soldier-stat-label {
-  font-weight: 700;
+  font-family: "Press Start 2P", monospace;
   fill: #ffffff;
   paint-order: stroke;
   stroke: #000000;
-  stroke-width: 1.4px;
+  stroke-width: 2.5px;
   stroke-linejoin: round;
   pointer-events: none;
   user-select: none;
 
   &__atk {
-    fill: #ff9d3d;
+    fill: #ffcc00;
   }
 
   &__hp {
-    fill: #5bd35b;
+    fill: #ff3b3b;
   }
 }
 

@@ -57,18 +57,22 @@ export function mergeAffinity(a, b) {
 }
 
 // Fusion de soldats : on ne fusionne QUE deux soldats de même niveau (lvl 1
-// avec lvl 1, lvl 2 avec lvl 2...), en-dessous du niveau maximum, et AUCUN des
-// deux ne doit porter de bonus (un soldat à bonus n'est jamais fusionnable). Les
+// avec lvl 1, lvl 2 avec lvl 2...), en-dessous du niveau maximum, et portant le
+// MÊME bonus — soit aucun des deux (fusion classique), soit le même bonus des
+// deux côtés (ex. deux bûcherons lvl 1 fusionnent en un bûcheron lvl 2). Deux
+// bonus différents (ou l'un avec / l'autre sans) restent infusionnables. Les
 // affinités, elles, n'empêchent jamais la fusion (voir `mergeAffinity`). Le
-// résultat monte d'un niveau et ADDITIONNE les points de vie et d'attaque
-// (plafonnés). Fonctions PURES partagées par le reducer (application), les
-// sélecteurs (cases de fusion valides) et l'aperçu d'interface — mêmes règles.
+// résultat monte d'un niveau, conserve le bonus commun et ADDITIONNE les points
+// de vie et d'attaque (plafonnés). Fonctions PURES partagées par le reducer
+// (application), les sélecteurs (cases de fusion valides) et l'aperçu — mêmes
+// règles.
 export function canMerge(from, to) {
     if (!from || !to || from.type !== 'soldier' || to.type !== 'soldier') return false;
     // Les squelettes invoqués ne fusionnent jamais (ni comme source ni cible).
     if (from.unit === 'skeleton' || to.unit === 'skeleton') return false;
-    // Un soldat porteur d'un bonus n'est pas fusionnable (source comme cible).
-    if (from.bonus || to.bonus) return false;
+    // Les deux soldats doivent porter le même bonus (ou aucun) : un bûcheron ne
+    // fusionne qu'avec un bûcheron, un soldat nu qu'avec un soldat nu.
+    if ((from.bonus || null) !== (to.bonus || null)) return false;
     const lvl = from.level || 1;
     return (to.level || 1) === lvl && lvl < MERGE_MAX;
 }
