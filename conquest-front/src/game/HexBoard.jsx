@@ -217,7 +217,7 @@ const Indicators = memo(function Indicators({moves, cellMap, size, mover, placem
                 .map(([id]) => plus(id))}
             {[...moves.entries()]
                 .filter(([, info]) => info.kind === 'merge')
-                .map(([id]) => icon(id, MERGE_SRC, 'm' + id, 0.75, 'center', 0.6))}
+                .map(([id]) => icon(id, MERGE_SRC, 'm' + id, 0.75, 'center', 1))}
             {[...moves.entries()]
                 .filter(([, info]) => info.kind === 'combat')
                 .map(([id]) => icon(id, FIGHT_SRC[fightKind(mover, resolveTarget(id, {
@@ -665,9 +665,7 @@ const HexBoard = ({
 
         if (!onHoverTarget) return;
         // Uniquement hors geste (pas de bouton enfoncé) et soldat sélectionné.
-        // Jamais tant qu'une boutique de bonus est ouverte (clic droit) : son
-        // aperçu ne doit pas se superposer au panneau de bonus.
-        if (selection?.kind !== 'soldier' || selection?.openBonus || pointers.current.size > 0) {
+        if (selection?.kind !== 'soldier' || pointers.current.size > 0) {
             onHoverTarget(null);
             return;
         }
@@ -687,28 +685,10 @@ const HexBoard = ({
     const moved = useRef(false);
 
     const onPointerDown = (e) => {
-        // Clic droit : sélectionne le soldat pointé et ouvre directement sa
-        // boutique de bonus ; sur toute autre case, désélectionne.
+        // Clic droit : désélectionne l'élément sélectionné, où que l'on clique.
         if (e.button === 2) {
-            const {x, y} = clientToSvg(e.clientX, e.clientY);
-            const {q, r} = pixelToHex({x, y});
-            const id = hexId(q, r);
-            const target = classifyCell(id, {
-                placements,
-                baseIds,
-                ownership,
-                activePlayerId,
-                movedSoldiers,
-                destroyedBases,
-            });
-            // Clic droit : on ferme tout aperçu de survol pour qu'il ne
-            // s'affiche pas par-dessus la boutique de bonus.
             if (onHoverTarget) onHoverTarget(null);
-            if (target && (target.kind === 'soldier' || target.kind === 'unit')) {
-                onSelect({...target, openBonus: true});
-            } else {
-                onSelect(null);
-            }
+            onSelect(null);
             return;
         }
         svgRef.current.setPointerCapture(e.pointerId);

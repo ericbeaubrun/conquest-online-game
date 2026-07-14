@@ -322,8 +322,6 @@ const GameLayout = ({ session, onExit }) => {
                         soldier={soldierView}
                         color={colorOf(soldierView.playerId)}
                         owner={players.find((p) => p.id === soldierView.playerId) || null}
-                        // Clic droit : ouvre d'emblée la boutique de bonus.
-                        openBonus={!!selection?.openBonus}
                         selectionId={selection?.id}
                         // Achat de bonus : possible seulement pour le soldat du
                         // joueur actif ; on lui passe son or et le dispatch.

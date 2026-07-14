@@ -138,7 +138,7 @@ export const HpHearts = ({ hp, max = SOLDIER_HP_MAX, beforeHp, wide }) => (
 
 // Menu des caractéristiques du soldat sélectionné. Prend la place de la
 // boutique en bas de l'écran tant qu'un soldat est sélectionné.
-const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBonus, openBonus = false, selectionId, settings, bonusesEnabled = true }) => {
+const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBonus, selectionId, settings, bonusesEnabled = true }) => {
     const level = soldier.level || 1;
     // Pas de boutique de bonus pour un squelette invoqué, ni quand les bonus sont
     // désactivés en configuration : le portrait n'ouvre alors rien.
@@ -148,7 +148,7 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
     const notify = hasUnlockedBonus(soldier, settings, bonusesEnabled);
     // La boutique de bonus est repliée par défaut : cliquer le portrait bascule
     // entre les caractéristiques du soldat et la boutique de bonus.
-    const [bonusOpen, setBonusOpen] = useState(openBonus);
+    const [bonusOpen, setBonusOpen] = useState(false);
     // Niveau des bonus affichés : par défaut celui du soldat, mais on peut
     // parcourir les niveaux voisins pour lire leurs défis (consultation seule).
     const [viewLevel, setViewLevel] = useState(level);
@@ -159,11 +159,10 @@ const SoldierPanel = ({ soldier, color, owner, canBuy = false, gold = 0, onBuyBo
         (b) => settings?.bonusEnabled?.[b.id] !== false
     );
     const viewingOwnLevel = viewLevel === level;
-    // Sélection via clic droit : on ouvre d'emblée la boutique de bonus. On
-    // resynchronise à chaque changement de soldat sélectionné.
+    // La boutique se referme à chaque changement de soldat sélectionné.
     useEffect(() => {
-        setBonusOpen(openBonus && !noBonusShop);
-    }, [openBonus, selectionId, noBonusShop]);
+        setBonusOpen(false);
+    }, [selectionId, noBonusShop]);
     // Nouveau soldat sélectionné : on repart sur son propre niveau.
     useEffect(() => {
         setViewLevel(level);
