@@ -1,0 +1,84 @@
+// Écran de fin de partie : voile sombre et panneau du vainqueur.
+@use 'tokens' as *;
+
+// ---- Écran de fin de partie ----
+.game-over {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 14, 0.78);
+
+  &__panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 28px 40px;
+    background: #1c1c1c;
+    color: #fff;
+    border: 3px solid #000;
+    box-shadow: 0 0 0 3px #4a4a4a;
+    text-align: center;
+  }
+
+  &__label {
+    font-size: 18px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: #a9a9a9;
+  }
+
+  &__avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.7);
+  }
+
+  &__winner {
+    margin: 0;
+    font-size: 40px;
+    letter-spacing: 0.04em;
+    color: #ffd766;
+  }
+
+  &__reason {
+    font-size: 20px;
+    color: #bdbdbd;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  &__btn {
+    font-family: $pixel-font;
+    font-size: 22px;
+    color: #fff;
+    background: #2c313a;
+    border: 3px solid #000;
+    box-shadow: 3px 3px 0 #000;
+    padding: 8px 20px;
+    cursor: pointer;
+
+    &:hover {
+      background: #363c46;
+    }
+    &:active {
+      transform: translate(3px, 3px);
+      box-shadow: 0 0 0 #000;
+    }
+
+    &--primary {
+      background: #234a34;
+      &:hover {
+        background: #2b5b40;
+      }
+    }
+  }
+}

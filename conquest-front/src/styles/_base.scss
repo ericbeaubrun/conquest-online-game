@@ -1,0 +1,24 @@
+// Bases globales : reset, plein écran, police pixel.
+@use 'tokens' as *;
+
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  overflow: hidden; // le plateau gère son propre espace
+  font-family: $pixel-font;
+  // VT323 est une police bitmap : on coupe le lissage pour un rendu net.
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: 0.02em;
+}

@@ -1,5 +1,5 @@
 import {ITEM_SRC} from '@conquest/shared-engine/data/items.js';
-import {AtkStars, HpHearts} from './SoldierPanel.jsx';
+import {AtkStars, HpHearts} from './StatDisplays.jsx';
 import {soldierSprite} from '@conquest/shared-engine/data/soldier.js';
 import {combatResult} from '@conquest/shared-engine/engine/rules.js';
 import {DEV_CONFIG} from '../config/devConfig.js';

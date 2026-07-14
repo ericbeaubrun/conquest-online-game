@@ -1,4 +1,4 @@
-import { AtkStars, HpHearts } from './SoldierPanel.jsx';
+import { AtkStars, HpHearts } from './StatDisplays.jsx';
 import { soldierSprite } from '@conquest/shared-engine/data/soldier.js';
 import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from '@conquest/shared-engine/engine/rules.js';
 import { DEV_CONFIG } from '../config/devConfig.js';

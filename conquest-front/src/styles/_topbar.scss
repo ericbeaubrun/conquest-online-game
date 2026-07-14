@@ -1,0 +1,152 @@
+// Barre du haut : tour, chrono, profils des joueurs, fin de tour.
+
+// ---- Barre du haut ----
+.top-bar {
+  flex: 0 0 auto;
+  background-color: #2b2b2b;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 52px; // place réservée au burger à gauche
+  z-index: 10;
+}
+
+.burger-menu {
+  position: fixed;
+  top: 8px;
+  left: 12px;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 20;
+  user-select: none;
+}
+
+.turn-counter {
+  flex: 0 0 auto;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  padding: 4px 12px;
+  border: 2px solid #000;
+  box-shadow: 0 0 0 2px #4a4a4a;
+  background: rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  user-select: none;
+}
+
+// Chrono du tour (réglage turnTimer) : même boîte « pixel » que le compteur.
+.turn-timer {
+  flex: 0 0 auto;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  padding: 4px 12px;
+  border: 2px solid #000;
+  box-shadow: 0 0 0 2px #4a4a4a;
+  background: rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  user-select: none;
+
+  // Dernières secondes : accent rouge clignotant.
+  &--low {
+    color: #ff6b6b;
+    border-color: #7a2b2b;
+    animation: timer-blink 0.6s steps(2, start) infinite;
+  }
+}
+
+@keyframes timer-blink {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+
+.players-info {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 5vw, 48px);
+  min-width: 0;
+}
+
+.player-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  // Réinitialise l'apparence bouton : le profil est cliquable (joueur actif).
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    opacity: 0.85;
+  }
+
+  &--active {
+    opacity: 1;
+    border-color: currentColor;
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.player-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+}
+
+.player-stats {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  font-size: 19px;
+}
+
+// Pièce d'or (image) inline dans les textes de prix (boutique, bonus).
+// Alignée sur la ligne de base du texte, rendu pixel net.
+.coin-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  image-rendering: pixelated;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+
+  // Pièce d'or (image) alignée sur le texte, rendu pixel net.
+  &__coin {
+    width: 16px;
+    height: 16px;
+    display: block;
+    image-rendering: pixelated;
+  }
+}
+
+.end-turn-button {
+  flex: 0 0 auto;
+  background-color: #f04e4e;
+  color: white;
+  border: 3px solid #000;
+  box-shadow: 0 0 0 2px #7a2b2b;
+  padding: 6px 18px;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+
+  &:hover {
+    background-color: #c03e3e;
+  }
+}

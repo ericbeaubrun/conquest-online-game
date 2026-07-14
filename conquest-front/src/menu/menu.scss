@@ -2,8 +2,9 @@
 // visuel que le jeu : police VT323, coins carrés, bordures noires franches,
 // « double bordure » pixel (box-shadow 0 0 0 Npx), accents or/vert/rouge.
 
+@use '../styles/tokens' as *; // $pixel-font
+
 // ---- Jetons de couleur partagés ----
-$pixel-font: "VT323", "Courier New", monospace;
 $bg: #14171c;
 $panel: #1c1c1c;
 $panel-soft: #23262d;

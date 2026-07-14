@@ -1,5 +1,5 @@
 import { ITEM_SRC } from '@conquest/shared-engine/data/items.js';
-import { StatBar } from './SoldierPanel.jsx';
+import { StatBar } from './StatDisplays.jsx';
 import { maxHp, maxAtk } from '@conquest/shared-engine/engine/rules.js';
 import { DEV_CONFIG } from '../config/devConfig.js';
 import UpkeepSpec from './UpkeepSpec.jsx';

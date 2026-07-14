@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import {useEffect, useMemo, useState} from "react";
 import HexBoard from "./game/HexBoard.jsx";
 import Shop from "./game/Shop.jsx";
 import SoldierPanel from "./game/SoldierPanel.jsx";
@@ -6,139 +6,56 @@ import BuildingPanel from "./game/BuildingPanel.jsx";
 import TreePanel from "./game/TreePanel.jsx";
 import MergePreview from "./game/MergePreview.jsx";
 import CombatPreview from "./game/CombatPreview.jsx";
-import { MAPS } from "@conquest/shared-engine/data/maps.js";
-import { setMap, endTurn, placeItem, buyBonus, resetGame } from "@conquest/shared-engine/engine/actions.js";
-import { incomeFor } from "@conquest/shared-engine/engine/selectors.js";
-import { BUILDING_STATS, canMerge, mergedSoldier } from "@conquest/shared-engine/engine/rules.js";
+import TopBar from "./game/TopBar.jsx";
+import SideMenu from "./game/SideMenu.jsx";
+import GameOverOverlay from "./game/GameOverOverlay.jsx";
+import {useTurnTimer} from "./game/useTurnTimer.js";
+import {buildSelectionView} from "./game/selectionView.js";
+import {setMap, endTurn, placeItem, buyBonus, resetGame} from "@conquest/shared-engine/engine/actions.js";
 
-const GameLayout = ({ session, onExit }) => {
+const GameLayout = ({session, onExit}) => {
     // État PARTAGÉ de la partie (tour, joueurs, possession, or...) fourni par la
     // SESSION, créée par le parent (hors-ligne : reducer local ; online : socket
     // partagé du lobby). GameLayout ne connaît pas le transport : il lit l'état,
     // dispatche des actions, et respecte `isMyTurn`. Identique dans les deux modes.
-    const { state, dispatch, isMyTurn, mode = "local", ready = true, localPlayerId = null } = session;
+    const {state, dispatch, isMyTurn, mode = "local", ready = true, localPlayerId = null} = session;
     const online = mode === "online";
-    const { players, activePlayerId, turn, mapId, gold, settings, status, winnerId, endReason } = state;
+    const {players, activePlayerId, mapId, gold, settings, status, winnerId, endReason} = state;
     const bonusesEnabled = settings?.bonusesEnabled !== false;
     // Ce client peut-il agir ? En hotseat local, toujours (le contrôle suit le
     // joueur actif) ; en online, seulement pendant son propre tour. Sert à
     // verrouiller toutes les actions de jeu (pose, fin de tour, plateau).
     const canAct = isMyTurn && status === "playing";
 
-    // État d'INTERFACE local à ce client (ne transite pas par le serveur).
+    // --- État d'INTERFACE, local à ce client (ne transite pas par le serveur) ---
     const [menuOpen, setMenuOpen] = useState(false);
+    // Item de boutique sélectionné, en attente d'être posé sur le plateau.
     const [selectedItem, setSelectedItem] = useState(null);
     // Tiroir de la boutique : replié par défaut, tiré vers le haut par son onglet.
-    // Il s'ouvre aussi automatiquement quand une case vide est sélectionnée (pose
-    // directe) — voir `placeTarget` plus bas.
+    // Il s'ouvre aussi d'office en pose directe (case vide sélectionnée).
     const [shopOpen, setShopOpen] = useState(false);
-    // Niveau de soldat à acheter dans la boutique (1 = base). Piloté par le
-    // sélecteur de la boutique, il conditionne le prix, les stats et le placement.
+    // Niveau de soldat à acheter (1 = base) : conditionne prix, stats et placement.
     const [soldierLevel, setSoldierLevel] = useState(1);
-    // Sélection courante sur le plateau : { id, kind } où kind vaut 'soldier'
-    // (soldat jouable), 'unit' (soldat ennemi / déjà joué), 'building' (base,
-    // tour, maison) ou 'tile' (case vide de son territoire). Pilote le panneau
-    // affiché en bas (specs vs boutique).
+    // Sélection sur le plateau : { id, kind } — 'soldier' | 'unit' | 'building' |
+    // 'tree' | 'tile'. Pilote le panneau affiché en bas (specs vs boutique).
     const [selection, setSelection] = useState(null);
-    // Cible survolée par le joueur (soldat sélectionné) : { id, kind } où kind
-    // vaut 'merge' (allié fusionnable) ou 'combat' (ennemi attaquable).
+    // Cible survolée, soldat sélectionné : { id, kind } — 'merge' | 'combat'.
     const [hoverTarget, setHoverTarget] = useState(null);
 
-    // Chrono par tour (réglage `turnTimer`, en secondes ; 0 = désactivé). Quand
-    // il tombe à zéro, la main passe automatiquement au joueur suivant. Le
-    // décompte redémarre à chaque changement de joueur / de tour.
-    const turnTimer = settings?.turnTimer || 0;
-    const [timeLeft, setTimeLeft] = useState(turnTimer);
-    useEffect(() => {
-        if (!turnTimer || status !== "playing") return undefined;
-        setTimeLeft(turnTimer);
-        const startedAt = Date.now();
-        const id = setInterval(() => {
-            const remaining = turnTimer - Math.floor((Date.now() - startedAt) / 1000);
-            setTimeLeft(remaining);
-            if (remaining <= 0) {
-                clearInterval(id);
-                dispatch(endTurn());
-            }
-        }, 250);
-        return () => clearInterval(id);
-    }, [turnTimer, status, activePlayerId, turn, dispatch]);
+    const {turnTimer, timeLeft} = useTurnTimer(state, dispatch);
 
-    const activeColor = players.find((p) => p.id === activePlayerId)?.color;
     const colorOf = (playerId) => players.find((p) => p.id === playerId)?.color;
-
-    // Vainqueur et libellé de la condition de fin, pour l'écran de victoire.
+    const activeColor = colorOf(activePlayerId);
     const winner = winnerId ? players.find((p) => p.id === winnerId) : null;
-    const END_REASONS = {
-        elimination: "Dernier joueur en lice",
-        domination: "Domination du territoire",
-        economy: "Course à l’or remportée",
-        timeout: "Limite de tours atteinte",
-    };
 
-    // Données du soldat/bâtiment sélectionné selon le type de sélection.
-    const selectedData = selection ? state.placements.get(selection.id) : null;
-    const soldierView =
-        selection && (selection.kind === "soldier" || selection.kind === "unit")
-            ? selectedData
-            : null;
-    // Bâtiment sélectionné : un item posé (tour, maison) ou la base d'une case
-    // spawn (absente de `placements`, d'où les valeurs synthétisées).
-    const buildingView =
-        selection && selection.kind === "building"
-            ? selectedData
-                ? {
-                      type: selectedData.type,
-                      hp: selectedData.hp ?? BUILDING_STATS[selectedData.type]?.hp ?? 0,
-                      atk: selectedData.atk,
-                      playerId: selectedData.playerId,
-                  }
-                : {
-                      type: "base",
-                      // PV courants de la base (elle peut avoir été assiégée).
-                      hp: state.baseHp?.[selection.id] ?? BUILDING_STATS.base.hp,
-                      playerId: state.ownership.get(selection.id),
-                  }
-            : null;
-    // Arbre sélectionné : on affiche ses infos (récompense + coût) et le joueur
-    // dont il occupe le territoire, le cas échéant.
-    const treeOwner =
-        selection?.kind === "tree"
-            ? players.find((p) => p.id === state.ownership.get(selection.id)) || null
-            : null;
+    // Panneaux et aperçus dérivés de la sélection / du survol.
+    const {soldierView, buildingView, treeOwner, placeTarget, mergePreview, combatPreview} = useMemo(
+        () => buildSelectionView(state, selection, hoverTarget),
+        [state, selection, hoverTarget]
+    );
 
-    // La boutique bascule en mode « pose directe » quand une case vide est
-    // sélectionnée : cliquer un item le pose immédiatement sur cette case.
-    const placeTarget = selection?.kind === "tile" ? selection.id : null;
-
-    // Soldat sélectionné et unité survolée : servent aux aperçus de fusion et
-    // de combat (affichés uniquement quand l'action est réellement valide).
-    const hoverSoldier = selection?.kind === "soldier" ? selectedData : null;
-    // Cible survolée : un item posé (soldat, maison, tour) OU une base ennemie
-    // (absente de `placements`) synthétisée depuis ses PV courants, pour que
-    // l'aperçu de combat s'affiche aussi lors d'un siège de base.
-    const resolveTarget = (id) => {
-        const placed = state.placements.get(id);
-        if (placed) return placed;
-        return {
-            type: "base",
-            playerId: state.ownership.get(id),
-            hp: state.baseHp?.[id] ?? BUILDING_STATS.base.hp,
-        };
-    };
-    const targetSoldier =
-        hoverTarget && hoverTarget.id !== selection?.id ? resolveTarget(hoverTarget.id) : null;
-    const mergePreview =
-        hoverTarget?.kind === "merge" && hoverSoldier && targetSoldier && canMerge(hoverSoldier, targetSoldier)
-            ? { from: hoverSoldier, to: targetSoldier, result: mergedSoldier(hoverSoldier, targetSoldier) }
-            : null;
-    const combatPreview =
-        hoverTarget?.kind === "combat" && hoverSoldier && targetSoldier
-            ? { attacker: hoverSoldier, defender: targetSoldier }
-            : null;
-
-    // Le clic droit sert d'action de jeu (ouvrir la boutique de bonus) : on
-    // supprime le menu contextuel natif du navigateur sur toute l'application.
+    // Le clic droit sert d'action de jeu (désélectionner) : on supprime le menu
+    // contextuel natif du navigateur sur toute l'application.
     useEffect(() => {
         const suppress = (e) => e.preventDefault();
         document.addEventListener("contextmenu", suppress);
@@ -153,7 +70,6 @@ const GameLayout = ({ session, onExit }) => {
         setHoverTarget(null);
     }, [mapId, activePlayerId]);
 
-    const toggleMenu = () => setMenuOpen((open) => !open);
     const selectMap = (id) => {
         dispatch(setMap(id));
         setMenuOpen(false);
@@ -182,11 +98,11 @@ const GameLayout = ({ session, onExit }) => {
     // Online : tant que le serveur n'a pas envoyé le premier état, on affiche un
     // écran de connexion (l'état courant n'est encore que provisoire). Placé
     // APRÈS tous les hooks pour respecter les règles des hooks.
-    if (mode === "online" && !ready) {
+    if (online && !ready) {
         return (
-            <div className="game-container" style={{ display: "grid", placeItems: "center" }}>
-                <div style={{ textAlign: "center", opacity: 0.8 }}>
-                    <p style={{ fontSize: "1.2rem" }}>Connexion au serveur…</p>
+            <div className="game-container" style={{display: "grid", placeItems: "center"}}>
+                <div style={{textAlign: "center", opacity: 0.8}}>
+                    <p style={{fontSize: "1.2rem"}}>Connexion au serveur…</p>
                     <button className="menu-btn menu-btn--ghost" onClick={() => onExit?.()}>
                         Annuler
                     </button>
@@ -197,96 +113,19 @@ const GameLayout = ({ session, onExit }) => {
 
     return (
         <div className="game-container">
-            {/* Barre du haut */}
-            <div className="top-bar">
-                <div className="burger-menu" onClick={toggleMenu}>
-                    ☰
-                </div>
-                <div className="turn-counter" title="Numéro du tour">
-                    Tour {turn}
-                    {settings?.maxTurns ? `/${settings.maxTurns}` : ""}
-                </div>
-                {online && (
-                    <div className="turn-counter" title="Votre place dans la partie">
-                        {localPlayerId
-                            ? `Vous : ${players.find((p) => p.id === localPlayerId)?.name ?? localPlayerId}`
-                            : "Spectateur"}
-                    </div>
-                )}
-                {turnTimer > 0 && (
-                    <div
-                        className={`turn-timer ${timeLeft <= 5 ? "turn-timer--low" : ""}`}
-                        title="Temps restant pour ce tour"
-                    >
-                        ⏱ {Math.max(0, timeLeft)}s
-                    </div>
-                )}
-                <div className="players-info">
-                    {players.map((player) => (
-                        <div
-                            className={`player-profile ${
-                                player.id === activePlayerId ? "player-profile--active" : ""
-                            }`}
-                            key={player.id}
-                            title={
-                                player.id === activePlayerId
-                                    ? `Au tour de ${player.name}`
-                                    : player.name
-                            }
-                        >
-                            <div
-                                className="player-avatar"
-                                style={{ backgroundColor: player.color }}
-                                aria-label={player.name}
-                            />
-                            <div className="player-stats">
-                                <div className="stat" title="Or en réserve">
-                                    <img src="/coin.png" alt="or" className="stat__coin" />
-                                    {gold[player.id] ?? 0}
-                                </div>
-                                <div className="stat" title="Or gagné par tour">
-                                    <span role="img" aria-label="or par tour">📈</span>
-                                    +{incomeFor(state, player.id)}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <button
-                    className="end-turn-button"
-                    title={canAct ? "Passer son tour" : "En attente du tour adverse"}
-                    onClick={handleEndTurn}
-                    disabled={!canAct}
-                >→</button>
-            </div>
+            <TopBar
+                state={state}
+                localPlayerId={localPlayerId}
+                online={online}
+                turnTimer={turnTimer}
+                timeLeft={timeLeft}
+                canAct={canAct}
+                onToggleMenu={() => setMenuOpen((open) => !open)}
+                onEndTurn={handleEndTurn}
+            />
 
-            {/* Menu latéral */}
-            <div className={`side-menu ${menuOpen ? "open" : ""}`}>
-                <div className="menu-section">
-                    <span className="menu-section__title">Cartes</span>
-                    {MAPS.map((m) => (
-                        <button
-                            key={m.id}
-                            className={`map-option ${m.id === mapId ? "map-option--active" : ""}`}
-                            onClick={() => selectMap(m.id)}
-                        >
-                            <span className="map-option__name">{m.name}</span>
-                            <span className="map-option__desc">{m.description}</span>
-                        </button>
-                    ))}
-                </div>
+            <SideMenu open={menuOpen} mapId={mapId} onSelectMap={selectMap} onExit={onExit}/>
 
-                <div className="menu-section">
-                    <span className="menu-section__title">Partie</span>
-                    <button>Turn Count</button>
-                    <button>Army</button>
-                    <button>Economy</button>
-                    <button>Save</button>
-                    <button onClick={() => onExit?.()}>Leave</button>
-                </div>
-            </div>
-
-            {/* Zone de jeu */}
             <div className="game-content">
                 <HexBoard
                     game={state}
@@ -314,6 +153,7 @@ const GameLayout = ({ session, onExit }) => {
                         defenderColor={colorOf(combatPreview.defender.playerId)}
                     />
                 )}
+
                 {/* Un soldat, un bâtiment ou un arbre sélectionné affiche ses
                     caractéristiques ; sinon, la boutique (en mode pose directe
                     quand une case vide est sélectionnée). */}
@@ -339,7 +179,7 @@ const GameLayout = ({ session, onExit }) => {
                         settings={settings}
                     />
                 ) : selection?.kind === "tree" ? (
-                    <TreePanel owner={treeOwner} settings={settings} />
+                    <TreePanel owner={treeOwner} settings={settings}/>
                 ) : (
                     <Shop
                         selectedItem={selectedItem}
@@ -359,44 +199,13 @@ const GameLayout = ({ session, onExit }) => {
                 )}
             </div>
 
-            {/* Écran de fin de partie : voile sombre + panneau du vainqueur. */}
             {status === "over" && (
-                <div className="game-over">
-                    <div className="game-over__panel">
-                        <span className="game-over__label">Partie terminée</span>
-                        {winner ? (
-                            <>
-                                <div
-                                    className="game-over__avatar"
-                                    style={{ backgroundColor: winner.color }}
-                                    aria-hidden="true"
-                                />
-                                <h2 className="game-over__winner">
-                                    {winner.name} l’emporte !
-                                </h2>
-                            </>
-                        ) : (
-                            <h2 className="game-over__winner">Match nul</h2>
-                        )}
-                        <span className="game-over__reason">
-                            {END_REASONS[endReason] || ""}
-                        </span>
-                        <div className="game-over__actions">
-                            <button
-                                className="game-over__btn game-over__btn--primary"
-                                onClick={() => dispatch(resetGame())}
-                            >
-                                Rejouer
-                            </button>
-                            <button
-                                className="game-over__btn"
-                                onClick={() => onExit?.()}
-                            >
-                                Menu principal
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <GameOverOverlay
+                    winner={winner}
+                    endReason={endReason}
+                    onReplay={() => dispatch(resetGame())}
+                    onExit={() => onExit?.()}
+                />
             )}
         </div>
     );

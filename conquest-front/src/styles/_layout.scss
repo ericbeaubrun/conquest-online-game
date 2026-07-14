@@ -1,0 +1,91 @@
+// Structure de l'écran de jeu : conteneur, menu latéral, zone de plateau.
+
+// ---- Structure principale ----
+.game-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  // 100dvh corrige la barre d'adresse mobile qui rogne la hauteur.
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+// ---- Menu latéral (tiroir) ----
+.side-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 250px;
+  max-width: 85vw;
+  background-color: #3a3a3a;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 64px 16px 16px;
+  z-index: 15;
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease-in-out;
+
+  &.open {
+    transform: translateX(0);
+  }
+
+  button {
+    background-color: #555;
+    border: 2px solid #000;
+    padding: 8px 10px;
+    color: white;
+    cursor: pointer;
+    text-align: left;
+    font-size: 18px;
+
+    &:hover {
+      background-color: #666;
+    }
+  }
+}
+
+.menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &__title {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #a9a9a9;
+  }
+}
+
+.map-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  &__name {
+    font-size: 19px;
+  }
+
+  &__desc {
+    font-size: 15px;
+    color: #bdbdbd;
+  }
+
+  &--active {
+    background-color: #2f6f4f !important;
+    outline: 1px solid #4caf7d;
+  }
+}
+
+// ---- Zone de jeu ----
+.game-content {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0; // indispensable pour que le flex enfant puisse rétrécir
+  background: radial-gradient(circle at 50% 40%, #dfe9f3 0%, #b9c8dc 100%);
+}
