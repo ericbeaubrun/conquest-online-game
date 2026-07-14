@@ -13,44 +13,41 @@ import {
 // s'ouvre aussi d'office en pose directe (une case vide de son territoire est
 // sélectionnée) : cliquer un item le pose alors immédiatement sur cette case.
 //
-// Chaque carte affiche les caractéristiques de l'élément (PV, attaque, coût par
-// tour / revenu) et son prix. Le soldat se décline en niveaux : un sélecteur
-// permet d'acheter directement un soldat de niveau supérieur (prix et stats
-// doublés à chaque niveau, comme une fusion).
+// Chaque carte affiche son coût par tour / revenu et son prix — PV et attaque
+// restent à découvrir une fois l'unité posée. Le soldat se décline en niveaux :
+// un sélecteur permet d'acheter directement un soldat de niveau supérieur
+// (prix et stats doublés à chaque niveau, comme une fusion).
 
-// Caractéristiques affichées pour un item donné (dépend du niveau pour le soldat).
+// Caractéristiques affichées pour un item donné (dépend du niveau pour le
+// soldat). Le soldat garde son sélecteur de niveau ; les autres éléments
+// (maison, tours) affichent leurs PV (et attaque pour les tours) à la même
+// place, en tête de carte.
 function specsFor(item, soldierLevel, settings) {
     if (item.id === 'soldier') {
         const stats = purchasedSoldierStats(soldierLevel, settings);
         return {
             cost: soldierCostForLevel(soldierLevel, settings),
             sprite: soldierSkin(stats.level),
-            stats: [
-                { icon: '/heart.png', label: 'PV', value: stats.hp },
-                { icon: '/sword.png', label: 'Attaque', value: stats.atk },
-            ],
             upkeep: upkeepFor({ type: 'soldier', level: stats.level }, settings),
         };
     }
     if (item.id === 'house') {
-        // Entretien négatif = revenu : on l'affiche en gain « +N/t ».
+        // Entretien négatif = revenu : on l'affiche en gain « +N/tour ».
         const income = -upkeepFor({ type: 'house' }, settings);
         return {
             cost: settings?.itemCost?.house ?? item.cost,
             sprite: item.src,
-            stats: [{ icon: '/heart.png', label: 'PV', value: BUILDING_STATS.house.hp }],
             income,
+            hp: BUILDING_STATS.house.hp,
         };
     }
     const s = BUILDING_STATS[item.id] || {};
     return {
         cost: settings?.itemCost?.[item.id] ?? item.cost,
         sprite: item.src,
-        stats: [
-            { icon: '/heart.png', label: 'PV', value: s.hp ?? 0 },
-            ...(s.atk != null ? [{ icon: '/sword.png', label: 'Attaque', value: s.atk }] : []),
-        ],
         upkeep: upkeepFor({ type: item.id }, settings),
+        hp: s.hp ?? 0,
+        atk: s.atk,
     };
 }
 
@@ -108,10 +105,9 @@ const Shop = ({
                                     : `${item.name} — or insuffisant`
                             }
                         >
-                            <img src={sp.sprite} alt={item.name} className="shop-card__icon" />
-
-                            {/* Sélecteur de niveau (soldat). Les flèches ne doivent pas
-                                déclencher l'achat du container : on stoppe la propagation. */}
+                            {/* Sélecteur de niveau (soldat), tout en haut de la carte. Les
+                                flèches ne doivent pas déclencher l'achat du container : on
+                                stoppe la propagation. */}
                             {isSoldier ? (
                                 <div className="shop-card__level" onClick={(e) => e.stopPropagation()}>
                                     <button
@@ -123,7 +119,15 @@ const Shop = ({
                                     >
                                         ◀
                                     </button>
-                                    <span className="shop-card__level-label">Nv {soldierLevel}</span>
+                                    <span className="shop-card__level-label">
+                                        {soldierLevel}x
+                                        <img
+                                            src="/etoilePleine.png"
+                                            alt="niveau"
+                                            className="shop-card__level-star shop-card__level-star--soldier"
+                                            draggable={false}
+                                        />
+                                    </span>
                                     <button
                                         type="button"
                                         className="shop-card__step"
@@ -139,20 +143,23 @@ const Shop = ({
                                     </button>
                                 </div>
                             ) : (
-                                // Réserve la hauteur du sélecteur pour aligner les lignes
-                                // suivantes (stats, par-tour, prix) entre toutes les cartes.
-                                <div className="shop-card__level shop-card__level--spacer" aria-hidden="true" />
+                                // Même emplacement que le sélecteur de niveau : PV (maison,
+                                // tours), précédés de l'attaque pour les tours.
+                                <div className="shop-card__level">
+                                    {sp.atk != null && (
+                                        <span className="shop-card__level-label" title="Attaque">
+                                            {sp.atk}
+                                            <img src="/sword.png" alt="attaque" className="shop-card__level-star" draggable={false} />
+                                        </span>
+                                    )}
+                                    <span className="shop-card__level-label shop-card__level-label--hp" title="Points de vie">
+                                        {sp.hp}
+                                        <img src="/coeurPlein.png" alt="points de vie" className="shop-card__level-star" draggable={false} />
+                                    </span>
+                                </div>
                             )}
 
-                            {/* Stats de combat (PV / attaque) uniquement. */}
-                            <div className="shop-card__specs">
-                                {sp.stats.map((st) => (
-                                    <span key={st.label} className="shop-stat" title={st.label}>
-                                        <img src={st.icon} alt="" className="shop-stat__icon" />
-                                        {st.value}
-                                    </span>
-                                ))}
-                            </div>
+                            <img src={sp.sprite} alt={item.name} className="shop-card__icon" draggable={false} />
 
                             {/* Ligne « par tour » DÉDIÉE (hauteur réservée même vide) : coût
                                 d'entretien ou revenu, toujours à la même hauteur d'une carte
@@ -160,20 +167,20 @@ const Shop = ({
                             <div className="shop-card__perturn">
                                 {sp.upkeep ? (
                                     <span className="shop-stat shop-stat--upkeep" title="Entretien par tour">
-                                        <img src="/coin.png" alt="" className="shop-stat__icon" />
-                                        −{sp.upkeep}/t
+                                        <img src="/coin.png" alt="" className="shop-stat__icon" draggable={false} />
+                                        −{sp.upkeep}/tour
                                     </span>
                                 ) : sp.income ? (
                                     <span className="shop-stat shop-stat--income" title="Revenu par tour">
-                                        <img src="/coin.png" alt="" className="shop-stat__icon" />
-                                        +{sp.income}/t
+                                        <img src="/coin.png" alt="" className="shop-stat__icon" draggable={false} />
+                                        +{sp.income}/tour
                                     </span>
                                 ) : null}
                             </div>
 
                             {/* Prix : ancré en bas de la carte, donc aligné entre toutes. */}
                             <div className="shop-card__price">
-                                <img src="/coin.png" alt="or" className="coin-icon" />
+                                <img src="/coin.png" alt="or" className="coin-icon" draggable={false} />
                                 {sp.cost}
                             </div>
                         </div>
@@ -193,7 +200,7 @@ const Shop = ({
             <span className="shop-drawer__arrow">{open ? '▼' : '▲'}</span>
             <span className="shop-drawer__label">Boutique</span>
             <span className="shop-drawer__gold">
-                <img src="/coin.png" alt="or" className="coin-icon" />
+                <img src="/coin.png" alt="or" className="coin-icon" draggable={false} />
                 {activeGold}
             </span>
         </button>

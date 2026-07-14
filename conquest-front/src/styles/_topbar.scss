@@ -71,44 +71,103 @@
   min-width: 0;
 }
 
+// Profil d'un joueur : avatar (+ badges), nom, or et revenu. Compact et carré
+// (pixel-art) : pas d'arrondi, bordures franches, aucune ombre floue.
 .player-profile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  // Réinitialise l'apparence bouton : le profil est cliquable (joueur actif).
+  gap: 2px;
+  max-width: 110px; // borne la largeur : les noms longs sont tronqués (voir __name)
   background: transparent;
   border: 2px solid transparent;
-  border-radius: 8px;
-  padding: 4px 8px;
+  padding: 2px 6px;
   color: inherit;
-  cursor: pointer;
   opacity: 0.55;
   transition: opacity 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-
-  &:hover {
-    opacity: 0.85;
-  }
 
   &--active {
     opacity: 1;
     border-color: currentColor;
     background: rgba(255, 255, 255, 0.08);
   }
+
+  // Joueur éliminé (plus aucune case ni soldat) : profil éteint, sans stats.
+  &--eliminated {
+    opacity: 0.32;
+    filter: grayscale(1);
+  }
+
+  // Avatar + badges superposés (couronne « vous », croix « éliminé »).
+  &__avatar-box {
+    position: relative;
+    line-height: 0;
+  }
+
+  &__badge {
+    position: absolute;
+    image-rendering: pixelated;
+    pointer-events: none;
+  }
+
+  // Couronne du joueur local (en ligne) : posée sur le coin haut-gauche.
+  &__badge--local {
+    top: -8px;
+    left: -8px;
+    width: 16px;
+    height: 16px;
+  }
+
+  // Croix d'élimination : centrée, par-dessus l'avatar.
+  &__badge--dead {
+    top: 50%;
+    left: 50%;
+    width: 26px;
+    height: 26px;
+    transform: translate(-50%, -50%);
+  }
+
+  // Nom du joueur : une seule ligne, tronquée si trop longue (« Bot Difficile »,
+  // pseudos longs) pour ne pas casser la rangée à 4+ joueurs.
+  &__name {
+    max-width: 100%;
+    font-size: 15px;
+    line-height: 1.1;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: none;
+  }
 }
 
 .player-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.6);
+  width: 32px;
+  height: 32px;
+  border: 2px solid #000;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5); // liseré « double bordure » pixel
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  // Repère bot (pas d'asset dédié) : occupe l'essentiel de la case, contraste
+  // noir/blanc pour rester lisible sur n'importe quelle couleur de joueur.
+  &__bot {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    color: #fff;
+    text-shadow: 0 0 2px #000, 0 0 2px #000, 1px 1px 0 #000;
+    user-select: none;
+  }
 }
 
 .player-stats {
   display: flex;
   flex-direction: row;
-  gap: 12px;
-  font-size: 19px;
+  gap: 10px;
+  font-size: 17px;
 }
 
 // Pièce d'or (image) inline dans les textes de prix (boutique, bonus).
@@ -133,20 +192,52 @@
     display: block;
     image-rendering: pixelated;
   }
+
+  // Or en réserve : même jaune que l'or affiché sur l'onglet de la boutique.
+  &--gold {
+    color: #ffd766;
+  }
+
+  // Revenu par tour : vert s'il est positif, rouge s'il est nul ou négatif.
+  &--positive {
+    color: #7cf76a;
+  }
+  &--negative {
+    color: #ff6b6b;
+  }
 }
 
+// Fin de tour : couleur du joueur actif (posée via `style` inline, repli sur
+// le rouge si elle manque), agrandi pour rester la cible la plus visible de
+// la barre.
 .end-turn-button {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background-color: #f04e4e;
   color: white;
   border: 3px solid #000;
-  box-shadow: 0 0 0 2px #7a2b2b;
-  padding: 6px 18px;
+  box-shadow: 0 0 0 2px #4a4a4a;
+  padding: 10px 20px;
   cursor: pointer;
-  font-size: 24px;
   line-height: 1;
 
   &:hover {
-    background-color: #c03e3e;
+    filter: brightness(1.15);
+  }
+
+  // Hors de son tour : bouton éteint, non cliquable.
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+    filter: none;
+  }
+
+  &__icon {
+    width: 32px;
+    height: 32px;
+    display: block;
+    image-rendering: pixelated;
   }
 }

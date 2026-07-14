@@ -7,6 +7,9 @@ $stroke_width_4: 5;
   width: 100%;
   height: 100%;
   overflow: hidden;
+  // Bordure épaisse à la couleur du joueur actif (posée via `style` inline) :
+  // signale d'un coup d'œil à qui est le tour, tout autour du plateau.
+  border: 6px solid transparent;
 
   &__svg {
     width: 100%;
@@ -119,7 +122,7 @@ $stroke_width_4: 5;
   // Case attaquable : couleur tenue par issue prévue du combat (voir
   // `fightKind`/`MoveHighlight`), même code couleur que l'icône de combat
   // (voir `FIGHT_SRC`) : victoire (vert), défaite (rouge), égalité (jaune),
-  // double élimination (violet).
+  // double élimination (orange).
   &__attackable {
     fill-opacity: 0.3;
     stroke-width: $stroke_width_2;
@@ -143,21 +146,29 @@ $stroke_width_4: 5;
     }
 
     &--doubleKo {
-      fill: #b04dff;
-      stroke: #b04dff;
+      fill: #ff9d4d;
+      stroke: #ff9d4d;
     }
   }
 
-  // Case d'un arbre abattable : même blanc que le déplacement ; l'icône dédiée
-  // (voir Indicators) marque l'action d'abattage.
+  // Case d'un arbre abattable : vert, comme une victoire assurée ; l'icône
+  // dédiée (voir Indicators) marque l'action d'abattage.
   &__choppable {
-    fill: #ffffff;
-    fill-opacity: 0.14;
-    stroke: #ffffff;
+    fill: #4dd25b;
+    fill-opacity: 0.3;
+    stroke: #4dd25b;
     stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
     animation: hex-pulse 1s ease-in-out infinite;
+  }
+
+  // Voile posé sur toute case où le soldat sélectionné n'a AUCUNE action
+  // possible : fait ressortir par contraste les seules cases jouables.
+  &__dimmed {
+    fill: #05070a;
+    fill-opacity: 0.2;
+    stroke: none;
   }
 
   // Soldat du joueur actif encore jouable : même hexagone pulsant que la portée

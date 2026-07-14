@@ -6,19 +6,19 @@ export const BASE_SRC = '/base.png';
 export const TREE_SRC = '/forestTree.png';
 // Images des items posés, arbres compris (les arbres ne sont pas en boutique).
 export const PLACEMENT_SRC = {...ITEM_SRC, tree: TREE_SRC};
-// Indicateur de fusion sur un allié fusionnable (étoile pleine).
-export const MERGE_SRC = '/etoilePleine.png';
+// Indicateur de fusion sur un allié fusionnable (mêmes coins que l'indicateur
+// de combat, en blanc — comme l'abattage d'un arbre).
+export const MERGE_SRC = '/fightIndicatorWhite.png';
 // Indicateurs de combat, selon l'issue prévue du point de vue de l'attaquant :
-// victoire (vert), défaite (rouge), égalité (jaune), double élimination (violet).
+// victoire (vert), défaite (rouge), égalité (jaune), double élimination (orange).
 export const FIGHT_SRC = {
     win: '/fightIndicatorGreen.png',
     lose: '/fightIndicatorRed.png',
     draw: '/fightIndicatorYellow.png',
-    doubleKo: '/fightIndicatorPurple.png',
+    doubleKo: '/fightIndicatorOrange.png',
 };
-// Abattage d'un arbre : action neutre (bleu, comme la fusion avant son
-// changement de visuel).
-export const CHOP_SRC = '/fightIndicatorBlue.png';
+// Abattage d'un arbre : vert, comme une victoire assurée (l'arbre ne riposte pas).
+export const CHOP_SRC = '/fightIndicatorGreen.png';
 export const NOTIF_SRC = '/notif.png';
 
 // Icône d'affinité (feu / glace / foudre), même correspondance que le panneau
@@ -30,7 +30,7 @@ export const AFFINITY_SRC = {
 };
 
 // Surbrillance de la portée d'un soldat selon le type de case : déplacement
-// (blanc), conquête (or) ou fusion (cyan). Le combat n'y figure pas : sa
+// (blanc), conquête (blanc) ou fusion (blanc). Le combat n'y figure pas : sa
 // couleur dépend de l'issue prévue (voir `MoveHighlight`).
 export const MOVE_CLASS = {
     move: 'hex__reachable',

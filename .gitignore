@@ -14,3 +14,4 @@ dist-ssr/
 # Logs
 *.log
 npm-debug.log*
+/conquest-back/.env

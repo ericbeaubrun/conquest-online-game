@@ -132,32 +132,32 @@ const GameLayout = ({session, onExit}) => {
                     dispatch={dispatch}
                     interactive={canAct}
                     selectedItem={selectedItem}
+                    onDeselectItem={() => setSelectedItem(null)}
                     soldierLevel={soldierLevel}
                     selection={selection}
                     onSelect={setSelection}
                     onHoverTarget={setHoverTarget}
                 />
-                {mergePreview && (
+                {/* Un seul panneau occupe le bas de l'écran à la fois. Priorité :
+                    aperçu de fusion / combat (survol d'une cible), puis les
+                    caractéristiques du soldat / bâtiment / arbre sélectionné,
+                    enfin la boutique (en mode pose directe quand une case vide
+                    est sélectionnée). */}
+                {mergePreview ? (
                     <MergePreview
                         from={mergePreview.from}
                         to={mergePreview.to}
                         result={mergePreview.result}
                         color={activeColor}
                     />
-                )}
-                {combatPreview && (
+                ) : combatPreview ? (
                     <CombatPreview
                         attacker={combatPreview.attacker}
                         defender={combatPreview.defender}
                         attackerColor={colorOf(combatPreview.attacker.playerId)}
                         defenderColor={colorOf(combatPreview.defender.playerId)}
                     />
-                )}
-
-                {/* Un soldat, un bâtiment ou un arbre sélectionné affiche ses
-                    caractéristiques ; sinon, la boutique (en mode pose directe
-                    quand une case vide est sélectionnée). */}
-                {soldierView ? (
+                ) : soldierView ? (
                     <SoldierPanel
                         soldier={soldierView}
                         color={colorOf(soldierView.playerId)}

@@ -12,8 +12,27 @@
   }
 
   .player-avatar {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
+
+    &__bot {
+      font-size: 14px;
+    }
+  }
+
+  // Profils resserrés : noms plus courts avant troncature, badges réduits.
+  .player-profile {
+    max-width: 76px;
+    padding: 2px 4px;
+
+    &__name {
+      font-size: 12px;
+    }
+
+    &__badge--dead {
+      width: 20px;
+      height: 20px;
+    }
   }
 
   // Stats empilées verticalement pour tenir sans déborder sous le bouton.
@@ -24,8 +43,12 @@
   }
 
   .end-turn-button {
-    padding: 8px 12px;
-    font-size: 16px;
+    padding: 8px 14px;
+
+    &__icon {
+      width: 24px;
+      height: 24px;
+    }
   }
 
   // Panneau du soldat : portrait au-dessus, infos empilées pour tenir en largeur.

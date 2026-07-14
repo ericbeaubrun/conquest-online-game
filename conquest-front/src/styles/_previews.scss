@@ -1,11 +1,13 @@
-// Aperçus de fusion et de combat, superposés au plateau au survol.
+// Aperçus de fusion et de combat, affichés au survol d'une cible.
+@use 'tokens' as *;
 
 // ---- Aperçu de fusion (survol d'un allié fusionnable) ----
-// Flotte au-dessus du plateau, au-dessus du panneau du soldat sélectionné.
+// Occupe le bas de l'écran, À LA PLACE du panneau du soldat (un seul panneau à
+// la fois — voir GameLayout), pour ne pas empiéter sur le plateau.
 .merge-preview {
   position: absolute;
   left: 50%;
-  top: 16px;
+  bottom: 12px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -38,6 +40,12 @@
     align-items: center;
     gap: 12px;
   }
+}
+
+// Très légère transparence, comme les autres panneaux flottants (boutique,
+// panneau du soldat) : laisse deviner le plateau derrière.
+.merge-preview {
+  opacity: $panel-opacity;
 }
 
 .merge-preview__outcome {

@@ -1,5 +1,6 @@
 // Panneaux du bas : caractéristiques d'un soldat / bâtiment / arbre,
 // boutique de bonus, jauges et notes en épées / cœurs.
+@use 'tokens' as *;
 
 // ---- Menu des caractéristiques d'un soldat (remplace la boutique) ----
 // Style pixel-art : coins carrés, bordures franches, aucune ombre floue.
@@ -18,6 +19,8 @@
   border: 3px solid #000;
   box-shadow: 0 0 0 3px #4a4a4a; // liseré « double bordure » pixel
   z-index: 12;
+  // Très légère transparence pour laisser deviner le plateau derrière.
+  opacity: $panel-opacity;
 
   // Colonne portrait : étoiles de niveau au-dessus du bouton portrait.
   &__portrait-col {

@@ -1,4 +1,5 @@
 // Boutique : tiroir compact en bas de l'écran.
+@use 'tokens' as *;
 
 // ---- Boutique : tiroir compact en bas de l'écran ----
 // Repliée par défaut : seul l'onglet dépasse. L'onglet la tire vers le haut ; le
@@ -14,6 +15,17 @@
   align-items: center;
   max-width: calc(100% - 16px);
   z-index: 12;
+  // Très légère transparence pour laisser deviner le plateau derrière.
+  opacity: $panel-opacity;
+  // Boutique tout tactile : aucun texte ni image (sprites, icônes) ne doit se
+  // laisser sélectionner ou glisser au clic.
+  user-select: none;
+
+  img {
+    -webkit-user-drag: none;
+    user-select: none;
+    pointer-events: none; // le clic reste porté par le container, pas l'image
+  }
 
   // Onglet toujours visible en bas : ▲ pour ouvrir, ▼ pour fermer, + or courant.
   &__handle {
@@ -89,7 +101,7 @@
 // prix étant poussé en bas pour rester à la même hauteur partout.
 .shop-card {
   flex: 0 0 auto;
-  width: 92px;
+  width: 104px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -124,35 +136,35 @@
   }
 
   &__icon {
-    width: 40px;
-    height: 40px;
+    width: 52px;
+    height: 52px;
     object-fit: contain;
     image-rendering: pixelated;
   }
 
-  // Sélecteur de niveau (soldat) : ◀ Nv N ▶. L'espaceur réserve la même hauteur
-  // sur les cartes sans sélecteur pour aligner les lignes suivantes.
+  // Sélecteur de niveau (soldat) ou stats (maison, tours), tout en haut de la
+  // carte : ◀ Nx ⭐ ▶ pour le soldat, Nx 🗡 Nx ❤ pour les bâtiments.
   &__level {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    height: 20px;
+    gap: 6px;
+    height: 24px;
 
     &--spacer {
       // Rien à afficher : sert juste de cale verticale.
     }
   }
   &__step {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     display: grid;
     place-items: center;
     padding: 0;
     border: 2px solid #000;
     background: #2c2c2c;
     color: #ffd766;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
 
     &:hover:not(:disabled) {
@@ -164,19 +176,30 @@
     }
   }
   &__level-label {
-    min-width: 44px;
-    text-align: center;
-    font-size: 15px;
-    color: #ffd766;
-  }
-
-  // Stats de combat (PV / attaque).
-  &__specs {
     display: flex;
-    flex-wrap: wrap;
+    align-items: center;
     justify-content: center;
-    gap: 4px 6px;
-    min-height: 16px;
+    gap: 3px;
+    font-size: 18px;
+    color: #ffd766;
+
+    // PV (maison, tours) : rouge, même teinte que le pourcentage de vie du
+    // panneau du soldat.
+    &--hp {
+      color: #ff3b3b;
+    }
+  }
+  &__level-star {
+    width: 17px;
+    height: 17px;
+    image-rendering: pixelated;
+
+    // Étoile de niveau du soldat : très légèrement réduite par rapport aux
+    // icônes épée/cœur des bâtiments.
+    &--soldier {
+      width: 15px;
+      height: 15px;
+    }
   }
 
   // Ligne « par tour » dédiée : hauteur réservée même vide pour aligner le coût

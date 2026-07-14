@@ -61,7 +61,7 @@ export const WARRIOR_KILL_REWARD = 20;
 
 // Squelette invoqué par le bonus « Mort-vivant » : unité alliée qui remplace le
 // soldat sur sa case au moment de sa mort. Sprite et statistiques dédiés.
-export const SKELETON_SRC = '/characters/skeleton1.png';
+export const SKELETON_SRC = '/characters/lvl2/skeleton1.png';
 export const SKELETON_HP = 5;
 export const SKELETON_ATK = 5;
 
@@ -70,7 +70,7 @@ export const SKELETON_ATK = 5;
 // case voisine libre.
 export const WARLOCK_HP = 100;
 export const WARLOCK_ATK = 10;
-export const SKELETON2_SRC = '/characters/skeleton2.png';
+export const SKELETON2_SRC = '/characters/lvl5/skeleton2.png';
 export const SKELETON2_HP = 1;
 export const SKELETON2_ATK = 5;
 export const WARLOCK_SUMMON_CHANCE = 0.5; // proba d'invocation par tour et par démoniste
@@ -98,7 +98,7 @@ export const BONUS_OFFERS = [
     {
         id: 'testNinja',
         label: 'Test ninja',
-        src: '/characters/SoldierLVL1.png',
+        src: '/characters/lvl1/SoldierLVL1.png',
         requiredLevel: 1,
         price: null,
         challenge: null,
@@ -107,7 +107,7 @@ export const BONUS_OFFERS = [
     {
         id: 'lumberjack',
         label: 'Bûcheron',
-        src: '/characters/lumberJack.png',
+        src: '/characters/lvl1/lumberJack.png',
         requiredLevel: 1,
         price: 10,
         challenge: {
@@ -120,7 +120,7 @@ export const BONUS_OFFERS = [
     {
         id: 'adventurer',
         label: 'Aventurier',
-        src: '/characters/aventurer.png',
+        src: '/characters/lvl1/aventurer.png',
         requiredLevel: 1,
         price: 10,
         challenge: {
@@ -133,7 +133,7 @@ export const BONUS_OFFERS = [
     {
         id: 'runner',
         label: 'Coureur',
-        src: '/characters/runner.png',
+        src: '/characters/lvl1/runner.png',
         requiredLevel: 1,
         price: null,
         challenge: {
@@ -146,7 +146,7 @@ export const BONUS_OFFERS = [
     {
         id: 'farmer',
         label: 'Fermier',
-        src: '/characters/farmer.png',
+        src: '/characters/lvl2/farmer.png',
         requiredLevel: 1,
         price: 20,
         challenge: {
@@ -161,7 +161,7 @@ export const BONUS_OFFERS = [
     {
         id: 'thief',
         label: 'Voleur',
-        src: '/characters/thief.png',
+        src: '/characters/lvl2/thief.png',
         requiredLevel: 2,
         price: 10,
         challenge: {
@@ -174,7 +174,7 @@ export const BONUS_OFFERS = [
     {
         id: 'undead',
         label: 'Mort-vivant',
-        src: '/characters/undead.png',
+        src: '/characters/lvl2/undead.png',
         requiredLevel: 2,
         price: null,
         challenge: {
@@ -187,7 +187,7 @@ export const BONUS_OFFERS = [
     {
         id: 'alchemist',
         label: 'Alchimiste',
-        src: '/characters/alchemist.png',
+        src: '/characters/lvl3/alchemist.png',
         requiredLevel: 2,
         price: 76,
         upkeep: 5,
@@ -204,7 +204,7 @@ export const BONUS_OFFERS = [
     {
         id: 'warrior',
         label: 'Guerrier',
-        src: '/characters/GoldWarrior.png',
+        src: '/characters/lvl2/GoldWarrior.png',
         requiredLevel: 2,
         price: 50,
         challenge: {
@@ -246,7 +246,7 @@ export const BONUS_OFFERS = [
     {
         id: 'blackKnight',
         label: 'Chevalier noir',
-        src: '/characters/darkWarrior.png',
+        src: '/characters/lvl4/darkWarrior.png',
         requiredLevel: 3,
         price: 40,
         upkeep: 10,
@@ -271,7 +271,7 @@ export const BONUS_OFFERS = [
     {
         id: 'paladin',
         label: 'Paladin',
-        src: '/characters/paladin.png',
+        src: '/characters/lvl4/paladin.png',
         requiredLevel: 4,
         price: 100,
         upkeep: 20,
@@ -281,7 +281,7 @@ export const BONUS_OFFERS = [
     {
         id: 'warlock',
         label: 'Démoniste',
-        src: '/characters/demonist.png',
+        src: '/characters/lvl5/demonist.png',
         requiredLevel: 4,
         price: 100,
         upkeep: 40,
@@ -291,7 +291,7 @@ export const BONUS_OFFERS = [
     {
         id: 'king',
         label: 'Roi',
-        src: '/characters/king.png',
+        src: '/characters/lvl5/king.png',
         requiredLevel: 4,
         price: 100,
         challenge: null,
@@ -382,11 +382,11 @@ export const BEHAVIORS = [
 // Apparence (skin) d'un soldat selon son niveau : chaque niveau a son propre
 // sprite, ce qui remplace le badge numérique affiché auparavant.
 export const SOLDIER_SKINS = {
-    1: '/characters/SoldierLVL1.png',
-    2: '/characters/SoldierLVL2.png',
-    3: '/characters/SoldierLVL3.png',
-    4: '/characters/SoldierLVL4.png',
-    5: '/characters/SoldierLVL5.png',
+    1: '/characters/lvl1/SoldierLVL1.png',
+    2: '/characters/lvl2/SoldierLVL2.png',
+    3: '/characters/lvl3/SoldierLVL3.png',
+    4: '/characters/lvl4/SoldierLVL4.png',
+    5: '/characters/lvl5/SoldierLVL5.png',
 };
 export const soldierSkin = (level) => SOLDIER_SKINS[level] || SOLDIER_SKINS[1];
 

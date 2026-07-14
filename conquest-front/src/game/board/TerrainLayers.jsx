@@ -49,6 +49,19 @@ export const Highlight = memo(function Highlight({cells}) {
     ));
 });
 
+// Assombrit toutes les cases SAUF celles où le soldat sélectionné a une action
+// à faire (déplacement, conquête, fusion, combat, abattage) et sa propre case.
+// Dessinée AU-DESSUS des bases/unités pour estomper aussi les unités posées sur
+// les cases sans action, et sous les surbrillances / indicateurs des cases
+// actives (qui n'ont, elles, aucun voile puisqu'exclues de `activeIds`).
+export const Dimmer = memo(function Dimmer({cells, activeIds}) {
+    return cells
+        .filter((c) => !activeIds.has(c.id))
+        .map((cell) => (
+            <polygon key={cell.id} points={cell.points} className="hex__dimmed" pointerEvents="none"/>
+        ));
+});
+
 // Portée du soldat sélectionné. Une case de combat prend la couleur de l'issue
 // prévue (victoire / défaite / égalité / double élimination), même code couleur
 // que l'icône posée dessus (voir `FIGHT_SRC`).

@@ -60,7 +60,7 @@ export function buildInitialOwnership(mapId, players) {
 // d'une configuration hors-ligne. Sans config, on retombe sur les joueurs par
 // défaut de la carte. Avec config, on prend les joueurs choisis (nom, couleur,
 // humain/bot, difficulté), tronqués au nombre de points de départ de la carte.
-const BOT_LABELS = {easy: 'Facile', normal: 'Normal', hard: 'Difficile'};
+const BOT_LABELS = {easy: 'Débutant', normal: 'Équilibré', hard: 'Malicieux'};
 
 function resolvePlayers(map, setup) {
     if (setup?.players?.length) {

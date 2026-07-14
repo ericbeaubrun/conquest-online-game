@@ -16,9 +16,9 @@ export { COLOR_PALETTE };
 
 // --- Difficultés de bot ---
 export const BOT_DIFFICULTIES = [
-    { id: 'easy', label: 'Facile' },
-    { id: 'normal', label: 'Normal' },
-    { id: 'hard', label: 'Difficile' },
+    { id: 'easy', label: 'Débutant' },
+    { id: 'normal', label: 'Équilibré' },
+    { id: 'hard', label: 'Malicieux' },
 ];
 
 // Capacité (nombre de joueurs) d'une carte = son nombre de points de départ.

@@ -24,6 +24,7 @@ import {classifyCell} from './board/targeting.js';
 import {useBoardCamera} from './board/useBoardCamera.js';
 import {
     ActionIndicators,
+    Dimmer,
     Highlight,
     Indicators,
     MoveHighlight,
@@ -40,6 +41,7 @@ const HexBoard = ({
                       dispatch,
                       interactive = true,
                       selectedItem,
+                      onDeselectItem,
                       soldierLevel = 1,
                       selection,
                       onSelect,
@@ -95,6 +97,14 @@ const HexBoard = ({
         [activeSoldier, game, board]
     );
 
+    // Cases qui restent en pleine lumière quand un soldat est sélectionné : lui-
+    // même et toutes ses cibles atteignables (voir `dimIds` plus bas, qui couvre
+    // aussi le cas d'un item de boutique sélectionné).
+    const activeCellIds = useMemo(() => {
+        if (!activeSoldier) return null;
+        return new Set([activeSoldier.id, ...reachable.moves.keys()]);
+    }, [activeSoldier, reachable]);
+
     // Case actuellement survolée (pour n'afficher les stats chiffrées que sur
     // l'unité pointée). `null` hors du plateau.
     const [hoveredCellId, setHoveredCellId] = useState(null);
@@ -113,11 +123,13 @@ const HexBoard = ({
     }, [hoveredCellId, activeSoldier, reachable]);
 
     // --- Caméra et gestes (pan / pinch / molette / clics) ---
-    // Clic droit, n'importe où : désélectionne l'élément sélectionné.
+    // Clic droit, n'importe où : désélectionne l'élément sélectionné, qu'il
+    // s'agisse d'une case du plateau ou d'un item de boutique en attente de pose.
     const deselect = useCallback(() => {
         onHoverTarget?.(null);
         onSelect(null);
-    }, [onHoverTarget, onSelect]);
+        if (selectedItem) onDeselectItem?.();
+    }, [onHoverTarget, onSelect, selectedItem, onDeselectItem]);
     const {svgRef, viewBox, clientToSvg, isGesturing, handlers, zoomBy, resetView} = useBoardCamera({
         base,
         onTap: (clientX, clientY) => handleTap(clientX, clientY),
@@ -135,10 +147,13 @@ const HexBoard = ({
     const handleTap = (clientX, clientY) => {
         const id = cellIdAt(clientX, clientY);
 
-        // Mode boutique : placement d'un item sur notre territoire (si la main).
+        // Mode boutique : placement d'un item sur une case posable (si la main).
+        // Cliquer ailleurs (case non posable, hors carte) désélectionne l'item.
         if (selectedItem) {
-            if (interactive) {
+            if (interactive && placeableIds.has(id)) {
                 dispatch(placeItem(id, selectedItem, selectedItem === 'soldier' ? soldierLevel : 1));
+            } else {
+                onDeselectItem?.();
             }
             return;
         }
@@ -192,9 +207,12 @@ const HexBoard = ({
 
     const selectedCell = !selectedItem && selection ? cellMap.get(selection.id) : null;
     const mover = activeSoldier ? placements.get(activeSoldier.id) : null;
+    // Cases qui restent en pleine lumière : portée du soldat sélectionné, ou
+    // cases posables quand un item de boutique est choisi. `null` : pas de voile.
+    const dimIds = activeSoldier ? activeCellIds : selectedItem ? placeableIds : null;
 
     return (
-        <div className="hex-board">
+        <div className="hex-board" style={{borderColor: colors[activePlayerId]}}>
             <svg
                 ref={svgRef}
                 className="hex-board__svg"
@@ -248,6 +266,7 @@ const HexBoard = ({
                     bonusesEnabled={bonusesEnabled}
                     activePlayerId={activePlayerId}
                 />
+                {dimIds && <Dimmer cells={cells} activeIds={dimIds}/>}
                 {!activeSoldier && (
                     <ActionIndicators
                         placements={placements}

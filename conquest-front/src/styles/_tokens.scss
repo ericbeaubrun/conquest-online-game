@@ -2,3 +2,8 @@
 
 // Police pixel-art appliquée à toute l'interface.
 $pixel-font: "VT323", "Courier New", monospace;
+
+// Opacité des panneaux flottants (boutique, panneau soldat/bâtiment/arbre,
+// panneau de combat) : laisse deviner le plateau derrière sans nuire à la
+// lisibilité.
+$panel-opacity: 0.9;

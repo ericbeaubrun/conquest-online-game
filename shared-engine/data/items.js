@@ -1,7 +1,7 @@
 // Items achetables dans la boutique et posables sur une case conquise.
 
 export const ITEMS = [
-    { id: 'soldier', name: 'Soldat', src: '/characters/SoldierLVL1.png', cost: 1 },
+    { id: 'soldier', name: 'Soldat', src: '/characters/lvl1/SoldierLVL1.png', cost: 1 },
     { id: 'house', name: 'Maison', src: '/house.png', cost: 2 },
     { id: 'attackTower', name: "Tour d'attaque", src: '/attackTower.png', cost: 3 },
     { id: 'defenseTower', name: 'Tour de défense', src: '/defenseTower.png', cost: 3 },
