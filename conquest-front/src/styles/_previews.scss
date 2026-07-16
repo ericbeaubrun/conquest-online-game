@@ -38,8 +38,42 @@
   .merge-preview__row {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 12px;
+    flex-wrap: wrap; // responsive : les cartes passent à la ligne si l'écran est étroit
+    max-width: 100%;
   }
+}
+
+// Teinte de la bordure et du fond selon l'issue du combat (même code couleur
+// que le texte de `__outcome` et les indicateurs du plateau). Le fond reste un
+// gris-anthracite proche du panneau standard (#1c1c1c), juste légèrement
+// teinté (~12 % de la couleur d'issue) — la bordure, elle, reprend la couleur
+// pleine pour rester bien identifiable.
+.merge-preview--win {
+  border-color: #5bd35b;
+  background: #202b20;
+}
+
+.merge-preview--lose {
+  border-color: #ff6b6b;
+  background: #372525;
+}
+
+.merge-preview--draw {
+  border-color: #ffd766;
+  background: #37331f;
+}
+
+.merge-preview--double-ko {
+  border-color: #ff9d4d;
+  background: #3a2c1f;
+}
+
+// Fusion : même principe, teinte bleu clair (couleur de `__outcome--fusion`).
+.merge-preview--fusion {
+  border-color: #6bc8ff;
+  background: #1f2c37;
 }
 
 // Très légère transparence, comme les autres panneaux flottants (boutique,
@@ -71,7 +105,7 @@
 
   // Les deux unités éliminées : issue neutre mais notable.
   &--double-ko {
-    color: #b98cff;
+    color: #ff9d4d;
   }
 
   // Fusion d'alliés : bleu clair.
@@ -134,11 +168,13 @@
     }
   }
 
+  // ATK et PV côte à côte (et non empilés) : deux pastilles alignées.
   &__stats {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 178px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
   }
 
   // Jauge PV du combat : les dégâts de l'adversaire sont épinglés en badge
@@ -177,14 +213,16 @@
     border: 1px solid #4a4a4a;
   }
 
-  // Tête de mort sur l'unité éliminée.
+  // Tête de mort sur l'unité éliminée : centrée sur le portrait, légèrement
+  // transparente pour laisser deviner le sprite dessous.
   &__skull {
     position: absolute;
-    top: -10px;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
-    width: 24px;
-    height: 24px;
+    transform: translate(-50%, -50%);
+    width: 28px;
+    height: 28px;
+    opacity: 0.85;
     image-rendering: pixelated;
   }
 

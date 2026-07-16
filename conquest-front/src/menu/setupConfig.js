@@ -68,6 +68,7 @@ const UPKEEP_FIELDS = [
     { key: 'soldier2', label: 'Soldat niv. 2' },
     { key: 'soldier3', label: 'Soldat niv. 3' },
     { key: 'soldier4', label: 'Soldat niv. 4' },
+    { key: 'soldier5', label: 'Soldat niv. 5' },
     { key: 'tower', label: 'Tour' },
     { key: 'skeleton', label: 'Squelette' },
 ].map((f) => ({ ...f, default: DEFAULT_SETTINGS.upkeep[f.key], min: 0, max: 99, step: 1, unit: '/tour' }));
@@ -97,6 +98,16 @@ const BONUS_ENABLED_FIELDS = BONUS_OFFERS.map((b) => ({
     key: b.id,
     label: b.label,
     default: DEFAULT_SETTINGS.bonusEnabled[b.id],
+    control: 'toggle',
+}));
+
+// Sous-champs à bascule des DÉFIS : seuls les bonus qui ont un défi sont listés
+// (ceux sans défi sont déjà disponibles d'emblée). « Non » désactive le défi et
+// débloque le bonus directement.
+const BONUS_CHALLENGE_FIELDS = BONUS_OFFERS.filter((b) => b.challenge != null).map((b) => ({
+    key: b.id,
+    label: b.label,
+    default: DEFAULT_SETTINGS.bonusChallengeEnabled[b.id],
     control: 'toggle',
 }));
 
@@ -280,6 +291,15 @@ export const GAME_SETTINGS = [
         type: 'group',
         fields: BONUS_ENABLED_FIELDS,
         help: 'Active ou désactive chaque bonus individuellement.',
+        dependsOn: 'bonusesEnabled',
+    },
+    {
+        id: 'bonusChallengeEnabled',
+        label: 'Défis de bonus',
+        group: 'Unités',
+        type: 'group',
+        fields: BONUS_CHALLENGE_FIELDS,
+        help: 'Désactive le défi d’un bonus (Non) pour le débloquer directement, sans l’accomplir.',
         dependsOn: 'bonusesEnabled',
     },
     {

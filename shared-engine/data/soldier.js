@@ -38,6 +38,9 @@ ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
     COMBATS_SURVIVED: 'combatsSurvived', // combats terminés en vie
     ALCHEMIST_MERGE: 'alchemistMerge', // fusion de 2 soldats affaiblis en niveau 2
     SKELETONS_KILLED: 'skeletonsKilled', // squelettes tués au combat
+    TOWERS_BOUGHT: 'towersBought', // tours (attaque/défense) bâties par le joueur
+    DRUID_TREES_KEPT: 'druidTreesKept', // tours consécutifs avec ≥5 arbres sur son territoire
+    PALADIN_IDLE_TURNS: 'paladinIdleTurns', // tours consécutifs terminés sans agir
 };
 
 // Les squelettes invoqués (Mort-vivant, Démoniste) sont un SOUS-TYPE d'unité :
@@ -45,6 +48,12 @@ ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
 // territoire) mais portent le marqueur `unit: 'skeleton'`. Ils ne fusionnent pas
 // et ne peuvent pas recevoir de bonus. `isSkeleton` est l'unique test partagé.
 export const isSkeleton = (u) => !!u && u.unit === 'skeleton';
+
+// Une unité INVOQUÉE (squelette, arbre-druide) occupe le plateau comme un soldat
+// mais ne fusionne jamais et ne porte aucun bonus. `isSkeleton` reste le test
+// spécifique au squelette (défi « Chevalier noir »). Toute unité invoquée porte
+// un marqueur `unit` ; un soldat ordinaire n'en a pas.
+export const isSummonedUnit = (u) => !!u && !!u.unit;
 
 // Bonus « Alchimiste » : à chaque fin de tour de son propriétaire, il renforce
 // l'allié adjacent le mieux portant et sans affinité. Le défi se débloque quand
@@ -75,6 +84,28 @@ export const SKELETON2_HP = 1;
 export const SKELETON2_ATK = 5;
 export const WARLOCK_SUMMON_CHANCE = 0.5; // proba d'invocation par tour et par démoniste
 
+// Bonus « Vampire » : à chaque fin de tour de son propriétaire, il draine ce
+// nombre de PV à CHAQUE soldat allié adjacent (sans jamais le descendre sous
+// 1 PV : il n'achève pas ses propres alliés) et récupère pour lui le total volé.
+export const VAMPIRE_DRAIN = 1;
+
+// Bonus « Druide » : au lieu de récolter un arbre, le druide le TRANSFORME en
+// une unité alliée « arbre-druide » — un combattant de niveau 2 non fusionnable,
+// aux statistiques dédiées, qui occupe la case de l'arbre. Le défi se débloque
+// en gardant DRUID_TREES_REQUIRED arbres sur son territoire pendant
+// DRUID_TREES_TURNS tours consécutifs.
+export const DRUID_TREE_SRC = '/characters/lvl4/druidTree.png';
+export const DRUID_TREE_HP = 15;
+export const DRUID_TREE_ATK = 30;
+export const DRUID_TREE_LEVEL = 2;
+export const DRUID_TREES_REQUIRED = 5; // arbres à garder sur son territoire
+export const DRUID_TREES_TURNS = 3; // tours consécutifs pour débloquer le défi
+
+// Défi « Paladin » : nombre de tours CONSÉCUTIFS que le soldat doit terminer sans
+// avoir agi (ni déplacement, ni fusion, ni attaque, ni abattage) pour débloquer
+// le bonus.
+export const PALADIN_IDLE_TURNS = 3;
+
 // Bonus proposés dans le panneau du soldat. Chaque bonus est rattaché à UN seul
 // niveau de soldat (`requiredLevel`) : un soldat ne voit que les bonus de son
 // niveau.
@@ -91,19 +122,6 @@ export const WARLOCK_SUMMON_CHANCE = 0.5; // proba d'invocation par tour et par 
 //   - effect   : effet accordé une fois débloqué (placeholder pour l'instant)
 export const BONUS_OFFERS = [
     // ---- Niveau 1 ----
-    // Bonus de TEST (provisoire) : sert à valider le déplacement « fantôme ».
-    // Disponible d'emblée et gratuit, il garde l'apparence du soldat de base.
-    // Effet : traverse tout (soldats, structures, bases, arbres) — voir
-    // `computeReachable`. À conserver ou retirer selon le ressenti en jeu.
-    {
-        id: 'testNinja',
-        label: 'Test ninja',
-        src: '/characters/lvl1/SoldierLVL1.png',
-        requiredLevel: 1,
-        price: null,
-        challenge: null,
-        effect: 'Se déplace à travers tout (soldats, structures, arbres). — TEST',
-    },
     {
         id: 'lumberjack',
         label: 'Bûcheron',
@@ -154,7 +172,7 @@ export const BONUS_OFFERS = [
             goal: 1,
             describe: (c, g) => `Détruire ${c}/${g} arbre sur le territoire ennemi.`,
         },
-        effect: 'Augmente l’apparition d’arbres autour de la frontière.',
+        effect: 'Sur une case frontière, fait pousser des arbres le long de la frontière.',
     },
 
     // ---- Niveau 2 ----
@@ -185,21 +203,19 @@ export const BONUS_OFFERS = [
         effect: 'À sa mort, invoque un squelette allié (5/10) sur sa case.',
     },
     {
-        id: 'alchemist',
-        label: 'Alchimiste',
-        src: '/characters/lvl3/alchemist.png',
+        id: 'viking',
+        label: 'Viking',
+        src: '/characters/lvl2/viking.png',
         requiredLevel: 2,
-        price: 76,
-        upkeep: 5,
+        price: 40,
+        upkeep: 10,
         challenge: {
-            metric: CHALLENGE_METRICS.ALCHEMIST_MERGE,
+            metric: CHALLENGE_METRICS.TOWERS_BOUGHT,
             goal: 1,
             describe: (c, g) =>
-                c >= g
-                    ? 'Fusion de 2 soldats affaiblis accomplie.'
-                    : 'Fusionner 2 soldats de moins de 20 PV en niveau 2.',
+                c >= g ? 'Tour bâtie.' : `Bâtir ${c}/${g} tour (attaque ou défense).`,
         },
-        effect: '+1 atk / +2 PV à l’allié adjacent sans affinité ayant le plus de PV.',
+        effect: 'Ne subit aucun dégât des tours.',
     },
     {
         id: 'warrior',
@@ -216,6 +232,29 @@ export const BONUS_OFFERS = [
     },
 
     // ---- Niveau 3 ----
+    // Bonus « Ninja » : déplacement « fantôme » — traverse TOUT (soldats,
+    // structures, bases, arbres) pour se repositionner, MAIS ne peut pas
+    // attaquer à travers un obstacle (voir `computeReachable` : les cibles de
+    // combat/abattage ne sont validées que depuis une case où il peut se tenir).
+    {
+        id: 'ninja',
+        label: 'Ninja',
+        src: '/characters/lvl3/ninja.png',
+        requiredLevel: 3,
+        price: null,
+        challenge: null,
+        effect: 'Se déplace à travers tout (soldats, structures, arbres), mais ne peut pas attaquer à travers un obstacle.',
+    },
+    {
+        id: 'vampire',
+        label: 'Vampire',
+        src: '/characters/lvl3/vampire.png',
+        requiredLevel: 3,
+        price: 120,
+        upkeep: 1,
+        challenge: null,
+        effect: 'Chaque tour, vole 1 PV à chaque allié adjacent.',
+    },
     {
         id: 'priest',
         label: 'Prêtre',
@@ -226,28 +265,29 @@ export const BONUS_OFFERS = [
         effect: 'Soigne les alliés adjacents.',
     },
     {
-        id: 'druid',
-        label: 'Druide',
-        src: null,
+        id: 'alchemist',
+        label: 'Alchimiste',
+        src: '/characters/lvl3/alchemist.png',
         requiredLevel: 3,
-        price: null,
-        challenge: 'Faire pousser 3 arbres.',
-        effect: 'Régénère ses PV sur l’herbe.',
+        price: 76,
+        upkeep: 5,
+        challenge: {
+            metric: CHALLENGE_METRICS.ALCHEMIST_MERGE,
+            goal: 1,
+            describe: (c, g) =>
+                c >= g
+                    ? 'Fusion de 2 soldats affaiblis accomplie.'
+                    : 'Fusionner 2 soldats de moins de 20 PV en niveau 2.',
+        },
+        effect: '+1 atk / +2 PV à l’allié adjacent sans affinité ayant le plus de PV.',
     },
-    {
-        id: 'viking',
-        label: 'Viking',
-        src: null,
-        requiredLevel: 3,
-        price: 350,
-        challenge: 'Conquérir 6 cases ennemies.',
-        effect: '+3 attaque sur la côte.',
-    },
+
+    // ---- Niveau 4 ----
     {
         id: 'blackKnight',
         label: 'Chevalier noir',
         src: '/characters/lvl4/darkWarrior.png',
-        requiredLevel: 3,
+        requiredLevel: 4,
         price: 40,
         upkeep: 10,
         challenge: {
@@ -257,17 +297,6 @@ export const BONUS_OFFERS = [
         },
         effect: 'Absorbe les stats des squelettes qu’il tue (comme une fusion).',
     },
-
-    // ---- Niveau 4 ----
-    {
-        id: 'sorcerer',
-        label: 'Sorcier',
-        src: null,
-        requiredLevel: 4,
-        price: 500,
-        challenge: 'Lancer 5 sorts en une partie.',
-        effect: 'Attaque à distance de 2 cases.',
-    },
     {
         id: 'paladin',
         label: 'Paladin',
@@ -275,14 +304,49 @@ export const BONUS_OFFERS = [
         requiredLevel: 4,
         price: 100,
         upkeep: 20,
-        challenge: null,
+        challenge: {
+            metric: CHALLENGE_METRICS.PALADIN_IDLE_TURNS,
+            goal: PALADIN_IDLE_TURNS,
+            describe: (c, g) =>
+                c >= g
+                    ? `${PALADIN_IDLE_TURNS} tours sans agir accomplis.`
+                    : `Terminer son tour sans agir (${c}/${g} tours consécutifs).`,
+        },
         effect: 'Récupère 2 PV à chaque tour.',
+    },
+    {
+        id: 'druid',
+        label: 'Druide',
+        src: '/characters/lvl4/druid.png',
+        requiredLevel: 4,
+        price: null,
+        upkeep: 10,
+        challenge: {
+            metric: CHALLENGE_METRICS.DRUID_TREES_KEPT,
+            goal: DRUID_TREES_TURNS,
+            describe: (c, g) =>
+                c >= g
+                    ? `${DRUID_TREES_REQUIRED} arbres gardés ${DRUID_TREES_TURNS} tours.`
+                    : `Garder ${DRUID_TREES_REQUIRED} arbres sur son territoire (${c}/${g} tours).`,
+        },
+        effect: 'Transforme l’arbre ciblé en une unité alliée (arbre-druide, 15/30).',
+    },
+
+    // ---- Niveau 5 ----
+    {
+        id: 'sorcerer',
+        label: 'Sorcier',
+        src: null,
+        requiredLevel: 5,
+        price: 500,
+        challenge: 'Lancer 5 sorts en une partie.',
+        effect: 'Attaque à distance de 2 cases.',
     },
     {
         id: 'warlock',
         label: 'Démoniste',
         src: '/characters/lvl5/demonist.png',
-        requiredLevel: 4,
+        requiredLevel: 5,
         price: 100,
         upkeep: 40,
         challenge: null,
@@ -292,10 +356,20 @@ export const BONUS_OFFERS = [
         id: 'king',
         label: 'Roi',
         src: '/characters/lvl5/king.png',
-        requiredLevel: 4,
+        requiredLevel: 5,
         price: 100,
         challenge: null,
         effect: 'Tant qu’il est en vie, +50% d’or gagné par tour.',
+    },
+    {
+        id: 'conqueror',
+        label: 'Conquérant',
+        src: '/characters/lvl5/conquerant.png',
+        requiredLevel: 5,
+        price: 100,
+        upkeep: 20,
+        challenge: null,
+        effect: 'À chaque tour, annexe toutes les cases vides autour de lui (même à l’ennemi).',
     },
 ];
 
@@ -315,10 +389,10 @@ export const bonusOffersForLevel = (level) =>
 // à son niveau : bonus activés en configuration, soldat sans bonus et non
 // squelette. Sert à la fois aux notifications et à leur acquittement.
 export const unlockedBonusIds = (soldier, settings, enabled = true) => {
-    if (!enabled || isSkeleton(soldier) || soldier?.bonus) return [];
+    if (!enabled || isSummonedUnit(soldier) || soldier?.bonus) return [];
     return bonusOffersForLevel(soldier?.level || 1)
         .filter((b) => settings?.bonusEnabled?.[b.id] !== false)
-        .filter((b) => isBonusUnlocked(soldier, b))
+        .filter((b) => isBonusUnlocked(soldier, b, settings))
         .map((b) => b.id);
 };
 
@@ -358,7 +432,8 @@ export const bonusProgress = (soldier, bonus) => {
 
 // Texte du défi à afficher pour ce soldat : avec l'avancement inséré (« 2/5 »)
 // pour les défis suivis, sinon la chaîne brute.
-export const challengeText = (soldier, bonus) => {
+export const challengeText = (soldier, bonus, settings) => {
+    if (!isBonusChallengeEnabled(bonus.id, settings)) return 'Défi désactivé — disponible d’emblée.';
     const { challenge } = bonus;
     if (challenge == null) return 'Aucun défi — disponible aussitôt.';
     if (!isTrackedChallenge(challenge)) return challenge;
@@ -366,10 +441,19 @@ export const challengeText = (soldier, bonus) => {
     return challenge.describe(current, goal);
 };
 
+// Le défi d'un bonus est-il ACTIF ? Désactivé en configuration
+// (`settings.bonusChallengeEnabled`), le bonus se débloque directement, sans
+// avoir à l'accomplir. Actif par défaut.
+export const isBonusChallengeEnabled = (bonusId, settings) =>
+    settings?.bonusChallengeEnabled?.[bonusId] !== false;
+
 // Un bonus est débloqué pour un soldat quand son défi (suivi) est terminé. Un
-// bonus SANS défi (`challenge` nul) est débloqué d'emblée.
-export const isBonusUnlocked = (soldier, bonus) =>
-    bonus.challenge == null || (bonusProgress(soldier, bonus)?.done ?? false);
+// bonus SANS défi (`challenge` nul), ou dont le défi est DÉSACTIVÉ en
+// configuration, est débloqué d'emblée.
+export const isBonusUnlocked = (soldier, bonus, settings) =>
+    !isBonusChallengeEnabled(bonus.id, settings) ||
+    bonus.challenge == null ||
+    (bonusProgress(soldier, bonus)?.done ?? false);
 
 export const BEHAVIORS = [
     { id: 'conquest', label: 'Conquête' },
@@ -436,7 +520,7 @@ export const soldierSprite = (soldier) =>
 // n'a pas déjà un bonus, et le porte-monnaie couvre le prix (un soldat = un seul
 // bonus). `gold` est l'or du propriétaire du soldat.
 export const canBuyBonus = (soldier, bonus, gold, settings) =>
-    isBonusUnlocked(soldier, bonus) && !soldier?.bonus && gold >= bonusPriceOf(bonus, settings);
+    isBonusUnlocked(soldier, bonus, settings) && !soldier?.bonus && gold >= bonusPriceOf(bonus, settings);
 
 // Entretien (or/tour) propre à un bonus (0 par défaut). Configurable par partie
 // (`settings.bonusUpkeep`) ; retombe sur le barème du bonus sinon.
@@ -460,6 +544,7 @@ export const upkeepFor = (unit, settings) => {
     if (!unit) return 0;
     if (unit.type === 'soldier') {
         if (isSkeleton(unit)) return settings?.upkeep?.skeleton ?? SKELETON_UPKEEP;
+        if (unit.unit === 'druidTree') return 0; // arbre-druide : unité invoquée sans entretien
         const lvl = unit.level || 1;
         const base = settings?.upkeep?.[`soldier${lvl}`] ?? SOLDIER_UPKEEP[lvl] ?? 0;
         return base + (unit.bonus ? bonusUpkeep(unit.bonus, settings) : 0);

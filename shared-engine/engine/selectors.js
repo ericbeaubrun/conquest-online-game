@@ -22,21 +22,29 @@ export function computeReachable(state, board, startId) {
     const moves = new Map(); // id -> { kind: 'move' | 'conquer' | 'merge' }
     const allies = []; // bâtiments / bases alliés bloquants
     const dist = new Map(); // id -> nombre de pas depuis `startId` (BFS)
-    if (!startId) return {moves, allies, dist};
+    // Cases où le mover peut RÉELLEMENT s'arrêter (départ + cases libres). Un
+    // relais traversé par le ninja entre dans `dist` mais PAS dans `standable` :
+    // on ne peut ni s'y arrêter, ni attaquer/abattre depuis lui.
+    const standable = new Set();
+    if (!startId) return {moves, allies, dist, standable};
     const {cellMap, baseIds} = board;
     const start = cellMap.get(startId);
-    if (!start) return {moves, allies, dist};
+    if (!start) return {moves, allies, dist, standable};
     const {placements, ownership, activePlayerId} = state;
     const mover = placements.get(startId); // soldat qui se déplace (pour la fusion)
     // Bonus « Coureur » : portée de déplacement doublée à l'intérieur du
     // territoire (la conquête reste limitée à 1 case hors territoire).
     const maxMove = mover?.bonus === 'runner' ? MAX_MOVE * 2 : MAX_MOVE;
-    // Bonus « Test ninja » : traverse TOUT (soldats alliés/ennemis, structures,
-    // bases, arbres). Les cases occupées deviennent des relais de passage — mais
-    // on ne peut toujours s'arrêter que sur une case libre (voir plus bas).
-    const ghost = mover?.bonus === 'testNinja';
+    // Bonus « Ninja » : déplacement « fantôme » — traverse TOUT (soldats
+    // alliés/ennemis, structures, bases, arbres). Les cases occupées deviennent
+    // des relais de passage (on ne s'arrête que sur une case libre). En revanche
+    // il ne peut PAS attaquer/abattre à travers un obstacle : une cible n'est
+    // validée que depuis une case « stable » (voir `standable`), jamais depuis un
+    // relais traversé.
+    const ghost = mover?.bonus === 'ninja';
 
     dist.set(startId, 0);
+    standable.add(startId);
     const queue = [startId];
     const seenAlly = new Set();
     while (queue.length) {
@@ -59,8 +67,10 @@ export function computeReachable(state, board, startId) {
                 }
             };
             // Arbre : infranchissable, mais abattable par un soldat adjacent.
+            // Abattage = action de contact, uniquement depuis une case stable (le
+            // ninja ne peut pas abattre un arbre à travers un obstacle).
             if (placed && placed.type === 'tree') {
-                if (!moves.has(nid)) moves.set(nid, {kind: 'chop'});
+                if (standable.has(curId) && !moves.has(nid)) moves.set(nid, {kind: 'chop'});
                 ghostAdvance();
                 continue;
             }
@@ -77,7 +87,9 @@ export function computeReachable(state, board, startId) {
                         seenAlly.add(nid);
                         allies.push(nid);
                     }
-                } else if ((isBase || isAttackable(placed)) && !moves.has(nid)) {
+                } else if ((isBase || isAttackable(placed)) && standable.has(curId) && !moves.has(nid)) {
+                    // Siège d'une structure/base ennemie : seulement depuis une
+                    // case stable (pas d'attaque à travers un obstacle).
                     moves.set(nid, {kind: 'combat'});
                 }
                 ghostAdvance();
@@ -87,7 +99,10 @@ export function computeReachable(state, board, startId) {
             // Soldat ennemi : cible de combat (terminale, infranchissable — sauf
             // pour le ninja qui la traverse tout en pouvant l'attaquer).
             if (isSoldier && placed.playerId !== activePlayerId) {
-                if (!moves.has(nid)) moves.set(nid, {kind: 'combat'});
+                // Cible de combat : validée seulement depuis une case stable (pas
+                // d'attaque à travers un obstacle) ; le ninja peut néanmoins la
+                // traverser pour se repositionner au-delà.
+                if (standable.has(curId) && !moves.has(nid)) moves.set(nid, {kind: 'combat'});
                 ghostAdvance();
                 continue;
             }
@@ -107,11 +122,12 @@ export function computeReachable(state, board, startId) {
                     ghostAdvance();
                 } else {
                     // Case LIBRE de notre territoire : on la traverse et on peut
-                    // s'y arrêter (repositionnement).
+                    // s'y arrêter (repositionnement) — donc « stable ».
                     if (!dist.has(nid)) {
                         dist.set(nid, d + 1);
                         queue.push(nid);
                     }
+                    standable.add(nid);
                     if (!moves.has(nid)) moves.set(nid, {kind: 'move'});
                 }
             } else if (!isSoldier) {
@@ -121,7 +137,7 @@ export function computeReachable(state, board, startId) {
         }
     }
     moves.delete(startId);
-    return {moves, allies, dist};
+    return {moves, allies, dist, standable};
 }
 
 // Nombre de cases possédées par un joueur.

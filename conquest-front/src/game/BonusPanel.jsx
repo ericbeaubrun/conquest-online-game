@@ -18,7 +18,7 @@ import {
 
 // Une carte de bonus : portrait, prix / entretien, défi, effet, et action.
 const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownLevel, onBuy}) => {
-    const unlocked = isBonusUnlocked(soldier, bonus);
+    const unlocked = isBonusUnlocked(soldier, bonus, settings);
     const equipped = soldier.bonus === bonus.id;
     // Le soldat porte déjà un AUTRE bonus (un seul par soldat).
     const blocked = !!soldier.bonus && !equipped;
@@ -74,7 +74,7 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
                 </div>
                 <p className={`bonus-card__challenge ${unlocked ? 'bonus-card__challenge--done' : ''}`}>
                     <img src="/defi.png" alt="Défi" className="bonus-card__line-icon"/>
-                    <span className="bonus-card__line-text">{challengeText(soldier, bonus)}</span>
+                    <span className="bonus-card__line-text">{challengeText(soldier, bonus, settings)}</span>
                 </p>
                 <p className="bonus-card__effect">
                     <img src="/sword.png" alt="Effet" className="bonus-card__line-icon"/>

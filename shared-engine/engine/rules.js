@@ -13,7 +13,7 @@ export const HOUSE_INCOME = 10; // or/tour rapporté par chaque maison possédé
 // rapportent). Barème centralisé, partagé par le calcul de revenu et l'affichage
 // des panneaux. Le coût d'un soldat s'ajoute à celui de son bonus éventuel
 // (voir `upkeepFor` / `bonusUpkeep` dans soldier.js).
-export const SOLDIER_UPKEEP = {1: 2, 2: 4, 3: 8, 4: 16}; // par niveau de soldat
+export const SOLDIER_UPKEEP = {1: 2, 2: 4, 3: 8, 4: 16, 5: 32}; // par niveau de soldat
 export const SKELETON_UPKEEP = 1; // squelette invoqué (Mort-vivant / Démoniste)
 export const TOWER_UPKEEP = 10; // tour d'attaque ou de défense
 // Bâtiments : la maison rapporte (entretien négatif) ; base et arbres = 0.
@@ -68,8 +68,9 @@ export function mergeAffinity(a, b) {
 // règles.
 export function canMerge(from, to) {
     if (!from || !to || from.type !== 'soldier' || to.type !== 'soldier') return false;
-    // Les squelettes invoqués ne fusionnent jamais (ni comme source ni cible).
-    if (from.unit === 'skeleton' || to.unit === 'skeleton') return false;
+    // Les unités invoquées (squelette, arbre-druide) ne fusionnent jamais, ni
+    // comme source ni comme cible : elles portent toutes un marqueur `unit`.
+    if (from.unit || to.unit) return false;
     // Les deux soldats doivent porter le même bonus (ou aucun) : un bûcheron ne
     // fusionne qu'avec un bûcheron, un soldat nu qu'avec un soldat nu.
     if ((from.bonus || null) !== (to.bonus || null)) return false;
@@ -87,13 +88,23 @@ export function mergedSoldier(from, to) {
     };
 }
 
+// Une unité est-elle une tour (d'attaque ou de défense) ? Sert au bonus
+// « Viking », immunisé aux dégâts infligés par les tours.
+export function isTower(unit) {
+    return unit?.type === 'attackTower' || unit?.type === 'defenseTower';
+}
+
 // Combat entre deux soldats : chaque unité retire à l'autre des points de vie
 // égaux à sa propre attaque (dégâts SIMULTANÉS). Une unité dont les PV tombent
-// à 0 meurt (`dead`). Fonction PURE partagée par le reducer (application) et
-// l'aperçu d'interface — mêmes règles partout.
+// à 0 meurt (`dead`). Bonus « Viking » : un soldat-viking ne subit AUCUN dégât
+// d'une tour (dans les deux sens : qu'il l'attaque ou qu'une tour le frappe).
+// Fonction PURE partagée par le reducer (application) et l'aperçu d'interface —
+// mêmes règles partout.
 export function combatResult(attacker, defender) {
-    const atkHp = Math.max(0, (attacker.hp || 0) - (defender.atk || 0));
-    const defHp = Math.max(0, (defender.hp || 0) - (attacker.atk || 0));
+    const atkImmune = attacker?.bonus === 'viking' && isTower(defender);
+    const defImmune = defender?.bonus === 'viking' && isTower(attacker);
+    const atkHp = atkImmune ? (attacker.hp || 0) : Math.max(0, (attacker.hp || 0) - (defender.atk || 0));
+    const defHp = defImmune ? (defender.hp || 0) : Math.max(0, (defender.hp || 0) - (attacker.atk || 0));
     return {
         attacker: {...attacker, hp: atkHp, dead: atkHp <= 0},
         defender: {...defender, hp: defHp, dead: defHp <= 0},

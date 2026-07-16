@@ -71,6 +71,34 @@
     background: #1c1c1c;
     transition: max-height 0.22s ease, opacity 0.18s ease;
   }
+
+  // Croix rouge accrochée au coin haut-droit du tiroir (déborde légèrement au-
+  // dessus et à droite du corps) : referme la boutique, y compris en pose
+  // directe (elle désélectionne alors aussi la case, voir `onClose`).
+  &__close {
+    position: absolute;
+    top: -16px;
+    right: -16px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 2px solid #000;
+    background: #2c2c2c;
+    cursor: pointer;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+
+    &:hover {
+      background: #3a3a3a;
+    }
+
+    img {
+      width: 19px;
+      height: 19px;
+      image-rendering: pixelated;
+    }
+  }
   &--open &__body {
     max-height: 360px;
     opacity: 1;
@@ -153,6 +181,12 @@
 
     &--spacer {
       // Rien à afficher : sert juste de cale verticale.
+    }
+
+    // Stats bâtiment (maison, tours) : les deux pastilles ATK/PV collées
+    // l'une à l'autre, sans espace entre elles.
+    &--stats {
+      gap: 0;
     }
   }
   &__step {

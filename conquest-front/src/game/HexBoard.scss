@@ -1,3 +1,5 @@
+@use '../styles/tokens' as *; // $pixel-font
+
 $stroke_width_2: 3;
 $stroke_width_4: 5;
 
@@ -9,7 +11,7 @@ $stroke_width_4: 5;
   overflow: hidden;
   // Bordure épaisse à la couleur du joueur actif (posée via `style` inline) :
   // signale d'un coup d'œil à qui est le tour, tout autour du plateau.
-  border: 6px solid transparent;
+  border: 12px solid transparent;
 
   &__svg {
     width: 100%;
@@ -212,21 +214,30 @@ $stroke_width_4: 5;
 // (attaque en haut à droite, points de vie en bas à droite ; taille fixée en
 // JS, proportionnelle à la case).
 .soldier-stat-label {
-  font-family: "Press Start 2P", monospace;
+  font-family: $pixel-font;
   fill: #ffffff;
-  paint-order: stroke;
-  stroke: #000000;
-  stroke-width: 2.5px;
-  stroke-linejoin: round;
   pointer-events: none;
   user-select: none;
 
-  &__atk {
-    fill: #ffcc00;
+  &__atk,
+  &__hp {
+    fill: #ffffff;
   }
 
-  &__hp {
-    fill: #ff3b3b;
+  &__bg {
+    pointer-events: none;
+    stroke-width: 2px;
+    shape-rendering: crispEdges;
+
+    &--atk {
+      fill: #0d0d0d;
+      stroke: #000000;
+    }
+
+    &--hp {
+      fill: #b81f1f;
+      stroke: #5c0d0d;
+    }
   }
 }
 

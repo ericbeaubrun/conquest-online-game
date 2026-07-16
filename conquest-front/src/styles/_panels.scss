@@ -22,6 +22,33 @@
   // Très légère transparence pour laisser deviner le plateau derrière.
   opacity: $panel-opacity;
 
+  // Croix accrochée au coin haut-droit du panneau (même style que celle de la
+  // boutique) : referme le panneau, désélectionne le soldat.
+  &__close {
+    position: absolute;
+    top: -16px;
+    right: -16px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 2px solid #000;
+    background: #2c2c2c;
+    cursor: pointer;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+
+    &:hover {
+      background: #3a3a3a;
+    }
+
+    img {
+      width: 19px;
+      height: 19px;
+      image-rendering: pixelated;
+    }
+  }
+
   // Colonne portrait : étoiles de niveau au-dessus du bouton portrait.
   &__portrait-col {
     display: flex;
@@ -565,6 +592,50 @@
 
 .soldier-stat--hp .soldier-stars__percent {
   color: #ff3b3b;
+}
+
+// Pastille de valeur brute (attaque / vie), même style que sur le plateau
+// (fond coloré, bordure franche, police pixel blanche) — occupe la même place
+// que `.soldier-stars__percent` (largeur fixe), taille réduite pour le panneau.
+.soldier-stat-badge {
+  width: 52px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: $pixel-font;
+  font-size: 30px;
+  color: #ffffff;
+  border: 2px solid #000;
+  padding: 0 2px;
+  box-sizing: border-box;
+
+  &--atk {
+    background: #0d0d0d;
+    border-color: #000000;
+  }
+
+  &--hp {
+    background: #b81f1f;
+    border-color: #5c0d0d;
+  }
+
+  // Variante élargie (aperçu de combat) : assez large pour « avant→après »
+  // sans déborder. Même taille de police que le panneau de fusion (30px) —
+  // la largeur s'adapte au texte plus long.
+  &--wide {
+    width: auto;
+    min-width: 92px;
+    font-size: 30px;
+  }
+
+  // Variante compacte (boutique) : deux pastilles côte à côte tiennent dans
+  // une carte de 104px de large.
+  &--sm {
+    width: 36px;
+    font-size: 19px;
+    border-width: 2px;
+  }
 }
 
 .soldier-spec {

@@ -7,6 +7,7 @@ import {
     soldierCostForLevel,
     MAX_SOLDIER_PURCHASE_LEVEL,
 } from '@conquest/shared-engine/data/soldier.js';
+import { formatStatValue } from './board/constants.js';
 
 // Boutique compacte, logée dans un TIROIR en bas de l'écran. Repliée par défaut
 // (seul l'onglet « ▲ Boutique » dépasse) ; l'onglet la tire vers le haut. Elle
@@ -62,9 +63,21 @@ const Shop = ({
     open = false,
     placeMode = false,
     onToggle,
+    onClose,
     canAct = true,
 }) => (
     <div className={`shop-drawer ${open ? 'shop-drawer--open' : ''}`}>
+        {open && (
+            <button
+                type="button"
+                className="shop-drawer__close"
+                onClick={onClose ?? onToggle}
+                aria-label="Fermer la boutique"
+                title="Fermer la boutique"
+            >
+                <img src="/croix.png" alt="" draggable={false} />
+            </button>
+        )}
         {/* Le corps se déploie AU-DESSUS de l'onglet (rendu avant lui) : la
             boutique s'ancre en bas et grandit vers le haut. */}
         <div className="shop-drawer__body">
@@ -145,16 +158,20 @@ const Shop = ({
                             ) : (
                                 // Même emplacement que le sélecteur de niveau : PV (maison,
                                 // tours), précédés de l'attaque pour les tours.
-                                <div className="shop-card__level">
+                                <div className="shop-card__level shop-card__level--stats">
                                     {sp.atk != null && (
-                                        <span className="shop-card__level-label" title="Attaque">
-                                            {sp.atk}
-                                            <img src="/sword.png" alt="attaque" className="shop-card__level-star" draggable={false} />
+                                        <span
+                                            className="soldier-stat-badge soldier-stat-badge--atk soldier-stat-badge--sm"
+                                            title="Attaque"
+                                        >
+                                            {formatStatValue(sp.atk)}
                                         </span>
                                     )}
-                                    <span className="shop-card__level-label shop-card__level-label--hp" title="Points de vie">
-                                        {sp.hp}
-                                        <img src="/coeurPlein.png" alt="points de vie" className="shop-card__level-star" draggable={false} />
+                                    <span
+                                        className="soldier-stat-badge soldier-stat-badge--hp soldier-stat-badge--sm"
+                                        title="Points de vie"
+                                    >
+                                        {formatStatValue(sp.hp)}
                                     </span>
                                 </div>
                             )}
@@ -193,7 +210,7 @@ const Shop = ({
         <button
             type="button"
             className="shop-drawer__handle"
-            onClick={onToggle}
+            onClick={() => (open ? (onClose ?? onToggle)() : onToggle())}
             aria-expanded={open}
             title={open ? 'Fermer la boutique' : 'Ouvrir la boutique'}
         >

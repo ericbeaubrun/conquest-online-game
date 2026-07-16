@@ -12,38 +12,64 @@ import {
     NOTIF_SRC,
     PLACEMENT_SRC,
     formatStatValue,
+    formatUnitStatValue,
     placementImgSize,
 } from './constants.js';
 
-// Nombres d'attaque / points de vie aux coins d'une unité : attaque en haut à
-// droite, vie en bas à droite. `atk` à `null` n'affiche aucun nombre d'attaque
-// (ex. la base, qui n'attaque pas). `box` est la demi-largeur de référence : la
-// case pour les bâtiments (les tours, dessinées plus grandes que leur case,
-// gardent ainsi leurs nombres dans la case), le sprite pour les soldats.
-const StatCornerLabels = ({cx, cy, size, box, atk, hp, atkYOffset = 0.1, hpYOffset = 0.11, hpXOffset = 0.16}) => {
-    const half = (box ?? size) / 2;
+// Pastille de fond colorée (selon le type de stat) derrière un nombre
+// d'attaque/de vie, pour le garder lisible quel que soit le fond de la case.
+const StatBadge = ({x, y, fontSize, text, kind}) => {
+    // Boîte englobante approximative d'un chiffre (pas de jambage) : le padding
+    // est ajouté symétriquement de chaque côté pour que le fond reste centré
+    // sur le texte, dont la position (x, y) ne bouge pas.
+    const paddingX = fontSize * 0.12;
+    const paddingY = fontSize * 0.12;
+    const textWidth = text.length * fontSize * 0.4;
+    const capHeight = fontSize * 0.58;
+    const descent = fontSize * 0.02;
+    const width = textWidth + paddingX * 2;
+    const height = capHeight + descent + paddingY * 2;
+    return (
+        <>
+            <rect
+                x={x - width / 2}
+                y={y - capHeight - paddingY}
+                width={width}
+                height={height}
+                rx={0}
+                vectorEffect="non-scaling-stroke"
+                className={`soldier-stat-label__bg soldier-stat-label__bg--${kind}`}
+            />
+            <text x={x} y={y} textAnchor="middle" className="soldier-stat-label" style={{fontSize}}>
+                <tspan className={`soldier-stat-label__${kind}`}>{text}</tspan>
+            </text>
+        </>
+    );
+};
+
+// Nombres d'attaque / points de vie en bas d'une unité : attaque en bas à
+// gauche, vie en bas à droite. `atk` à `null` n'affiche aucun nombre d'attaque
+// (ex. la base, qui n'attaque pas).
+const StatCornerLabels = ({cx, cy, size, atk, hp, yOffset = 0.56, xOffset = 0.18, formatValue = formatStatValue}) => {
+    const fontSize = size * 0.35;
     return (
         <>
             {atk != null && (
-                <text
-                    x={cx + half - size * 0.16}
-                    y={cy - half + size * atkYOffset}
-                    textAnchor="end"
-                    className="soldier-stat-label"
-                    style={{fontSize: size * 0.19}}
-                >
-                    <tspan className="soldier-stat-label__atk">{formatStatValue(atk)}</tspan>
-                </text>
+                <StatBadge
+                    x={cx - size * xOffset}
+                    y={cy + size * yOffset}
+                    fontSize={fontSize}
+                    text={formatValue(atk)}
+                    kind="atk"
+                />
             )}
-            <text
-                x={cx + half - size * hpXOffset}
-                y={cy + half + size * hpYOffset}
-                textAnchor="end"
-                className="soldier-stat-label"
-                style={{fontSize: size * 0.19}}
-            >
-                <tspan className="soldier-stat-label__hp">{formatStatValue(hp)}</tspan>
-            </text>
+            <StatBadge
+                x={cx + size * xOffset}
+                y={cy + size * yOffset}
+                fontSize={fontSize}
+                text={formatValue(hp)}
+                kind="hp"
+            />
         </>
     );
 };
@@ -72,8 +98,8 @@ export const Bases = memo(function Bases({baseCells, size, destroyedBases, baseH
                         size={size}
                         atk={null}
                         hp={baseHp?.[cell.id] ?? BUILDING_STATS.base.hp}
-                        hpYOffset={-0.05}
-                        hpXOffset={0.2}
+                        xOffset={0}
+                        yOffset={0.15}
                     />
                 )}
             </g>
@@ -83,14 +109,12 @@ export const Bases = memo(function Bases({baseCells, size, destroyedBases, baseH
 // Items posés (soldats, maisons, tours). Le niveau d'un soldat se lit à son
 // sprite (skin par niveau) plutôt qu'à un badge numérique.
 export const Buildings = memo(function Buildings({placements, cellMap, size, visibleStatIds}) {
-    // Géométrie de repère pour l'icône d'affinité, calée sur la barre de vie.
-    const barW = size * 0.6;
-    const barH = size * 0.11;
     return [...placements.entries()].map(([id, placed]) => {
         const cell = cellMap.get(id);
         if (!cell) return null;
         const isSoldier = placed.type === 'soldier';
         const isBuilding = BUILDING_STATS[placed.type] != null && !isSoldier;
+        const isTower = placed.type === 'attackTower' || placed.type === 'defenseTower';
         const imgSize = placementImgSize(placed.type, size);
         const showStats = visibleStatIds.has(id);
         return (
@@ -108,13 +132,13 @@ export const Buildings = memo(function Buildings({placements, cellMap, size, vis
                         ? `translate(${2 * cell.cx} 0) scale(-1 1)`
                         : undefined}
                 />
-                {isSoldier && AFFINITY_SRC[placed.affinity] && (
+                {showStats && isSoldier && AFFINITY_SRC[placed.affinity] && (
                     <image
                         href={AFFINITY_SRC[placed.affinity]}
-                        x={cell.cx - barW / 2 - barH * 0.8}
-                        y={cell.cy + size * 0.49 - barH * 1.6}
-                        width={barH * 1.6}
-                        height={barH * 1.6}
+                        x={cell.cx + size * 0.5 - size * 0.3 - size * 0.06}
+                        y={cell.cy - size * 0.5 - size * 0.02}
+                        width={size * 0.3}
+                        height={size * 0.3}
                         style={{imageRendering: 'pixelated'}}
                     />
                 )}
@@ -125,6 +149,7 @@ export const Buildings = memo(function Buildings({placements, cellMap, size, vis
                         size={size}
                         atk={BUILDING_STATS[placed.type]?.atk ?? null}
                         hp={placed.hp ?? 0}
+                        formatValue={isTower ? formatUnitStatValue : undefined}
                     />
                 )}
                 {showStats && isSoldier && (
@@ -132,11 +157,9 @@ export const Buildings = memo(function Buildings({placements, cellMap, size, vis
                         cx={cell.cx}
                         cy={cell.cy}
                         size={size}
-                        box={imgSize}
                         atk={placed.atk ?? 0}
                         hp={placed.hp ?? 0}
-                        atkYOffset={0.13}
-                        hpYOffset={0.08}
+                        formatValue={formatUnitStatValue}
                     />
                 )}
             </g>

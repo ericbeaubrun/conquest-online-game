@@ -170,6 +170,7 @@ const GameLayout = ({session, onExit}) => {
                         onBuyBonus={(bonusId) => dispatch(buyBonus(selection.id, bonusId))}
                         settings={settings}
                         bonusesEnabled={bonusesEnabled}
+                        onClose={() => setSelection(null)}
                     />
                 ) : buildingView ? (
                     <BuildingPanel
@@ -177,6 +178,7 @@ const GameLayout = ({session, onExit}) => {
                         color={colorOf(buildingView.playerId)}
                         owner={players.find((p) => p.id === buildingView.playerId) || null}
                         settings={settings}
+                        onClose={() => setSelection(null)}
                     />
                 ) : selection?.kind === "tree" ? (
                     <TreePanel owner={treeOwner} settings={settings}/>
@@ -194,6 +196,11 @@ const GameLayout = ({session, onExit}) => {
                         open={shopOpen || !!placeTarget}
                         placeMode={!!placeTarget}
                         onToggle={() => setShopOpen((o) => !o)}
+                        onClose={() => {
+                            setShopOpen(false);
+                            setSelection(null);
+                            setSelectedItem(null);
+                        }}
                         canAct={canAct}
                     />
                 )}

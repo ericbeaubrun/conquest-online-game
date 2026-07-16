@@ -53,10 +53,22 @@ export const placementImgSize = (type, size) => {
 
 // Format compact (3 caractères max) pour un nombre de points de vie élevé
 // (ex. la base) : 1000 -> « 1k », 1200 -> « 1k2 », 2000 -> « 2k »… seule la
-// tranche des centaines est gardée, les dizaines/unités sont tronquées.
+// tranche des centaines est gardée, les dizaines/unités sont tronquées. Les
+// valeurs à un chiffre sont préfixées d'un 0 (ex. « 05 ») pour garder une
+// largeur constante entre les badges.
 export const formatStatValue = (value) => {
+    if (value < 10) return `0${value}`;
     if (value < 1000) return String(value);
     const thousands = Math.floor(value / 1000);
     const hundreds = Math.floor((value % 1000) / 100);
     return hundreds > 0 ? `${thousands}k${hundreds}` : `${thousands}k`;
+};
+
+// Même format que `formatStatValue`, mais pour les soldats (jamais les
+// structures : base, maison, tours) : au-delà de 99, on affiche « FF » plutôt
+// que de tronquer le nombre, les soldats n'atteignant pas des valeurs à
+// hauteur de base/bâtiment.
+export const formatUnitStatValue = (value) => {
+    if (value >= 100) return 'FF';
+    return formatStatValue(value);
 };

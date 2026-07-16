@@ -27,8 +27,8 @@ const Card = ({ soldier, color, label }) => (
             )}
         </div>
         <div className="merge-card__stats">
-            <AtkStars atk={soldier.atk} max={SOLDIER_ATK_MAX} />
-            <HpHearts hp={soldier.hp} max={SOLDIER_HP_MAX} />
+            <AtkStars atk={soldier.atk} max={SOLDIER_ATK_MAX} showValue hideStars />
+            <HpHearts hp={soldier.hp} max={SOLDIER_HP_MAX} showValue hideStars />
         </div>
     </div>
 );

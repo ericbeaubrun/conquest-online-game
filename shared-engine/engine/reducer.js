@@ -52,9 +52,18 @@ import {
     SKELETON2_ATK,
     WARLOCK_SUMMON_CHANCE,
     PALADIN_HP_REGEN,
+    PALADIN_IDLE_TURNS,
+    VAMPIRE_DRAIN,
+    isSummonedUnit,
     unlockedBonusIds,
     purchasedSoldierStats,
     soldierCostForLevel,
+    DRUID_TREE_SRC,
+    DRUID_TREE_HP,
+    DRUID_TREE_ATK,
+    DRUID_TREE_LEVEL,
+    DRUID_TREES_REQUIRED,
+    DRUID_TREES_TURNS,
 } from '../data/soldier.js';
 import {getNeighbors, hexId} from '../data/hex.js';
 
@@ -69,7 +78,7 @@ function makeSoldier(playerId, uid, settings) {
         // PV / attaque de départ configurables (retombent sur les valeurs par défaut).
         hp: settings?.soldierHp ?? SOLDIER_HP_DEFAULT,
         atk: settings?.soldierAtk ?? SOLDIER_ATK_DEFAULT,
-        affinity: null, // fire | ice | lightning | null
+        affinity: 'fire', // fire | ice | lightning | null
         bonus: null, // cupide | rapide | assaillant | protecteur | soigneur | bucheron | null
         behavior: null, // conquete | attaque | defense | arbre | renfort | null
         // Avancement des défis PROPRE à ce soldat (metric -> compteur). Sert à
@@ -97,6 +106,27 @@ function makeSkeleton(playerId, uid, {skin = SKELETON_SRC, hp = SKELETON_HP, atk
         bonus: null,
         behavior: null,
         skin,
+        progress: {},
+    };
+}
+
+// Arbre-druide invoqué par le bonus « Druide » : quand un druide cible un arbre,
+// celui-ci se change en cette unité alliée (au lieu d'être récolté). Combattant
+// à part entière (déplacement, combat, territoire) au sprite dédié, de niveau 2
+// mais NON fusionnable et sans bonus — comme un squelette, via le marqueur `unit`.
+function makeDruidTree(playerId, uid) {
+    return {
+        type: 'soldier',
+        unit: 'druidTree', // sous-type invoqué : ne fusionne pas, ne porte pas de bonus.
+        playerId,
+        uid,
+        level: DRUID_TREE_LEVEL,
+        hp: DRUID_TREE_HP,
+        atk: DRUID_TREE_ATK,
+        affinity: null,
+        bonus: null,
+        behavior: null,
+        skin: DRUID_TREE_SRC,
         progress: {},
     };
 }
@@ -216,7 +246,11 @@ function approachCell(board, reachable, fromId, toId) {
     for (const n of getNeighbors(target.q, target.r)) {
         const nid = hexId(n.q, n.r);
         const d = reachable.dist.get(nid);
-        if (d != null && d < bestDist) {
+        // Case d'approche = case où le soldat peut réellement se tenir (jamais un
+        // relais traversé par le ninja). Pour un soldat ordinaire, `standable`
+        // couvre toutes les cases atteintes : le comportement est inchangé.
+        const canStand = !reachable.standable || reachable.standable.has(nid);
+        if (d != null && canStand && d < bestDist) {
             bestDist = d;
             bestId = nid;
         }
@@ -399,6 +433,37 @@ function reduceChop(state, {fromId, toId}) {
     const chopFromId = approachCell(board, reachable, fromId, toId);
     if (chopFromId == null) return state; // aucune approche possible
 
+    // Bonus « Druide » : au lieu de récolter l'arbre, il le TRANSFORME en une
+    // unité alliée « arbre-druide » sur la case de l'arbre. Le druide reste sur
+    // sa case d'approche (adjacente) ; son tour est consommé, sans gain d'or.
+    if (from.bonus === 'druid') {
+        const targetCell = board.cellMap.get(toId);
+        const dq = Number(chopFromId.split(',')[0]);
+        let druid = from;
+        if (targetCell && targetCell.q !== dq) {
+            druid = {...druid, facing: targetCell.q > dq ? 'right' : 'left'};
+        }
+        const placements = new Map(state.placements);
+        placements.delete(toId); // l'arbre disparaît…
+        placements.delete(fromId); // …et le druide quitte sa case de départ
+        placements.set(chopFromId, druid); // le druide se tient sur sa case d'approche
+        const uidSeq = state.uidSeq + 1;
+        placements.set(toId, makeDruidTree(state.activePlayerId, `s${uidSeq}`)); // …remplacé par l'unité
+        // Les deux cases portent une unité alliée : elles appartiennent désormais
+        // au joueur (invariant : une unité se tient sur son propre territoire).
+        let ownership = state.ownership;
+        if (
+            state.ownership.get(toId) !== state.activePlayerId ||
+            state.ownership.get(chopFromId) !== state.activePlayerId
+        ) {
+            ownership = new Map(state.ownership);
+            ownership.set(toId, state.activePlayerId);
+            ownership.set(chopFromId, state.activePlayerId);
+        }
+        const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
+        return {...state, placements, ownership, movedSoldiers, uidSeq};
+    }
+
     // Avancement des défis : +1 arbre abattu, et +1 si l'arbre était sur une
     // case possédée par un adversaire (territoire ennemi).
     let chopper = withProgress(from, CHALLENGE_METRICS.TREES_CHOPPED, 1);
@@ -480,14 +545,23 @@ function spawnTrees(state, board, rng) {
 // 2 arbres sur des cases collées à SON territoire (frontière), indépendamment du
 // système d'apparition normal (n'entre pas dans le plafond / la montée en
 // intensité). Prend la carte des items déjà mise à jour par `spawnTrees`.
+// Un fermier ne produit QUE s'il se tient lui-même sur une case frontière (sa
+// case borde au moins une case qui n'appartient pas au joueur) : un fermier
+// enfoui au cœur du territoire ne fait rien pousser.
 function spawnFarmerTrees(state, board, placementsIn, rng) {
     // Rien à faire si les arbres sont désactivés en configuration.
     if (state.settings && state.settings.treesEnabled === false) return placementsIn;
     const pid = state.activePlayerId;
-    // Combien de soldats-fermiers possède le joueur actif ?
+    // Une case est « frontière » quand elle borde au moins une case qui n'est pas
+    // au joueur (même définition pour la case du fermier et les cases de pousse).
+    const isFrontier = (q, r) =>
+        getNeighbors(q, r).some((n) => state.ownership.get(hexId(n.q, n.r)) !== pid);
+    // Combien de fermiers du joueur actif se tiennent SUR une case frontière ?
     let farmers = 0;
-    for (const p of placementsIn.values()) {
-        if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'farmer') farmers += 1;
+    for (const [id, p] of placementsIn) {
+        if (p.type !== 'soldier' || p.playerId !== pid || p.bonus !== 'farmer') continue;
+        const cell = board.cellMap.get(id);
+        if (cell && isFrontier(cell.q, cell.r)) farmers += 1;
     }
     if (farmers === 0) return placementsIn;
 
@@ -497,7 +571,7 @@ function spawnFarmerTrees(state, board, placementsIn, rng) {
     const eligible = board.cells.filter((c) => {
         if (c.blocked || board.baseIds.has(c.id) || placementsIn.has(c.id)) return false;
         if (state.ownership.get(c.id) !== pid) return false; // seulement sur son sol
-        return getNeighbors(c.q, c.r).some((n) => state.ownership.get(hexId(n.q, n.r)) !== pid);
+        return isFrontier(c.q, c.r);
     });
     if (!eligible.length) return placementsIn;
 
@@ -624,6 +698,118 @@ function healPaladins(state, placementsIn) {
     return placements || placementsIn;
 }
 
+// Bonus « Vampire » : à la fin du tour de son propriétaire, chaque vampire draine
+// VAMPIRE_DRAIN PV à CHAQUE soldat allié adjacent (jamais en dessous de 1 PV, pour
+// ne pas achever ses propres alliés) et récupère pour lui le total ainsi volé
+// (plafonné au maximum d'un soldat). Modifie la carte des items.
+function applyVampires(state, board, placementsIn) {
+    const pid = state.activePlayerId;
+    const vampireCells = [];
+    for (const [id, p] of placementsIn) {
+        if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'vampire') vampireCells.push(id);
+    }
+    if (!vampireCells.length) return placementsIn;
+
+    const placements = new Map(placementsIn);
+    for (const id of vampireCells) {
+        const cell = board.cellMap.get(id);
+        if (!cell) continue;
+        let stolen = 0;
+        for (const n of getNeighbors(cell.q, cell.r)) {
+            const nid = hexId(n.q, n.r);
+            const ally = placements.get(nid);
+            if (!ally || ally.type !== 'soldier' || ally.playerId !== pid) continue;
+            // On draine au plus VAMPIRE_DRAIN, sans jamais descendre l'allié sous 1 PV.
+            const drain = Math.min(VAMPIRE_DRAIN, Math.max(0, (ally.hp || 0) - 1));
+            if (drain <= 0) continue;
+            placements.set(nid, {...ally, hp: (ally.hp || 0) - drain});
+            stolen += drain;
+        }
+        if (stolen > 0) {
+            const vamp = placements.get(id);
+            placements.set(id, {...vamp, hp: Math.min((vamp.hp || 0) + stolen, SOLDIER_HP_MAX)});
+        }
+    }
+    return placements;
+}
+
+// Bonus « Conquérant » : à la fin du tour de son propriétaire, chaque conquérant
+// annexe toutes les cases VIDES adjacentes — libres (aucune unité ni structure),
+// non bloquées, hors base — qu'elles soient neutres OU déjà possédées par un
+// adversaire. Modifie la carte des propriétés (`ownership`), pas les items ; prend
+// la carte des items de fin de tour pour savoir quelles cases sont vraiment vides.
+function applyConquerors(state, board, placements, ownershipIn) {
+    const pid = state.activePlayerId;
+    let ownership = null; // copié à la volée seulement si une case est annexée
+    for (const [id, p] of placements) {
+        if (p.type !== 'soldier' || p.playerId !== pid || p.bonus !== 'conqueror') continue;
+        const cell = board.cellMap.get(id);
+        if (!cell) continue;
+        for (const n of getNeighbors(cell.q, cell.r)) {
+            const nid = hexId(n.q, n.r);
+            const ncell = board.cellMap.get(nid);
+            if (!ncell || ncell.blocked || board.baseIds.has(nid)) continue; // hors carte / eau / base
+            if (placements.has(nid)) continue; // case occupée (non vide) : pas d'annexion
+            if ((ownership || ownershipIn).get(nid) === pid) continue; // déjà à nous
+            if (!ownership) ownership = new Map(ownershipIn);
+            ownership.set(nid, pid);
+        }
+    }
+    return ownership || ownershipIn;
+}
+
+// Défi « Druide » : à la fin du tour de son propriétaire, met à jour le compteur
+// de tours CONSÉCUTIFS pendant lesquels le joueur a gardé au moins
+// DRUID_TREES_REQUIRED arbres sur son territoire. Le compteur monte tant que la
+// condition tient, retombe à zéro dès qu'elle est rompue, et reste acquis une
+// fois l'objectif atteint (le défi ne se re-verrouille plus). Crédité sur tous
+// les soldats du joueur (comme les autres défis « par soldat »).
+function trackDruidChallenge(state, placementsIn) {
+    const pid = state.activePlayerId;
+    let trees = 0;
+    for (const [id, p] of placementsIn) {
+        if (p.type === 'tree' && state.ownership.get(id) === pid) trees += 1;
+    }
+    const kept = trees >= DRUID_TREES_REQUIRED;
+    const metric = CHALLENGE_METRICS.DRUID_TREES_KEPT;
+    let placements = null; // copié à la volée seulement si un compteur change
+    for (const [id, p] of placementsIn) {
+        if (p.type !== 'soldier' || p.playerId !== pid || isSummonedUnit(p)) continue;
+        const cur = p.progress?.[metric] || 0;
+        let next;
+        if (cur >= DRUID_TREES_TURNS) next = cur; // déjà accompli : reste acquis
+        else if (kept) next = cur + 1; // la série continue
+        else next = 0; // série interrompue
+        if (next === cur) continue;
+        if (!placements) placements = new Map(placementsIn);
+        placements.set(id, {...p, progress: {...p.progress, [metric]: next}});
+    }
+    return placements || placementsIn;
+}
+
+// Défi « Paladin » : un soldat qui termine son tour SANS AVOIR AGI (ni déplacé,
+// ni fusionné, ni attaqué, ni abattu — absent de `movedSoldiers`) progresse ; agir
+// remet son compteur à zéro. Le défi se débloque après PALADIN_IDLE_TURNS tours
+// consécutifs d'inactivité, puis reste acquis (comme le défi « Druide »). Appelée
+// AVANT la réinitialisation de `movedSoldiers` en fin de tour.
+function trackPaladinChallenge(state, placementsIn) {
+    const pid = state.activePlayerId;
+    const metric = CHALLENGE_METRICS.PALADIN_IDLE_TURNS;
+    let placements = null; // copié à la volée seulement si un compteur change
+    for (const [id, p] of placementsIn) {
+        if (p.type !== 'soldier' || p.playerId !== pid || isSummonedUnit(p)) continue;
+        const cur = p.progress?.[metric] || 0;
+        let next;
+        if (cur >= PALADIN_IDLE_TURNS) next = cur; // déjà accompli : reste acquis
+        else if (!state.movedSoldiers.has(p.uid)) next = cur + 1; // resté immobile
+        else next = 0; // a agi : série interrompue
+        if (next === cur) continue;
+        if (!placements) placements = new Map(placementsIn);
+        placements.set(id, {...p, progress: {...p.progress, [metric]: next}});
+    }
+    return placements || placementsIn;
+}
+
 // Pose d'un item (soldat, maison, tour) sur une case du territoire actif.
 function reducePlace(state, {cellId, itemType, level = 1}) {
     const board = getLogicalBoard(state.mapId);
@@ -659,6 +845,15 @@ function reducePlace(state, {cellId, itemType, level = 1}) {
         if (stats?.atk != null) item.atk = stats.atk; // tours : attaque de riposte
     }
     placements.set(cellId, item);
+    // Défi « Viking » : bâtir une tour (attaque ou défense) crédite tous les
+    // soldats du joueur actif — le défi (goal 1) se débloque dès la première tour.
+    if (itemType === 'attackTower' || itemType === 'defenseTower') {
+        for (const [id, p] of placements) {
+            if (p.type === 'soldier' && p.playerId === state.activePlayerId && !isSkeleton(p)) {
+                placements.set(id, withProgress(p, CHALLENGE_METRICS.TOWERS_BOUGHT, 1));
+            }
+        }
+    }
     const gold = {...state.gold, [state.activePlayerId]: purse - cost};
     return {...state, placements, gold, uidSeq};
 }
@@ -678,7 +873,7 @@ function reduceBuyBonus(state, {cellId, bonusId}) {
     if (state.settings?.bonusEnabled?.[bonusId] === false) return state; // bonus désactivé
     const bonus = BONUS_OFFERS.find((b) => b.id === bonusId);
     if (!bonus || bonus.requiredLevel !== (soldier.level || 1)) return state;
-    if (!isBonusUnlocked(soldier, bonus)) return state; // défi non accompli
+    if (!isBonusUnlocked(soldier, bonus, state.settings)) return state; // défi non accompli (ou défi désactivé : débloqué)
 
     const price = bonusPriceOf(bonus, state.settings); // prix configurable
     const purse = state.gold[state.activePlayerId] || 0;
@@ -730,9 +925,17 @@ function reduceEndTurn(state) {
     placements = applyAlchemists(state, board, placements);
     // Régénération « Paladin ».
     placements = healPaladins(state, placements);
+    // Ponction « Vampire » : draine 1 PV à chaque allié adjacent, au profit du vampire.
+    placements = applyVampires(state, board, placements);
     // Invocation « Démoniste » : un squelette fragile par démoniste.
     const summon = spawnWarlockSkeletons(state, board, placements, state.uidSeq, rng);
     placements = summon.placements;
+    // Défi « Druide » : progression du compteur « 5 arbres gardés N tours ».
+    // Placé après les apparitions d'arbres pour compter l'état de fin de tour.
+    placements = trackDruidChallenge(state, placements);
+    // Défi « Paladin » : progression du compteur « N tours sans agir ». Doit lire
+    // `state.movedSoldiers` AVANT sa réinitialisation ci-dessous.
+    placements = trackPaladinChallenge(state, placements);
     // Acquittement des notifications de bonus : les bonus débloqués et réclamables
     // des soldats du joueur qui vient de jouer rejoignent leur `bonusSeen`. La
     // notification ne réapparaîtra donc plus, même si le bonus reste non réclamé.
@@ -746,9 +949,12 @@ function reduceEndTurn(state) {
         }
     }
     placements = acked;
+    // Annexion « Conquérant » : les cases vides adjacentes rejoignent le joueur.
+    const ownership = applyConquerors(state, board, placements, state.ownership);
     return {
         ...state,
         placements,
+        ownership,
         uidSeq: summon.uidSeq,
         rngSeed: rng.seed, // graine avancée : la suite de la partie reste déterministe
         gold: {...state.gold, [activePlayerId]: (state.gold[activePlayerId] || 0) + income},

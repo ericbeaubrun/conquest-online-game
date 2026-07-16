@@ -20,6 +20,9 @@ const DEFAULT_BONUS_PRICE = Object.fromEntries(BONUS_OFFERS.map((b) => [b.id, b.
 const DEFAULT_BONUS_UPKEEP = Object.fromEntries(BONUS_OFFERS.map((b) => [b.id, b.upkeep ?? 0]));
 // Chaque bonus est autorisé par défaut ; on peut en désactiver individuellement.
 const DEFAULT_BONUS_ENABLED = Object.fromEntries(BONUS_OFFERS.map((b) => [b.id, true]));
+// Défi de chaque bonus ACTIF par défaut ; on peut le désactiver individuellement
+// pour débloquer le bonus directement (sans avoir à l'accomplir).
+const DEFAULT_BONUS_CHALLENGE_ENABLED = Object.fromEntries(BONUS_OFFERS.map((b) => [b.id, true]));
 
 export const DEFAULT_SETTINGS = {
     // Économie
@@ -33,6 +36,7 @@ export const DEFAULT_SETTINGS = {
         soldier2: SOLDIER_UPKEEP[2],
         soldier3: SOLDIER_UPKEEP[3],
         soldier4: SOLDIER_UPKEEP[4],
+        soldier5: SOLDIER_UPKEEP[5],
         tower: TOWER_UPKEEP,
         skeleton: SKELETON_UPKEEP,
     },
@@ -49,6 +53,7 @@ export const DEFAULT_SETTINGS = {
     soldierHp: 10,
     soldierAtk: 5,
     bonusEnabled: DEFAULT_BONUS_ENABLED, // bonus autorisés (activables un par un)
+    bonusChallengeEnabled: DEFAULT_BONUS_CHALLENGE_ENABLED, // défis actifs (désactivables un par un)
     bonusPrice: DEFAULT_BONUS_PRICE, // prix d'achat par bonus
     bonusUpkeep: DEFAULT_BONUS_UPKEEP, // entretien par tour par bonus
     // Partie

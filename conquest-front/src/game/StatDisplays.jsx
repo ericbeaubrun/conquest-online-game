@@ -3,6 +3,7 @@
 // en épées / cœurs sur 5 crans.
 import {SOLDIER_HP_MAX} from '@conquest/shared-engine/engine/rules.js';
 import {atkHalfStarsFlat, hpHalfHearts} from '@conquest/shared-engine/data/soldier.js';
+import {formatStatValue, formatUnitStatValue} from './board/constants.js';
 
 const STAR_SRC = {full: '/epeePlein.png', half: '/epeeMoitie.png', empty: '/epeeVide.png'};
 const HEART_SRC = {full: '/coeurPlein.png', half: '/coeurMoitie.png', empty: '/coeurVide.png'};
@@ -42,22 +43,56 @@ export const StatBar = ({icon, label, value, max, kind, valueText, valueNode, hi
 // texte déjà formaté (ex. « 42% » ou « 42 → 20% ») affiché avant la rangée.
 // `percentWide` : élargit la case du pourcentage (panneau de combat) pour que
 // le texte plus long « avant% → après% » ne déborde pas sur les icônes.
-const IconRating = ({kind, alt, srcSet, halfCount, percentText, percentWide}) => {
+// `badgeValue` (optionnel, panneau du soldat / aperçus) : remplace le
+// pourcentage par la valeur brute d'attaque/vie, affichée dans la même
+// pastille que sur le plateau (fond coloré, police pixel blanche) — même
+// place, même style. `badgeBeforeValue` (aperçu de combat) : affiche
+// « avant→après » dans la pastille élargie (voir `percentWide`). `badgeFormat`
+// (aperçu de combat) : formateur utilisé pour la pastille — par défaut celui
+// du plateau (plafonné à « FF » dès 100), remplacé par `formatStatValue` (pas
+// de plafond) pour toujours voir la valeur réelle en combat. `hideStars`
+// (aperçus de fusion / combat) : masque la rangée d'icônes, ne garde que la
+// pastille de valeur brute.
+const IconRating = ({
+    kind,
+    alt,
+    srcSet,
+    halfCount,
+    percentText,
+    percentWide,
+    badgeValue,
+    badgeBeforeValue,
+    badgeFormat = formatUnitStatValue,
+    hideStars = false,
+}) => {
     const full = Math.floor(halfCount / 2);
     const hasHalf = halfCount % 2 === 1;
     return (
         <div className={`soldier-stat soldier-stat--${kind}`} role="img" aria-label={alt}>
-            {percentText != null && (
-                <span className={`soldier-stars__percent ${percentWide ? 'soldier-stars__percent--wide' : ''}`}>
-                    {percentText}
+            {badgeValue != null ? (
+                <span
+                    className={`soldier-stat-badge soldier-stat-badge--${kind} ${
+                        percentWide ? 'soldier-stat-badge--wide' : ''
+                    }`}
+                >
+                    {badgeBeforeValue != null && `${badgeFormat(badgeBeforeValue)}→`}
+                    {badgeFormat(badgeValue)}
                 </span>
+            ) : (
+                percentText != null && (
+                    <span className={`soldier-stars__percent ${percentWide ? 'soldier-stars__percent--wide' : ''}`}>
+                        {percentText}
+                    </span>
+                )
             )}
-            <div className="soldier-stars">
-                {Array.from({length: 5}, (_, i) => {
-                    const state = i < full ? 'full' : i === full && hasHalf ? 'half' : 'empty';
-                    return <img key={i} src={srcSet[state]} alt="" className="soldier-stars__item"/>;
-                })}
-            </div>
+            {!hideStars && (
+                <div className="soldier-stars">
+                    {Array.from({length: 5}, (_, i) => {
+                        const state = i < full ? 'full' : i === full && hasHalf ? 'half' : 'empty';
+                        return <img key={i} src={srcSet[state]} alt="" className="soldier-stars__item"/>;
+                    })}
+                </div>
+            )}
         </div>
     );
 };
@@ -69,7 +104,7 @@ const ratioPercent = (value, max) => Math.round(Math.max(0, value / max) * 100);
 // Note d'attaque en épées : une demi-épée par tranche de 10 points d'attaque
 // (échelle absolue, indépendante du maximum réel), précédée du pourcentage
 // d'attaque (`atk` rapporté à `max`).
-export const AtkStars = ({atk, max, wide}) => (
+export const AtkStars = ({atk, max, wide, showValue = false, uncapped = false, hideStars = false}) => (
     <IconRating
         kind="atk"
         alt="Attaque"
@@ -77,6 +112,9 @@ export const AtkStars = ({atk, max, wide}) => (
         halfCount={atkHalfStarsFlat(atk)}
         percentText={`${ratioPercent(atk, max)}%`}
         percentWide={wide}
+        badgeValue={showValue ? atk : null}
+        badgeFormat={uncapped ? formatStatValue : undefined}
+        hideStars={hideStars}
     />
 );
 
@@ -84,7 +122,7 @@ export const AtkStars = ({atk, max, wide}) => (
 // pourcentage de vie restante. `beforeHp` (optionnel, panneau de combat) :
 // affiche « avant% → après% » — passer alors `wide` pour que la case élargie
 // n'empiète pas sur les cœurs.
-export const HpHearts = ({hp, max = SOLDIER_HP_MAX, beforeHp, wide}) => (
+export const HpHearts = ({hp, max = SOLDIER_HP_MAX, beforeHp, wide, showValue = false, uncapped = false, hideStars = false}) => (
     <IconRating
         kind="hp"
         alt="Points de vie"
@@ -96,5 +134,9 @@ export const HpHearts = ({hp, max = SOLDIER_HP_MAX, beforeHp, wide}) => (
                 : `${ratioPercent(hp, max)}%`
         }
         percentWide={wide}
+        badgeValue={showValue ? hp : null}
+        badgeBeforeValue={showValue && beforeHp != null ? beforeHp : null}
+        badgeFormat={uncapped ? formatStatValue : undefined}
+        hideStars={hideStars}
     />
 );

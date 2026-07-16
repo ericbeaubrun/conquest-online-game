@@ -1,7 +1,7 @@
 import {ITEM_SRC} from '@conquest/shared-engine/data/items.js';
 import {AtkStars, HpHearts} from './StatDisplays.jsx';
 import {soldierSprite} from '@conquest/shared-engine/data/soldier.js';
-import {combatResult} from '@conquest/shared-engine/engine/rules.js';
+import {combatResult, isTower} from '@conquest/shared-engine/engine/rules.js';
 import {DEV_CONFIG} from '../config/devConfig.js';
 
 // Image d'une unité (soldat ou bâtiment). La base n'est pas un item de boutique.
@@ -32,12 +32,12 @@ const Card = ({before, after, color, label, dmg}) => {
                 )}
             </div>
             <div className="merge-card__stats">
-                {before.atk != null && <AtkStars atk={before.atk} max={PREVIEW_STAT_MAX} wide/>}
+                {before.atk != null && <AtkStars atk={before.atk} max={PREVIEW_STAT_MAX} showValue uncapped hideStars/>}
                 <div className="merge-card__hp">
                     {DEV_CONFIG.showFightDamageBadge && dmg > 0 && (
                         <span className="merge-card__atk-note-value">−{dmg}</span>
                     )}
-                    <HpHearts hp={after.hp} beforeHp={before.hp} max={PREVIEW_STAT_MAX} wide/>
+                    <HpHearts hp={after.hp} beforeHp={before.hp} max={PREVIEW_STAT_MAX} wide showValue uncapped hideStars/>
                 </div>
             </div>
         </div>
@@ -66,16 +66,20 @@ const combatOutcome = (attackerDead, defenderDead) => {
 const CombatPreview = ({attacker, defender, attackerColor, defenderColor}) => {
     const res = combatResult(attacker, defender);
     const outcome = combatOutcome(res.attacker.dead, res.defender.dead);
+    // Dégâts réellement subis par chaque camp : nuls quand un viking encaisse une
+    // tour (bonus « Viking »), sinon l'attaque adverse (cohérent avec combatResult).
+    const attackerDmg = attacker.bonus === 'viking' && isTower(defender) ? 0 : defender.atk;
+    const defenderDmg = defender.bonus === 'viking' && isTower(attacker) ? 0 : attacker.atk;
     return (
-        <div className="merge-preview merge-preview--combat">
+        <div className={`merge-preview merge-preview--combat merge-preview--${outcome.cls}`}>
             <span className={`merge-preview__outcome merge-preview__outcome--${outcome.cls}`}>
                 {outcome.text}
             </span>
             <div className="merge-preview__row">
                 <Card before={attacker} after={res.attacker} color={attackerColor} label="Attaquant"
-                      dmg={defender.atk}/>
+                      dmg={attackerDmg}/>
                 <span className="merge-preview__vs">VS</span>
-                <Card before={defender} after={res.defender} color={defenderColor} label="Cible" dmg={attacker.atk}/>
+                <Card before={defender} after={res.defender} color={defenderColor} label="Cible" dmg={defenderDmg}/>
             </div>
         </div>
     );

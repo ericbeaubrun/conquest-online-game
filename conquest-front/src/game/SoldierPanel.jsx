@@ -6,6 +6,7 @@ import {
     bonusLabel,
     hasUnlockedBonus,
     isSkeleton,
+    isSummonedUnit,
     levelRankLabel,
     soldierSprite,
 } from '@conquest/shared-engine/data/soldier.js';
@@ -19,12 +20,14 @@ import UpkeepSpec from './UpkeepSpec.jsx';
 // Menu des caractéristiques du soldat sélectionné. Prend la place de la
 // boutique en bas de l'écran tant qu'un soldat est sélectionné. Son portrait
 // fait office de bouton : il ouvre la boutique de bonus (`BonusPanel`) au-dessus.
-const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBonus, selectionId, settings, bonusesEnabled = true}) => {
+const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBonus, selectionId, settings, bonusesEnabled = true, onClose}) => {
     const level = soldier.level || 1;
-    // Pas de boutique de bonus pour un squelette invoqué, ni quand les bonus sont
-    // désactivés en configuration : le portrait n'ouvre alors rien.
+    // Pas de boutique de bonus pour une unité invoquée (squelette, arbre-druide),
+    // ni quand les bonus sont désactivés en configuration : le portrait n'ouvre
+    // alors rien.
     const skeleton = isSkeleton(soldier);
-    const noBonusShop = skeleton || !bonusesEnabled;
+    const summoned = isSummonedUnit(soldier);
+    const noBonusShop = summoned || !bonusesEnabled;
     // Un bonus est débloqué (défi accompli) et pas encore réclamé : notification.
     const notify = hasUnlockedBonus(soldier, settings, bonusesEnabled);
 
@@ -36,6 +39,17 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
 
     return (
         <div className="soldier-panel">
+            {onClose && (
+                <button
+                    type="button"
+                    className="soldier-panel__close"
+                    onClick={onClose}
+                    aria-label="Fermer"
+                    title="Fermer"
+                >
+                    <img src="/croix.png" alt="" draggable={false} />
+                </button>
+            )}
             {bonusOpen && !noBonusShop && (
                 <BonusPanel
                     soldier={soldier}
@@ -67,9 +81,9 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                     onClick={() => !noBonusShop && setBonusOpen((v) => !v)}
                     aria-expanded={noBonusShop ? undefined : bonusOpen}
                     disabled={noBonusShop}
-                    title={skeleton ? 'Squelette invoqué' : bonusesEnabled ? 'Voir les bonus' : 'Bonus désactivés'}
+                    title={summoned ? (skeleton ? 'Squelette invoqué' : 'Unité invoquée') : bonusesEnabled ? 'Voir les bonus' : 'Bonus désactivés'}
                 >
-                    <img src={soldierSprite(soldier)} alt={skeleton ? 'Squelette' : 'Soldat'}/>
+                    <img src={soldierSprite(soldier)} alt={summoned ? (skeleton ? 'Squelette' : 'Unité invoquée') : 'Soldat'}/>
                     {DEV_CONFIG.showSoldierPanelLevel && (
                         <span className="soldier-panel__level">LVL {level}</span>
                     )}
@@ -89,8 +103,8 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                         </span>
                     </span>
                 )}
-                <AtkStars atk={soldier.atk} max={SOLDIER_ATK_MAX}/>
-                <HpHearts hp={soldier.hp}/>
+                <AtkStars atk={soldier.atk} max={SOLDIER_ATK_MAX} showValue/>
+                <HpHearts hp={soldier.hp} showValue/>
             </div>
 
             <div className="soldier-panel__specs">

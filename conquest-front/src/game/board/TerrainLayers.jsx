@@ -81,7 +81,7 @@ export const MoveHighlight = memo(function MoveHighlight({moves, cellMap, game, 
 // ennemis attaquables, hache sur les arbres. Les cases bloquées par un allié
 // (bâtiment / base / soldat infusionnable) ne reçoivent AUCUN marqueur.
 export const Indicators = memo(function Indicators({moves, cellMap, size, game, mover}) {
-    const icon = (id, href, key, iconRatio = 0.75) => {
+    const icon = (id, href, key, iconRatio = 0.65) => {
         const cell = cellMap.get(id);
         if (!cell) return null;
         const iconSize = size * iconRatio;
@@ -117,7 +117,7 @@ export const Indicators = memo(function Indicators({moves, cellMap, size, game, 
             case 'merge':
                 return icon(id, MERGE_SRC, 'm' + id);
             case 'combat':
-                return icon(id, FIGHT_SRC[fightKind(mover, unitAt(game, id))], 'c' + id, 0.7);
+                return icon(id, FIGHT_SRC[fightKind(mover, unitAt(game, id))], 'c' + id, 0.6);
             case 'chop':
                 return icon(id, CHOP_SRC, 'h' + id);
             default:
