@@ -25,10 +25,13 @@ import {
     canMerge,
     mergedSoldier,
     combatResult,
+    canFight,
+    isTower,
     TREE_REWARD,
     TREE_MAX_RATIO,
+    AFFINITY_IDS,
 } from './rules.js';
-import {ITEM_COST} from '../data/items.js';
+import {ITEM_COST, isAffinityItem} from '../data/items.js';
 import {
     CHALLENGE_METRICS,
     BONUS_OFFERS,
@@ -40,7 +43,6 @@ import {
     WARRIOR_HP,
     WARRIOR_ATK,
     WARRIOR_KILL_REWARD,
-    ALCHEMIST_WEAK_HP,
     ALCHEMIST_ATK_BUFF,
     ALCHEMIST_HP_BUFF,
     KING_INCOME_MULT,
@@ -55,6 +57,7 @@ import {
     PALADIN_IDLE_TURNS,
     VAMPIRE_DRAIN,
     isSummonedUnit,
+    canReceiveAffinity,
     unlockedBonusIds,
     purchasedSoldierStats,
     soldierCostForLevel,
@@ -63,7 +66,7 @@ import {
     DRUID_TREE_ATK,
     DRUID_TREE_LEVEL,
     DRUID_TREES_REQUIRED,
-    DRUID_TREES_TURNS,
+    MAGICIAN_GOLD_REWARD,
 } from '../data/soldier.js';
 import {getNeighbors, hexId} from '../data/hex.js';
 
@@ -78,7 +81,7 @@ function makeSoldier(playerId, uid, settings) {
         // PV / attaque de départ configurables (retombent sur les valeurs par défaut).
         hp: settings?.soldierHp ?? SOLDIER_HP_DEFAULT,
         atk: settings?.soldierAtk ?? SOLDIER_ATK_DEFAULT,
-        affinity: 'fire', // fire | ice | lightning | null
+        affinity: null, // fire | ice | lightning | null
         bonus: null, // cupide | rapide | assaillant | protecteur | soigneur | bucheron | null
         behavior: null, // conquete | attaque | defense | arbre | renfort | null
         // Avancement des défis PROPRE à ce soldat (metric -> compteur). Sert à
@@ -214,17 +217,7 @@ function reduceMerge(state, {fromId, toId}) {
     if (!to || to.playerId !== state.activePlayerId) return state;
     if (!canMerge(from, to)) return state; // niveaux différents ou cible au max
 
-    let merged = mergedSoldier(from, to);
-    // Défi « Alchimiste » : le soldat de niveau 2 issu de DEUX soldats affaiblis
-    // (PV < seuil chacun) débloque le bonus. La progression voyage avec le
-    // soldat fusionné (elle survit aux fusions suivantes via `mergedSoldier`).
-    if (
-        (merged.level || 1) === 2 &&
-        (from.hp || 0) < ALCHEMIST_WEAK_HP &&
-        (to.hp || 0) < ALCHEMIST_WEAK_HP
-    ) {
-        merged = withProgress(merged, CHALLENGE_METRICS.ALCHEMIST_MERGE, 1);
-    }
+    const merged = mergedSoldier(from, to);
 
     const placements = new Map(state.placements);
     placements.delete(fromId);
@@ -300,6 +293,7 @@ function reduceAttack(state, {fromId, toId}) {
         to = state.placements.get(toId);
         if (!to || to.playerId === state.activePlayerId) return state;
     }
+    if (!canFight(mover, to)) return state; // affinités identiques : combat refusé
 
     const {attacker, defender} = combatResult(mover, to);
     const placements = new Map(state.placements);
@@ -312,11 +306,13 @@ function reduceAttack(state, {fromId, toId}) {
     // Applique l'issue du combat sur une case : l'unité survivante garde ses PV
     // à jour ; l'unité morte quitte le plateau, sauf « Mort-vivant » qui laisse
     // un squelette allié (5/10) sur sa case. Renvoie l'unité morte (ou null).
-    const settle = (id, unit, outcome) => {
+    // Défi « Guerrier » : seuls les combats contre un AUTRE SOLDAT comptent —
+    // tours, maisons et bases (structures) sont exclues.
+    const countsForWarriorChallenge = !isBaseTarget && !isTower(to) && to?.type === 'soldier';
+    const settle = (id, unit, outcome, countsForWarrior = true) => {
         if (!outcome.dead) {
             let survivor = {...unit, hp: outcome.hp};
-            // Défi « Guerrier » : chaque combat terminé en vie compte pour un soldat.
-            if (unit.type === 'soldier') {
+            if (unit.type === 'soldier' && countsForWarrior) {
                 survivor = withProgress(survivor, CHALLENGE_METRICS.COMBATS_SURVIVED, 1);
             }
             placements.set(id, survivor);
@@ -357,7 +353,7 @@ function reduceAttack(state, {fromId, toId}) {
     // reste collé à la cible.
     const targetFreed = !attacker.dead && defender.dead && !placements.has(toId);
     const attackerFinalId = targetFreed ? toId : attackFromId;
-    settle(attackerFinalId, mover, attacker);
+    settle(attackerFinalId, mover, attacker, countsForWarriorChallenge);
 
     // La case prise en avançant devient la propriété de l'attaquant : un soldat
     // se tient toujours sur son propre territoire (même invariant qu'une conquête).
@@ -634,16 +630,97 @@ function applyAlchemists(state, board, placementsIn) {
     return placements;
 }
 
+// Bonus « Magicien » : à la fin du tour de son propriétaire, chaque magicien
+// donne 1 affinité (tirée au sort) à UN allié adjacent sans affinité — jamais
+// lui-même — et rapporte MAGICIAN_GOLD_REWARD or à son propriétaire par don.
+// Renvoie la carte des items ET l'or gagné (0 si aucun don).
+function applyMagicians(state, board, placementsIn, rng) {
+    const pid = state.activePlayerId;
+    const magicianCells = [];
+    for (const [id, p] of placementsIn) {
+        if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'magician') {
+            magicianCells.push(id);
+        }
+    }
+    if (!magicianCells.length) return {placements: placementsIn, goldGained: 0};
+
+    const placements = new Map(placementsIn);
+    let goldGained = 0;
+    for (const id of magicianCells) {
+        const cell = board.cellMap.get(id);
+        if (!cell) continue;
+        const targets = [];
+        for (const n of getNeighbors(cell.q, cell.r)) {
+            const nid = hexId(n.q, n.r);
+            const ally = placements.get(nid);
+            if (ally && ally.type === 'soldier' && ally.playerId === pid && nid !== id && ally.affinity == null) {
+                targets.push(nid);
+            }
+        }
+        if (!targets.length) continue;
+        const targetId = targets[rng.int(targets.length)];
+        const ally = placements.get(targetId);
+        const affinity = AFFINITY_IDS[rng.int(AFFINITY_IDS.length)];
+        placements.set(targetId, {...ally, affinity});
+        goldGained += MAGICIAN_GOLD_REWARD;
+    }
+    return {placements, goldGained};
+}
+
+// Bonus « Prêtre » : à la fin du tour de son propriétaire, chaque prêtre
+// retire 1 point d'attaque à lui-même (jamais sous 0) pour donner 2 PV à
+// l'allié adjacent ayant le plus d'attaque (jamais lui-même). Sans cible
+// éligible, il ne perd rien.
+function applyPriests(state, board, placementsIn) {
+    const pid = state.activePlayerId;
+    const priestCells = [];
+    for (const [id, p] of placementsIn) {
+        if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'priest') {
+            priestCells.push(id);
+        }
+    }
+    if (!priestCells.length) return placementsIn;
+
+    const placements = new Map(placementsIn);
+    for (const id of priestCells) {
+        const cell = board.cellMap.get(id);
+        if (!cell) continue;
+        let bestId = null;
+        let bestAtk = -1;
+        for (const n of getNeighbors(cell.q, cell.r)) {
+            const nid = hexId(n.q, n.r);
+            const ally = placements.get(nid);
+            if (
+                ally &&
+                ally.type === 'soldier' &&
+                ally.playerId === pid &&
+                (ally.atk || 0) > bestAtk
+            ) {
+                bestAtk = ally.atk || 0;
+                bestId = nid;
+            }
+        }
+        if (bestId == null) continue;
+        const priest = placements.get(id);
+        placements.set(id, {...priest, atk: Math.max((priest.atk || 0) - 1, 0)});
+        const ally = placements.get(bestId);
+        placements.set(bestId, {...ally, hp: Math.min((ally.hp || 0) + 2, SOLDIER_HP_MAX)});
+    }
+    return placements;
+}
+
 // Bonus « Démoniste » : à la fin du tour de son propriétaire, chaque démoniste
-// invoque un squelette allié fragile (skeleton2, 10/1) sur une case voisine
-// CONQUISE par le joueur (libre, non bloquée, hors base). L'invocation n'est pas
-// systématique : elle a une chance fixe de se produire chaque tour. Renvoie la
-// carte des items et le compteur d'uid mis à jour.
+// N'AYANT PAS AGI ce tour (ni déplacé, ni fusionné, ni attaqué, ni abattu —
+// absent de `movedSoldiers`) invoque un squelette allié fragile (skeleton2,
+// 10/1) sur une case voisine CONQUISE par le joueur (libre, non bloquée, hors
+// base). L'invocation n'est pas systématique : elle a une chance fixe de se
+// produire chaque tour. Renvoie la carte des items et le compteur d'uid mis à
+// jour.
 function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn, rng) {
     const pid = state.activePlayerId;
     const warlockCells = [];
     for (const [id, p] of placementsIn) {
-        if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'warlock') {
+        if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'warlock' && !state.movedSoldiers.has(p.uid)) {
             warlockCells.push(id);
         }
     }
@@ -758,28 +835,129 @@ function applyConquerors(state, board, placements, ownershipIn) {
     return ownership || ownershipIn;
 }
 
-// Défi « Druide » : à la fin du tour de son propriétaire, met à jour le compteur
-// de tours CONSÉCUTIFS pendant lesquels le joueur a gardé au moins
-// DRUID_TREES_REQUIRED arbres sur son territoire. Le compteur monte tant que la
-// condition tient, retombe à zéro dès qu'elle est rompue, et reste acquis une
-// fois l'objectif atteint (le défi ne se re-verrouille plus). Crédité sur tous
-// les soldats du joueur (comme les autres défis « par soldat »).
+// Défi « Druide » : à la fin du tour de son propriétaire, suit le nombre
+// d'arbres sur son territoire (plafonné à DRUID_TREES_REQUIRED) — condition
+// réévaluée à chaque fin de tour (non cumulative : elle redescend si des
+// arbres disparaissent). Crédité sur tous les soldats du joueur (comme les
+// autres défis « par soldat »).
 function trackDruidChallenge(state, placementsIn) {
     const pid = state.activePlayerId;
     let trees = 0;
     for (const [id, p] of placementsIn) {
         if (p.type === 'tree' && state.ownership.get(id) === pid) trees += 1;
     }
-    const kept = trees >= DRUID_TREES_REQUIRED;
     const metric = CHALLENGE_METRICS.DRUID_TREES_KEPT;
+    const next = Math.min(trees, DRUID_TREES_REQUIRED);
     let placements = null; // copié à la volée seulement si un compteur change
     for (const [id, p] of placementsIn) {
         if (p.type !== 'soldier' || p.playerId !== pid || isSummonedUnit(p)) continue;
         const cur = p.progress?.[metric] || 0;
-        let next;
-        if (cur >= DRUID_TREES_TURNS) next = cur; // déjà accompli : reste acquis
-        else if (kept) next = cur + 1; // la série continue
-        else next = 0; // série interrompue
+        if (next === cur) continue;
+        if (!placements) placements = new Map(placementsIn);
+        placements.set(id, {...p, progress: {...p.progress, [metric]: next}});
+    }
+    return placements || placementsIn;
+}
+
+// Défi « Vampire » : à la fin du tour de son propriétaire, débloqué tant que
+// son territoire ne compte AUCUN arbre — condition réévaluée à chaque fin de
+// tour (non cumulative, contrairement au défi « Druide » : elle se re-verrouille
+// dès qu'un arbre repousse sur le territoire). Crédité sur tous les soldats du
+// joueur (comme les autres défis « par soldat »).
+function trackVampireChallenge(state, placementsIn) {
+    const pid = state.activePlayerId;
+    let hasTree = false;
+    for (const [id, p] of placementsIn) {
+        if (p.type === 'tree' && state.ownership.get(id) === pid) {
+            hasTree = true;
+            break;
+        }
+    }
+    const metric = CHALLENGE_METRICS.NO_TREES_ON_TERRITORY;
+    const next = hasTree ? 0 : 1;
+    let placements = null; // copié à la volée seulement si un compteur change
+    for (const [id, p] of placementsIn) {
+        if (p.type !== 'soldier' || p.playerId !== pid || isSummonedUnit(p)) continue;
+        const cur = p.progress?.[metric] || 0;
+        if (next === cur) continue;
+        if (!placements) placements = new Map(placementsIn);
+        placements.set(id, {...p, progress: {...p.progress, [metric]: next}});
+    }
+    return placements || placementsIn;
+}
+
+// Défi « Chevalier noir » : « tuer OU posséder un squelette ». Les kills sont
+// déjà crédités au fil de l'eau (voir `reduceAttack`) ; ici, à chaque fin de
+// tour, on complète en haussant le compteur à l'objectif si le joueur possède
+// actuellement un squelette — le compteur ne redescend jamais (un kill passé
+// reste acquis), il ne fait donc que ratifier la seconde moitié du défi.
+function trackBlackKnightChallenge(state, placementsIn) {
+    const pid = state.activePlayerId;
+    let ownsSkeleton = false;
+    for (const p of placementsIn.values()) {
+        if (p.type === 'soldier' && p.playerId === pid && isSkeleton(p)) {
+            ownsSkeleton = true;
+            break;
+        }
+    }
+    if (!ownsSkeleton) return placementsIn;
+    const goal = BONUS_OFFERS.find((b) => b.id === 'blackKnight')?.challenge?.goal ?? 0;
+    const metric = CHALLENGE_METRICS.SKELETONS_KILLED;
+    let placements = null; // copié à la volée seulement si un compteur change
+    for (const [id, p] of placementsIn) {
+        if (p.type !== 'soldier' || p.playerId !== pid || isSummonedUnit(p)) continue;
+        const cur = p.progress?.[metric] || 0;
+        if (cur >= goal) continue;
+        if (!placements) placements = new Map(placementsIn);
+        placements.set(id, {...p, progress: {...p.progress, [metric]: goal}});
+    }
+    return placements || placementsIn;
+}
+
+// Défis « Alchimiste » / « Prêtre » : à la fin du tour de son propriétaire,
+// suit le nombre de maisons possédées (plafonné à l'objectif) — condition
+// réévaluée à chaque fin de tour (non cumulative : elle redescend si des
+// maisons sont perdues). Crédité sur tous les soldats du joueur (comme les
+// autres défis « par soldat »). Les deux bonus partagent le même seuil.
+function trackHousesOwnedChallenge(state, placementsIn) {
+    const pid = state.activePlayerId;
+    const goal = BONUS_OFFERS.find((b) => b.id === 'priest')?.challenge?.goal ?? 0;
+    let houses = 0;
+    for (const [id, p] of placementsIn) {
+        if (p.type === 'house' && state.ownership.get(id) === pid) houses += 1;
+    }
+    const metric = CHALLENGE_METRICS.HOUSES_OWNED;
+    const next = Math.min(houses, goal);
+    let placements = null; // copié à la volée seulement si un compteur change
+    for (const [id, p] of placementsIn) {
+        if (p.type !== 'soldier' || p.playerId !== pid || isSummonedUnit(p)) continue;
+        const cur = p.progress?.[metric] || 0;
+        if (next === cur) continue;
+        if (!placements) placements = new Map(placementsIn);
+        placements.set(id, {...p, progress: {...p.progress, [metric]: next}});
+    }
+    return placements || placementsIn;
+}
+
+// Défis « Démoniste » / « Roi » / « Conquérant » : débloqués tant qu'AUCUN
+// soldat ne porte ce bonus sur tout le plateau, tous joueurs confondus —
+// condition réévaluée à chaque fin de tour (non cumulative : elle se
+// re-verrouille dès qu'un tel soldat apparaît). Crédité sur tous les soldats
+// du joueur actif (comme les autres défis « par soldat »).
+function trackNoBonusOnBoardChallenge(state, placementsIn, bonusId, metric) {
+    const pid = state.activePlayerId;
+    let present = false;
+    for (const p of placementsIn.values()) {
+        if (p.type === 'soldier' && p.bonus === bonusId) {
+            present = true;
+            break;
+        }
+    }
+    const next = present ? 0 : 1;
+    let placements = null; // copié à la volée seulement si un compteur change
+    for (const [id, p] of placementsIn) {
+        if (p.type !== 'soldier' || p.playerId !== pid || isSummonedUnit(p)) continue;
+        const cur = p.progress?.[metric] || 0;
         if (next === cur) continue;
         if (!placements) placements = new Map(placementsIn);
         placements.set(id, {...p, progress: {...p.progress, [metric]: next}});
@@ -810,11 +988,34 @@ function trackPaladinChallenge(state, placementsIn) {
     return placements || placementsIn;
 }
 
-// Pose d'un item (soldat, maison, tour) sur une case du territoire actif.
+// Achat d'une affinité (feu / glace / foudre) en boutique : elle ne se pose pas
+// sur une case libre mais s'APPLIQUE au soldat qui occupe la case — un soldat du
+// joueur actif encore sans affinité, à qui elle donne l'élément. Le prix est
+// débité ; le soldat CONSERVE son droit d'action (comme l'achat d'un bonus).
+function reducePlaceAffinity(state, cellId, affinity) {
+    const soldier = state.placements.get(cellId);
+    if (!canReceiveAffinity(soldier)) return state; // pas un soldat, ou déjà une affinité
+    if (soldier.playerId !== state.activePlayerId) return state; // jamais un soldat adverse
+
+    const cost = state.settings?.itemCost?.[affinity] ?? ITEM_COST[affinity] ?? 0;
+    const purse = state.gold[state.activePlayerId] || 0;
+    if (purse < cost) return state; // fonds insuffisants
+
+    const placements = new Map(state.placements);
+    placements.set(cellId, {...soldier, affinity});
+    const gold = {...state.gold, [state.activePlayerId]: purse - cost};
+    return {...state, placements, gold};
+}
+
+// Pose d'un item (soldat, maison, tour) sur une case du territoire actif, ou
+// achat d'une affinité pour le soldat qui l'occupe.
 function reducePlace(state, {cellId, itemType, level = 1}) {
     const board = getLogicalBoard(state.mapId);
     const cell = board.cellMap.get(cellId);
     if (!cell || cell.blocked || board.baseIds.has(cellId)) return state;
+    // Les affinités ciblent un SOLDAT posé et non une case libre : elles ont
+    // leurs propres conditions (voir `reducePlaceAffinity`).
+    if (isAffinityItem(itemType)) return reducePlaceAffinity(state, cellId, itemType);
     if (state.ownership.get(cellId) !== state.activePlayerId) return state;
     if (state.placements.has(cellId)) return state; // case déjà occupée
 
@@ -925,8 +1126,14 @@ function reduceEndTurn(state) {
     placements = applyAlchemists(state, board, placements);
     // Régénération « Paladin ».
     placements = healPaladins(state, placements);
+    // Soin « Prêtre » : sacrifie 1 attaque pour soigner l'allié le plus offensif.
+    placements = applyPriests(state, board, placements);
     // Ponction « Vampire » : draine 1 PV à chaque allié adjacent, au profit du vampire.
     placements = applyVampires(state, board, placements);
+    // Don « Magicien » : offre une affinité à un allié adjacent, contre de l'or.
+    const magicianResult = applyMagicians(state, board, placements, rng);
+    placements = magicianResult.placements;
+    income += magicianResult.goldGained;
     // Invocation « Démoniste » : un squelette fragile par démoniste.
     const summon = spawnWarlockSkeletons(state, board, placements, state.uidSeq, rng);
     placements = summon.placements;
@@ -936,6 +1143,17 @@ function reduceEndTurn(state) {
     // Défi « Paladin » : progression du compteur « N tours sans agir ». Doit lire
     // `state.movedSoldiers` AVANT sa réinitialisation ci-dessous.
     placements = trackPaladinChallenge(state, placements);
+    // Défi « Vampire » : débloqué tant qu'aucun arbre ne subsiste sur le territoire.
+    placements = trackVampireChallenge(state, placements);
+    // Défis « Alchimiste » / « Prêtre » : progression du compteur « maisons possédées ».
+    placements = trackHousesOwnedChallenge(state, placements);
+    // Défi « Chevalier noir » : complète le défi si le joueur possède un squelette.
+    placements = trackBlackKnightChallenge(state, placements);
+    // Défis « Démoniste » / « Roi » / « Conquérant » : débloqués tant qu'aucun
+    // soldat portant ce bonus n'est sur le plateau.
+    placements = trackNoBonusOnBoardChallenge(state, placements, 'warlock', CHALLENGE_METRICS.NO_WARLOCK_ON_BOARD);
+    placements = trackNoBonusOnBoardChallenge(state, placements, 'king', CHALLENGE_METRICS.NO_KING_ON_BOARD);
+    placements = trackNoBonusOnBoardChallenge(state, placements, 'conqueror', CHALLENGE_METRICS.NO_CONQUEROR_ON_BOARD);
     // Acquittement des notifications de bonus : les bonus débloqués et réclamables
     // des soldats du joueur qui vient de jouer rejoignent leur `bonusSeen`. La
     // notification ne réapparaîtra donc plus, même si le bonus reste non réclamé.

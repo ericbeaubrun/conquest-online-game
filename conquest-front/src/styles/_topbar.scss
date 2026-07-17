@@ -8,19 +8,44 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px 8px 52px; // place réservée au burger à gauche
-  z-index: 10;
+  padding: 8px 12px;
+  position: relative;
+  // Doit rester AU-DESSUS du tiroir latéral (z-index 15) et de son overlay
+  // (14) une fois ouvert, sinon le burger devient inatteignable pour le
+  // refermer (un flex item avec z-index crée son propre contexte
+  // d'empilement même en position statique — d'où ce z-index explicite).
+  z-index: 16;
 }
 
+// Bouton burger : même style « pixel » que le reste de la barre (bordure
+// franche + liseré), en flux normal (aligné avec les autres éléments de la
+// barre via `align-items: center` du parent). Change en croix quand le menu
+// est ouvert (voir TopBar.jsx), pour signaler qu'il sert aussi à le refermer.
 .burger-menu {
-  position: fixed;
-  top: 8px;
-  left: 12px;
-  font-size: 24px;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 20px;
   line-height: 1;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid #000;
+  box-shadow: 0 0 0 2px #4a4a4a;
   cursor: pointer;
-  z-index: 20;
   user-select: none;
+  font-family: inherit;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  &--open {
+    background: #555;
+    box-shadow: 0 0 0 2px #ffd766;
+  }
 }
 
 .turn-counter {
@@ -33,6 +58,17 @@
   background: rgba(255, 255, 255, 0.1);
   white-space: nowrap;
   user-select: none;
+}
+
+// Icône soldat, devant le nombre de soldats qu'il reste à déplacer ce tour
+// (même boîte « pixel » que le compteur de tour, juste avant le bouton de
+// fin de tour).
+.movable-count__icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 4px;
+  vertical-align: -5px;
+  image-rendering: pixelated;
 }
 
 // Chrono du tour (réglage turnTimer) : même boîte « pixel » que le compteur.

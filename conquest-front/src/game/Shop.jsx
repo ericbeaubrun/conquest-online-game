@@ -1,4 +1,5 @@
-import { ITEMS } from '@conquest/shared-engine/data/items.js';
+import { useState } from 'react';
+import { ITEMS, AFFINITY_ITEMS, isAffinityItem } from '@conquest/shared-engine/data/items.js';
 import { BUILDING_STATS } from '@conquest/shared-engine/engine/rules.js';
 import {
     upkeepFor,
@@ -14,22 +15,46 @@ import { formatStatValue } from './board/constants.js';
 // s'ouvre aussi d'office en pose directe (une case vide de son territoire est
 // sélectionnée) : cliquer un item le pose alors immédiatement sur cette case.
 //
-// Chaque carte affiche son coût par tour / revenu et son prix — PV et attaque
-// restent à découvrir une fois l'unité posée. Le soldat se décline en niveaux :
-// un sélecteur permet d'acheter directement un soldat de niveau supérieur
-// (prix et stats doublés à chaque niveau, comme une fusion).
+// Chaque carte affiche son coût par tour / revenu et son prix. Trois pages,
+// naviguées par les flèches de l'onglet : la première propose le soldat de
+// base (niveau 1), la maison et les tours ; la deuxième, les soldats de
+// niveau supérieur (achat direct, prix/stats doublés à chaque niveau, comme
+// une fusion) ; la troisième, les affinités (feu / glace / foudre), qui ne se
+// posent pas sur une case mais sur un soldat allié sans affinité.
+const SOLDIER_UPGRADE_LEVELS = Array.from(
+    { length: MAX_SOLDIER_PURCHASE_LEVEL - 1 },
+    (_, i) => i + 2
+);
+const PAGES = [
+    ITEMS,
+    SOLDIER_UPGRADE_LEVELS.map((level) => ({
+        id: 'soldier',
+        name: `Soldat Nv.${level}`,
+        level,
+    })),
+    AFFINITY_ITEMS,
+];
 
-// Caractéristiques affichées pour un item donné (dépend du niveau pour le
-// soldat). Le soldat garde son sélecteur de niveau ; les autres éléments
-// (maison, tours) affichent leurs PV (et attaque pour les tours) à la même
-// place, en tête de carte.
-function specsFor(item, soldierLevel, settings) {
-    if (item.id === 'soldier') {
-        const stats = purchasedSoldierStats(soldierLevel, settings);
+// Caractéristiques affichées pour un item donné : PV (et attaque pour le
+// soldat et les tours) en tête de carte.
+function specsFor(item, settings) {
+    // Affinité : ni PV, ni attaque, ni entretien — seulement son icône et son
+    // prix (les badges de stats sont alors omis de la carte).
+    if (isAffinityItem(item.id)) {
         return {
-            cost: soldierCostForLevel(soldierLevel, settings),
+            cost: settings?.itemCost?.[item.id] ?? item.cost,
+            sprite: item.src,
+        };
+    }
+    if (item.id === 'soldier') {
+        const level = item.level ?? 1;
+        const stats = purchasedSoldierStats(level, settings);
+        return {
+            cost: soldierCostForLevel(level, settings),
             sprite: soldierSkin(stats.level),
             upkeep: upkeepFor({ type: 'soldier', level: stats.level }, settings),
+            hp: stats.hp,
+            atk: stats.atk,
         };
     }
     if (item.id === 'house') {
@@ -54,18 +79,20 @@ function specsFor(item, soldierLevel, settings) {
 
 const Shop = ({
     selectedItem,
+    selectedLevel = 1,
     onSelect,
-    activeColor,
     activeGold = 0,
     settings,
-    soldierLevel = 1,
-    onSoldierLevel,
     open = false,
     placeMode = false,
     onToggle,
     onClose,
     canAct = true,
-}) => (
+}) => {
+    const [page, setPage] = useState(0);
+    const items = PAGES[page];
+
+    return (
     <div className={`shop-drawer ${open ? 'shop-drawer--open' : ''}`}>
         {open && (
             <button
@@ -84,22 +111,43 @@ const Shop = ({
             {placeMode && (
                 <div className="shop-drawer__hint">Pose directe — choisis un élément</div>
             )}
-            <div className="shop">
-                {ITEMS.map((item) => {
-                    const isSoldier = item.id === 'soldier';
-                    const sp = specsFor(item, soldierLevel, settings);
-                    const active = selectedItem === item.id;
+            <div className="shop-page">
+                <button
+                    type="button"
+                    className="shop-page__arrow"
+                    onClick={() => setPage((p) => (p - 1 + PAGES.length) % PAGES.length)}
+                    aria-label="Page précédente"
+                    title="Page précédente"
+                >
+                    ◀
+                </button>
+                <div className="shop">
+                {items.map((item) => {
+                    const level = item.level ?? 1;
+                    const sp = specsFor(item, settings);
+                    const active = selectedItem === item.id && selectedLevel === level;
                     const affordable = activeGold >= sp.cost;
                     const buyable = affordable && canAct;
-                    const buy = () => buyable && onSelect(active ? null : item.id);
+                    const buy = () => buyable && onSelect(active ? null : item.id, level);
+                    // Une affinité se pose sur un SOLDAT, pas sur une case : même
+                    // en pose directe, elle demande de choisir sa cible.
+                    const affinity = isAffinityItem(item.id);
+                    const hint = !affordable
+                        ? `${item.name} — or insuffisant`
+                        : affinity
+                            ? `${item.name} — sélectionner puis choisir un soldat sans affinité`
+                            : placeMode
+                                ? 'Poser sur la case'
+                                : `${item.name} — sélectionner puis poser`;
                     return (
                         // Tout le container est cliquable pour acheter (plus accessible).
                         <div
-                            key={item.id}
+                            key={`${item.id}-${level}`}
                             className={`shop-card ${active ? 'shop-card--active' : ''} ${
                                 affordable ? '' : 'shop-card--poor'
-                            } ${buyable ? '' : 'shop-card--locked'}`}
-                            style={active ? { borderColor: activeColor } : undefined}
+                            } ${buyable ? '' : 'shop-card--locked'} ${
+                                (placeMode && !affinity) || active ? 'shop-card--placemode' : ''
+                            }`}
                             role="button"
                             tabIndex={buyable ? 0 : -1}
                             aria-disabled={!buyable}
@@ -110,73 +158,30 @@ const Shop = ({
                                     buy();
                                 }
                             }}
-                            title={
-                                affordable
-                                    ? placeMode
-                                        ? 'Poser sur la case'
-                                        : `${item.name} — sélectionner puis poser`
-                                    : `${item.name} — or insuffisant`
-                            }
+                            title={hint}
                         >
-                            {/* Sélecteur de niveau (soldat), tout en haut de la carte. Les
-                                flèches ne doivent pas déclencher l'achat du container : on
-                                stoppe la propagation. */}
-                            {isSoldier ? (
-                                <div className="shop-card__level" onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                        type="button"
-                                        className="shop-card__step"
-                                        onClick={() => onSoldierLevel?.(Math.max(1, soldierLevel - 1))}
-                                        disabled={soldierLevel <= 1}
-                                        aria-label="Niveau inférieur"
+                            <img src={sp.sprite} alt={item.name} className="shop-card__icon" draggable={false} />
+
+                            {/* PV et attaque (soldat, tours) sous l'image. Une
+                                affinité n'a ni l'un ni l'autre : aucun badge. */}
+                            <div className="shop-card__level shop-card__level--stats">
+                                {sp.atk != null && (
+                                    <span
+                                        className="soldier-stat-badge soldier-stat-badge--atk soldier-stat-badge--sm"
+                                        title="Attaque"
                                     >
-                                        ◀
-                                    </button>
-                                    <span className="shop-card__level-label">
-                                        {soldierLevel}x
-                                        <img
-                                            src="/etoilePleine.png"
-                                            alt="niveau"
-                                            className="shop-card__level-star shop-card__level-star--soldier"
-                                            draggable={false}
-                                        />
+                                        {formatStatValue(sp.atk)}
                                     </span>
-                                    <button
-                                        type="button"
-                                        className="shop-card__step"
-                                        onClick={() =>
-                                            onSoldierLevel?.(
-                                                Math.min(MAX_SOLDIER_PURCHASE_LEVEL, soldierLevel + 1)
-                                            )
-                                        }
-                                        disabled={soldierLevel >= MAX_SOLDIER_PURCHASE_LEVEL}
-                                        aria-label="Niveau supérieur"
-                                    >
-                                        ▶
-                                    </button>
-                                </div>
-                            ) : (
-                                // Même emplacement que le sélecteur de niveau : PV (maison,
-                                // tours), précédés de l'attaque pour les tours.
-                                <div className="shop-card__level shop-card__level--stats">
-                                    {sp.atk != null && (
-                                        <span
-                                            className="soldier-stat-badge soldier-stat-badge--atk soldier-stat-badge--sm"
-                                            title="Attaque"
-                                        >
-                                            {formatStatValue(sp.atk)}
-                                        </span>
-                                    )}
+                                )}
+                                {sp.hp != null && (
                                     <span
                                         className="soldier-stat-badge soldier-stat-badge--hp soldier-stat-badge--sm"
                                         title="Points de vie"
                                     >
                                         {formatStatValue(sp.hp)}
                                     </span>
-                                </div>
-                            )}
-
-                            <img src={sp.sprite} alt={item.name} className="shop-card__icon" draggable={false} />
+                                )}
+                            </div>
 
                             {/* Ligne « par tour » DÉDIÉE (hauteur réservée même vide) : coût
                                 d'entretien ou revenu, toujours à la même hauteur d'une carte
@@ -203,6 +208,16 @@ const Shop = ({
                         </div>
                     );
                 })}
+                </div>
+                <button
+                    type="button"
+                    className="shop-page__arrow"
+                    onClick={() => setPage((p) => (p + 1) % PAGES.length)}
+                    aria-label="Page suivante"
+                    title="Page suivante"
+                >
+                    ▶
+                </button>
             </div>
         </div>
 
@@ -222,6 +237,7 @@ const Shop = ({
             </span>
         </button>
     </div>
-);
+    );
+};
 
 export default Shop;

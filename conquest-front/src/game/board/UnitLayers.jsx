@@ -150,6 +150,9 @@ export const Buildings = memo(function Buildings({placements, cellMap, size, vis
                         atk={BUILDING_STATS[placed.type]?.atk ?? null}
                         hp={placed.hp ?? 0}
                         formatValue={isTower ? formatUnitStatValue : undefined}
+                        // Maison : pas d'attaque, un seul nombre (PV) centré comme
+                        // pour la base plutôt que casé dans le coin bas-droit.
+                        {...(placed.type === 'house' ? {xOffset: 0, yOffset: 0.15} : null)}
                     />
                 )}
                 {showStats && isSoldier && (
@@ -203,6 +206,26 @@ export const BonusNotifications = memo(function BonusNotifications({
 // sur la case survolée quand elle est un emplacement de pose valide : le joueur
 // voit ce qu'il s'apprête à placer avant de valider (soldat, maison, tour).
 export const PlacementPreview = ({cell, type, soldierLevel, size}) => {
+    // Affinité : la case porte déjà le soldat visé — on prévisualise donc la
+    // seule icône de l'élément, à l'emplacement exact de son futur badge (coin
+    // haut-droit, voir la couche `Buildings`). Pas de désaturation ici : la
+    // couleur EST l'information qui distingue feu, glace et foudre.
+    const affinitySrc = AFFINITY_SRC[type];
+    if (affinitySrc) {
+        if (!cell) return null;
+        const badge = size * 0.3;
+        return (
+            <image
+                href={affinitySrc}
+                x={cell.cx + size * 0.14}
+                y={cell.cy - size * 0.52}
+                width={badge}
+                height={badge}
+                style={{imageRendering: 'pixelated', opacity: 0.6}}
+                pointerEvents="none"
+            />
+        );
+    }
     const href = type === 'soldier' ? soldierSkin(soldierLevel) : PLACEMENT_SRC[type];
     if (!cell || !href) return null;
     const imgSize = placementImgSize(type, size);

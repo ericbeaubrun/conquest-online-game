@@ -59,6 +59,17 @@ $stroke_width_4: 5;
         transform: scale(0.94);
       }
     }
+
+    // Bouton « afficher toutes les stats » : reste enfoncé/allumé tant que
+    // l'affichage forcé est actif.
+    &-btn--active {
+      background: rgba(255, 215, 102, 0.9);
+      color: #1c1c1c;
+
+      &:hover {
+        background: rgba(255, 215, 102, 1);
+      }
+    }
   }
 }
 

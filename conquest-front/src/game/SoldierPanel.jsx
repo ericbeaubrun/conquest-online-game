@@ -59,6 +59,7 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                     gold={gold}
                     canBuy={canBuy}
                     onBuy={onBuyBonus}
+                    onClose={() => setBonusOpen(false)}
                 />
             )}
 

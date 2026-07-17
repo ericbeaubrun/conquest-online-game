@@ -7,6 +7,7 @@ import {
     MAX_MOVE,
     BASE_INCOME,
     canMerge,
+    canFight,
     isAttackable,
 } from './rules.js';
 import {upkeepFor} from '../data/soldier.js';
@@ -100,9 +101,14 @@ export function computeReachable(state, board, startId) {
             // pour le ninja qui la traverse tout en pouvant l'attaquer).
             if (isSoldier && placed.playerId !== activePlayerId) {
                 // Cible de combat : validée seulement depuis une case stable (pas
-                // d'attaque à travers un obstacle) ; le ninja peut néanmoins la
-                // traverser pour se repositionner au-delà.
-                if (standable.has(curId) && !moves.has(nid)) moves.set(nid, {kind: 'combat'});
+                // d'attaque à travers un obstacle) et si les affinités ne
+                // s'annulent pas (voir `canFight`) ; le ninja peut néanmoins la
+                // traverser pour se repositionner au-delà. Un ennemi de même
+                // affinité reste donc un simple obstacle, ni attaquable ni
+                // franchissable.
+                if (standable.has(curId) && !moves.has(nid) && canFight(mover, placed)) {
+                    moves.set(nid, {kind: 'combat'});
+                }
                 ghostAdvance();
                 continue;
             }
@@ -144,6 +150,22 @@ export function computeReachable(state, board, startId) {
 export function ownedCount(state, playerId) {
     let n = 0;
     for (const owner of state.ownership.values()) if (owner === playerId) n += 1;
+    return n;
+}
+
+// Nombre de soldats d'un joueur n'ayant pas encore joué ce tour (absents de
+// `movedSoldiers`) : combien il lui reste à déplacer/agir avant la fin du tour.
+export function movableSoldierCount(state, playerId) {
+    let n = 0;
+    for (const placed of state.placements.values()) {
+        if (
+            placed.type === 'soldier' &&
+            placed.playerId === playerId &&
+            !state.movedSoldiers.has(placed.uid)
+        ) {
+            n += 1;
+        }
+    }
     return n;
 }
 

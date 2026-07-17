@@ -144,3 +144,13 @@ export function maxAtk(unit) {
 export function isAttackable(unit) {
     return !!unit && (unit.type === 'soldier' || unit.type in BUILDING_STATS);
 }
+
+// Deux unités de MÊME affinité (feu, glace, foudre) refusent le combat : leurs
+// éléments s'annulent. Ne concerne en pratique que les soldats — les structures
+// (maison, tour, base) ne portent jamais d'affinité et restent donc toujours
+// assiégeables. Par défaut le combat est AUTORISÉ : seule l'égalité de deux
+// affinités RÉELLES le refuse. Fonction PURE partagée par `computeReachable`
+// (cibles proposées) et le reducer (validation de l'attaque).
+export function canFight(attacker, defender) {
+    return !(attacker?.affinity && attacker.affinity === defender?.affinity);
+}

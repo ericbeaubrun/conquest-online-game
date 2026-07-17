@@ -23,7 +23,9 @@
   opacity: $panel-opacity;
 
   // Croix accrochée au coin haut-droit du panneau (même style que celle de la
-  // boutique) : referme le panneau, désélectionne le soldat.
+  // boutique) : referme le panneau, désélectionne le soldat. Doit rester
+  // AU-DESSUS de la boutique de bonus (`.bonus-panel`, z-index 13) qui se
+  // déploie juste au-dessus et peut chevaucher son coin haut-droit.
   &__close {
     position: absolute;
     top: -16px;
@@ -34,7 +36,7 @@
     border: 2px solid #000;
     background: #2c2c2c;
     cursor: pointer;
-    z-index: 3;
+    z-index: 20;
     display: grid;
     place-items: center;
 
@@ -181,11 +183,41 @@
   background: #1c1c1c;
   border: 3px solid #000;
   box-shadow: 0 0 0 3px #4a4a4a; // même liseré « double bordure » pixel
-  // Colonne : la liste défile en interne, la nav reste ancrée en bas.
+  // Colonne : la liste défile en interne (voir `.bonus-list`), la nav reste
+  // ancrée en bas. Pas de `overflow: hidden` ici : la croix de fermeture
+  // déborde volontairement du cadre (coin haut-droit, comme le panneau soldat).
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   z-index: 13;
+
+  // Croix accrochée au coin haut-droit, même style/emplacement relatif que
+  // celle du panneau soldat : referme la boutique de bonus. Doit rester
+  // au-dessus du contenu du panneau (liste, nav), qui se déploie derrière.
+  &__close {
+    position: absolute;
+    top: -16px;
+    right: -16px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 2px solid #000;
+    background: #2c2c2c;
+    cursor: pointer;
+    z-index: 5;
+    display: grid;
+    place-items: center;
+
+    &:hover {
+      background: #3a3a3a;
+    }
+
+    img {
+      width: 19px;
+      height: 19px;
+      image-rendering: pixelated;
+    }
+  }
 
   // Barre de navigation entre niveaux de bonus (consultation seule). Ancrée en
   // bas du panneau : toujours visible même quand la liste doit défiler.

@@ -11,7 +11,8 @@ import SideMenu from "./game/SideMenu.jsx";
 import GameOverOverlay from "./game/GameOverOverlay.jsx";
 import {useTurnTimer} from "./game/useTurnTimer.js";
 import {buildSelectionView} from "./game/selectionView.js";
-import {setMap, endTurn, placeItem, buyBonus, resetGame} from "@conquest/shared-engine/engine/actions.js";
+import {endTurn, placeItem, buyBonus, resetGame} from "@conquest/shared-engine/engine/actions.js";
+import {isAffinityItem} from "@conquest/shared-engine/data/items.js";
 
 const GameLayout = ({session, onExit}) => {
     // État PARTAGÉ de la partie (tour, joueurs, possession, or...) fourni par la
@@ -31,11 +32,11 @@ const GameLayout = ({session, onExit}) => {
     const [menuOpen, setMenuOpen] = useState(false);
     // Item de boutique sélectionné, en attente d'être posé sur le plateau.
     const [selectedItem, setSelectedItem] = useState(null);
+    // Niveau du soldat sélectionné (achat direct depuis la 2e page de la boutique).
+    const [selectedLevel, setSelectedLevel] = useState(1);
     // Tiroir de la boutique : replié par défaut, tiré vers le haut par son onglet.
     // Il s'ouvre aussi d'office en pose directe (case vide sélectionnée).
     const [shopOpen, setShopOpen] = useState(false);
-    // Niveau de soldat à acheter (1 = base) : conditionne prix, stats et placement.
-    const [soldierLevel, setSoldierLevel] = useState(1);
     // Sélection sur le plateau : { id, kind } — 'soldier' | 'unit' | 'building' |
     // 'tree' | 'tile'. Pilote le panneau affiché en bas (specs vs boutique).
     const [selection, setSelection] = useState(null);
@@ -62,18 +63,26 @@ const GameLayout = ({session, onExit}) => {
         return () => document.removeEventListener("contextmenu", suppress);
     }, []);
 
+    // Menu burger ouvert : la touche Échap le referme (en plus du clic sur le
+    // burger, l'overlay ou "Quitter").
+    useEffect(() => {
+        if (!menuOpen) return;
+        const onKeyDown = (e) => {
+            if (e.key === "Escape") setMenuOpen(false);
+        };
+        document.addEventListener("keydown", onKeyDown);
+        return () => document.removeEventListener("keydown", onKeyDown);
+    }, [menuOpen]);
+
     // Changement de carte ou de joueur actif : plus rien ne doit rester
     // sélectionné (item de boutique comme sélection de plateau).
     useEffect(() => {
         setSelectedItem(null);
+        setSelectedLevel(1);
         setSelection(null);
         setHoverTarget(null);
     }, [mapId, activePlayerId]);
 
-    const selectMap = (id) => {
-        dispatch(setMap(id));
-        setMenuOpen(false);
-    };
     const handleEndTurn = () => {
         if (!canAct) return; // pas la main : on ne termine pas le tour d'autrui
         dispatch(endTurn());
@@ -82,16 +91,19 @@ const GameLayout = ({session, onExit}) => {
     // Clic sur un item de boutique. Si une case vide est sélectionnée, l'item y
     // est posé directement. Sinon, on (dé)sélectionne l'item pour le mode
     // placement classique (surbrillance des cases, puis clic sur le plateau).
-    const handleSelectItem = (id) => {
+    // Les affinités échappent à la pose directe : leur cible est un SOLDAT et
+    // non une case vide, elles passent donc toujours par le mode placement.
+    const handleSelectItem = (id, level = 1) => {
         if (!canAct) return; // hors de son tour : la boutique est en lecture seule
-        if (placeTarget) {
+        if (placeTarget && !isAffinityItem(id)) {
             if (id) {
-                dispatch(placeItem(placeTarget, id, id === "soldier" ? soldierLevel : 1));
+                dispatch(placeItem(placeTarget, id, level));
                 setSelection(null);
             }
             return;
         }
         setSelectedItem(id);
+        setSelectedLevel(level);
         if (id) setSelection(null);
     };
 
@@ -120,11 +132,17 @@ const GameLayout = ({session, onExit}) => {
                 turnTimer={turnTimer}
                 timeLeft={timeLeft}
                 canAct={canAct}
+                menuOpen={menuOpen}
                 onToggleMenu={() => setMenuOpen((open) => !open)}
                 onEndTurn={handleEndTurn}
             />
 
-            <SideMenu open={menuOpen} mapId={mapId} onSelectMap={selectMap} onExit={onExit}/>
+            {/* Overlay : capte le clic hors du tiroir pour le refermer (en plus
+                de la touche Échap et du bouton burger). */}
+            {menuOpen && (
+                <div className="side-menu-overlay" onClick={() => setMenuOpen(false)}/>
+            )}
+            <SideMenu open={menuOpen} onExit={onExit}/>
 
             <div className="game-content">
                 <HexBoard
@@ -132,8 +150,8 @@ const GameLayout = ({session, onExit}) => {
                     dispatch={dispatch}
                     interactive={canAct}
                     selectedItem={selectedItem}
+                    selectedLevel={selectedLevel}
                     onDeselectItem={() => setSelectedItem(null)}
-                    soldierLevel={soldierLevel}
                     selection={selection}
                     onSelect={setSelection}
                     onHoverTarget={setHoverTarget}
@@ -185,12 +203,10 @@ const GameLayout = ({session, onExit}) => {
                 ) : (
                     <Shop
                         selectedItem={selectedItem}
+                        selectedLevel={selectedLevel}
                         onSelect={handleSelectItem}
-                        activeColor={activeColor}
                         activeGold={gold[activePlayerId] ?? 0}
                         settings={settings}
-                        soldierLevel={soldierLevel}
-                        onSoldierLevel={setSoldierLevel}
                         // Tiroir : ouvert par l'onglet, ou forcé ouvert en pose
                         // directe (case vide sélectionnée).
                         open={shopOpen || !!placeTarget}

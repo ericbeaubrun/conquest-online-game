@@ -11,6 +11,8 @@
 import {useCallback, useMemo, useState} from 'react';
 import {hexId, hexHeight, pixelToHex} from '@conquest/shared-engine/data/hex.js';
 import {getLogicalBoard} from '@conquest/shared-engine/engine/board.js';
+import {isAffinityItem} from '@conquest/shared-engine/data/items.js';
+import {canReceiveAffinity} from '@conquest/shared-engine/data/soldier.js';
 import {buildGeometry} from '@conquest/shared-engine/render/geometry.js';
 import {computeReachable} from '@conquest/shared-engine/engine/selectors.js';
 import {
@@ -41,8 +43,8 @@ const HexBoard = ({
                       dispatch,
                       interactive = true,
                       selectedItem,
+                      selectedLevel = 1,
                       onDeselectItem,
-                      soldierLevel = 1,
                       selection,
                       onSelect,
                       onHoverTarget,
@@ -75,8 +77,17 @@ const HexBoard = ({
     const itemSize = hexHeight() * 0.8;
 
     // Cases où le joueur actif peut poser l'item : à lui, hors base, non occupées.
+    // Une AFFINITÉ fait exception : elle ne se pose pas sur une case libre mais
+    // sur un soldat du joueur actif encore sans affinité (mêmes conditions que
+    // le reducer, via `canReceiveAffinity`).
     const placeableCells = useMemo(() => {
         if (!selectedItem) return [];
+        if (isAffinityItem(selectedItem)) {
+            return cells.filter((c) => {
+                const placed = placements.get(c.id);
+                return canReceiveAffinity(placed) && placed.playerId === activePlayerId;
+            });
+        }
         return cells.filter(
             (c) =>
                 ownership.get(c.id) === activePlayerId &&
@@ -108,11 +119,16 @@ const HexBoard = ({
     // Case actuellement survolée (pour n'afficher les stats chiffrées que sur
     // l'unité pointée). `null` hors du plateau.
     const [hoveredCellId, setHoveredCellId] = useState(null);
+    // Bouton « afficher toutes les stats » : force l'affichage des nombres
+    // d'attaque/PV sur toutes les unités posées, sans avoir à survoler.
+    const [showAllStats, setShowAllStats] = useState(false);
 
     // Cases dont les stats chiffrées (attaque / points de vie) s'affichent : la
     // case survolée, et — quand un soldat est sélectionné — le soldat lui-même
-    // ainsi que toutes ses cibles atteignables. Ailleurs, aucun nombre.
+    // ainsi que toutes ses cibles atteignables. Ailleurs, aucun nombre — sauf si
+    // `showAllStats` force l'affichage sur toutes les unités du plateau.
     const visibleStatIds = useMemo(() => {
+        if (showAllStats) return new Set([...placements.keys(), ...baseCells.map((c) => c.id)]);
         const ids = new Set();
         if (hoveredCellId != null) ids.add(hoveredCellId);
         if (activeSoldier) {
@@ -120,7 +136,7 @@ const HexBoard = ({
             for (const id of reachable.moves.keys()) ids.add(id);
         }
         return ids;
-    }, [hoveredCellId, activeSoldier, reachable]);
+    }, [showAllStats, placements, baseCells, hoveredCellId, activeSoldier, reachable]);
 
     // --- Caméra et gestes (pan / pinch / molette / clics) ---
     // Clic droit, n'importe où : désélectionne l'élément sélectionné, qu'il
@@ -151,7 +167,7 @@ const HexBoard = ({
         // Cliquer ailleurs (case non posable, hors carte) désélectionne l'item.
         if (selectedItem) {
             if (interactive && placeableIds.has(id)) {
-                dispatch(placeItem(id, selectedItem, selectedItem === 'soldier' ? soldierLevel : 1));
+                dispatch(placeItem(id, selectedItem, selectedItem === 'soldier' ? selectedLevel : 1));
             } else {
                 onDeselectItem?.();
             }
@@ -233,7 +249,7 @@ const HexBoard = ({
                     <PlacementPreview
                         cell={cellMap.get(hoveredCellId)}
                         type={selectedItem}
-                        soldierLevel={soldierLevel}
+                        soldierLevel={selectedLevel}
                         size={itemSize}
                     />
                 )}
@@ -302,6 +318,15 @@ const HexBoard = ({
                 </button>
                 <button onClick={resetView} aria-label="Recentrer" title="Voir toute la carte">
                     ⤢
+                </button>
+                <button
+                    className={showAllStats ? 'hex-board__controls-btn--active' : ''}
+                    onClick={() => setShowAllStats((v) => !v)}
+                    aria-pressed={showAllStats}
+                    aria-label="Afficher les stats de toutes les unités"
+                    title="Afficher les stats de toutes les unités"
+                >
+                    ⚔
                 </button>
             </div>
         </div>

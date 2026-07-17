@@ -11,6 +11,15 @@
   overflow: hidden;
 }
 
+// Overlay derrière le tiroir : capte le clic hors du menu pour le refermer.
+.side-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 14; // sous le tiroir (15), au-dessus du reste
+  cursor: pointer;
+}
+
 // ---- Menu latéral (tiroir) ----
 .side-menu {
   position: fixed;

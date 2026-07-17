@@ -5,7 +5,7 @@
 
 import { MAPS, DEFAULT_MAP_ID } from '@conquest/shared-engine/data/maps.js';
 import { DEFAULT_SETTINGS } from '@conquest/shared-engine/engine/settings.js';
-import { ITEMS } from '@conquest/shared-engine/data/items.js';
+import { ITEMS, AFFINITY_ITEMS } from '@conquest/shared-engine/data/items.js';
 import { BONUS_OFFERS } from '@conquest/shared-engine/data/soldier.js';
 
 // --- Palette de couleurs des joueurs ---
@@ -53,7 +53,7 @@ export function makeDefaultPlayers(count = MIN_PLAYERS) {
 // --- Sous-champs des réglages « groupe » (barèmes détaillés) ---
 // Chaque groupe édite un objet { clé -> nombre } ; les valeurs par défaut sont
 // tirées de DEFAULT_SETTINGS (source de vérité du moteur).
-const ITEM_COST_FIELDS = ITEMS.map((it) => ({
+const ITEM_COST_FIELDS = [...ITEMS, ...AFFINITY_ITEMS].map((it) => ({
     key: it.id,
     label: it.name,
     default: DEFAULT_SETTINGS.itemCost[it.id],

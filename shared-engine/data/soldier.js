@@ -36,11 +36,16 @@ ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
     CASES_TRAVELED_OWN: 'casesTraveledOwn', // cases parcourues dans son territoire
     ENEMIES_KILLED_L2: 'enemiesKilledL2', // soldats ennemis de niveau ≥ 2 tués
     COMBATS_SURVIVED: 'combatsSurvived', // combats terminés en vie
-    ALCHEMIST_MERGE: 'alchemistMerge', // fusion de 2 soldats affaiblis en niveau 2
     SKELETONS_KILLED: 'skeletonsKilled', // squelettes tués au combat
     TOWERS_BOUGHT: 'towersBought', // tours (attaque/défense) bâties par le joueur
-    DRUID_TREES_KEPT: 'druidTreesKept', // tours consécutifs avec ≥5 arbres sur son territoire
+    DRUID_TREES_KEPT: 'druidTreesKept', // arbres sur son territoire (à la dernière fin de tour)
     PALADIN_IDLE_TURNS: 'paladinIdleTurns', // tours consécutifs terminés sans agir
+    NO_TREES_ON_TERRITORY: 'noTreesOnTerritory', // aucun arbre sur son territoire (à la dernière fin de tour)
+    HAS_AFFINITY: 'hasAffinity', // le soldat porte une affinité (feu/glace/foudre) — lu directement sur `soldier.affinity`, pas de compteur
+    HOUSES_OWNED: 'housesOwned', // maisons possédées par le joueur (à la dernière fin de tour)
+    NO_CONQUEROR_ON_BOARD: 'noConquerorOnBoard', // aucun soldat « Conquérant » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
+    NO_KING_ON_BOARD: 'noKingOnBoard', // aucun soldat « Roi » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
+    NO_WARLOCK_ON_BOARD: 'noWarlockOnBoard', // aucun soldat « Démoniste » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
 };
 
 // Les squelettes invoqués (Mort-vivant, Démoniste) sont un SOUS-TYPE d'unité :
@@ -55,12 +60,23 @@ export const isSkeleton = (u) => !!u && u.unit === 'skeleton';
 // un marqueur `unit` ; un soldat ordinaire n'en a pas.
 export const isSummonedUnit = (u) => !!u && !!u.unit;
 
+// Un soldat peut-il RECEVOIR une affinité (feu / glace / foudre) achetée en
+// boutique ? Il doit être un vrai soldat — les unités invoquées (squelette,
+// arbre-druide) n'en portent jamais — et ne pas en avoir déjà une : une
+// affinité ne se remplace pas. Test PUR partagé par le reducer (validation) et
+// l'interface (cases ciblables).
+export const canReceiveAffinity = (u) =>
+    !!u && u.type === 'soldier' && !isSummonedUnit(u) && u.affinity == null;
+
 // Bonus « Alchimiste » : à chaque fin de tour de son propriétaire, il renforce
-// l'allié adjacent le mieux portant et sans affinité. Le défi se débloque quand
-// le soldat naît de la fusion de deux soldats affaiblis (PV < ce seuil).
-export const ALCHEMIST_WEAK_HP = 20; // seuil de « soldat affaibli » pour la fusion
+// l'allié adjacent le mieux portant et sans affinité.
 export const ALCHEMIST_ATK_BUFF = 1; // +attaque procurée à l'allié ciblé
 export const ALCHEMIST_HP_BUFF = 2; // +PV procurés à l'allié ciblé
+
+// Bonus « Magicien » : à chaque fin de tour de son propriétaire, il donne 1
+// affinité (aléatoire) à UN allié adjacent sans affinité, et rapporte cette
+// prime d'or à chaque don.
+export const MAGICIAN_GOLD_REWARD = 10;
 
 // Bonus « Guerrier » : en l'équipant, le soldat voit ses statistiques portées à
 // ces valeurs, et chaque ennemi qu'il tue rapporte cette prime d'or.
@@ -92,14 +108,12 @@ export const VAMPIRE_DRAIN = 1;
 // Bonus « Druide » : au lieu de récolter un arbre, le druide le TRANSFORME en
 // une unité alliée « arbre-druide » — un combattant de niveau 2 non fusionnable,
 // aux statistiques dédiées, qui occupe la case de l'arbre. Le défi se débloque
-// en gardant DRUID_TREES_REQUIRED arbres sur son territoire pendant
-// DRUID_TREES_TURNS tours consécutifs.
+// en ayant DRUID_TREES_REQUIRED arbres sur son territoire.
 export const DRUID_TREE_SRC = '/characters/lvl4/druidTree.png';
 export const DRUID_TREE_HP = 15;
 export const DRUID_TREE_ATK = 30;
 export const DRUID_TREE_LEVEL = 2;
-export const DRUID_TREES_REQUIRED = 5; // arbres à garder sur son territoire
-export const DRUID_TREES_TURNS = 3; // tours consécutifs pour débloquer le défi
+export const DRUID_TREES_REQUIRED = 5; // arbres à avoir sur son territoire
 
 // Défi « Paladin » : nombre de tours CONSÉCUTIFS que le soldat doit terminer sans
 // avoir agi (ni déplacement, ni fusion, ni attaque, ni abattage) pour débloquer
@@ -252,17 +266,26 @@ export const BONUS_OFFERS = [
         requiredLevel: 3,
         price: 120,
         upkeep: 1,
-        challenge: null,
+        challenge: {
+            metric: CHALLENGE_METRICS.NO_TREES_ON_TERRITORY,
+            goal: 1,
+            describe: (c, g) =>
+                c >= g ? 'Territoire sans arbre.' : 'N’avoir aucun arbre sur son territoire.',
+        },
         effect: 'Chaque tour, vole 1 PV à chaque allié adjacent.',
     },
     {
-        id: 'priest',
-        label: 'Prêtre',
-        src: null,
+        id: 'magician',
+        label: 'Magicien',
+        src: '/characters/lvl3/magicien.png',
         requiredLevel: 3,
-        price: 300,
-        challenge: 'Soigner 50 points de vie alliés.',
-        effect: 'Soigne les alliés adjacents.',
+        price: 50,
+        challenge: {
+            metric: CHALLENGE_METRICS.HAS_AFFINITY,
+            goal: 1,
+            describe: (c, g) => (c >= g ? 'Affinité acquise.' : 'Porter une affinité.'),
+        },
+        effect: 'Donne 1 affinité à un allié adjacent, et gagne 10 or à chaque don.',
     },
     {
         id: 'alchemist',
@@ -272,17 +295,28 @@ export const BONUS_OFFERS = [
         price: 76,
         upkeep: 5,
         challenge: {
-            metric: CHALLENGE_METRICS.ALCHEMIST_MERGE,
-            goal: 1,
-            describe: (c, g) =>
-                c >= g
-                    ? 'Fusion de 2 soldats affaiblis accomplie.'
-                    : 'Fusionner 2 soldats de moins de 20 PV en niveau 2.',
+            metric: CHALLENGE_METRICS.HOUSES_OWNED,
+            goal: 2,
+            describe: (c, g) => (c >= g ? `${g} maisons possédées.` : `Posséder ${c}/${g} maisons.`),
         },
         effect: '+1 atk / +2 PV à l’allié adjacent sans affinité ayant le plus de PV.',
     },
 
     // ---- Niveau 4 ----
+    {
+        id: 'priest',
+        label: 'Prêtre',
+        src: '/characters/lvl4/pretre.png',
+        requiredLevel: 4,
+        price: 30,
+        upkeep: 12,
+        challenge: {
+            metric: CHALLENGE_METRICS.HOUSES_OWNED,
+            goal: 2,
+            describe: (c, g) => (c >= g ? `${g} maisons possédées.` : `Posséder ${c}/${g} maisons.`),
+        },
+        effect: 'Retire 1 attaque à lui-même pour donner 2 PV à l’allié adjacent ayant le plus d’attaque.',
+    },
     {
         id: 'blackKnight',
         label: 'Chevalier noir',
@@ -293,7 +327,7 @@ export const BONUS_OFFERS = [
         challenge: {
             metric: CHALLENGE_METRICS.SKELETONS_KILLED,
             goal: 1,
-            describe: (c, g) => `Tuer ${c}/${g} squelette.`,
+            describe: (c, g) => (c >= g ? 'Squelette tué ou possédé.' : 'Tuer ou posséder un squelette.'),
         },
         effect: 'Absorbe les stats des squelettes qu’il tue (comme une fusion).',
     },
@@ -323,11 +357,9 @@ export const BONUS_OFFERS = [
         upkeep: 10,
         challenge: {
             metric: CHALLENGE_METRICS.DRUID_TREES_KEPT,
-            goal: DRUID_TREES_TURNS,
+            goal: DRUID_TREES_REQUIRED,
             describe: (c, g) =>
-                c >= g
-                    ? `${DRUID_TREES_REQUIRED} arbres gardés ${DRUID_TREES_TURNS} tours.`
-                    : `Garder ${DRUID_TREES_REQUIRED} arbres sur son territoire (${c}/${g} tours).`,
+                c >= g ? `${g} arbres sur son territoire.` : `Avoir ${c}/${g} arbres sur son territoire.`,
         },
         effect: 'Transforme l’arbre ciblé en une unité alliée (arbre-druide, 15/30).',
     },
@@ -349,8 +381,12 @@ export const BONUS_OFFERS = [
         requiredLevel: 5,
         price: 100,
         upkeep: 40,
-        challenge: null,
-        effect: 'Passe à 10/100 et invoque un squelette allié (10/1) chaque tour.',
+        challenge: {
+            metric: CHALLENGE_METRICS.NO_WARLOCK_ON_BOARD,
+            goal: 1,
+            describe: (c, g) => (c >= g ? 'Aucun démoniste sur le terrain.' : 'Qu’aucun démoniste ne soit sur le terrain.'),
+        },
+        effect: 'Passe à 10/100 et invoque un squelette allié (10/1) chaque tour où il n’a pas agi.',
     },
     {
         id: 'king',
@@ -358,7 +394,11 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl5/king.png',
         requiredLevel: 5,
         price: 100,
-        challenge: null,
+        challenge: {
+            metric: CHALLENGE_METRICS.NO_KING_ON_BOARD,
+            goal: 1,
+            describe: (c, g) => (c >= g ? 'Aucun roi sur le terrain.' : 'Qu’aucun roi ne soit sur le terrain.'),
+        },
         effect: 'Tant qu’il est en vie, +50% d’or gagné par tour.',
     },
     {
@@ -368,7 +408,11 @@ export const BONUS_OFFERS = [
         requiredLevel: 5,
         price: 100,
         upkeep: 20,
-        challenge: null,
+        challenge: {
+            metric: CHALLENGE_METRICS.NO_CONQUEROR_ON_BOARD,
+            goal: 1,
+            describe: (c, g) => (c >= g ? 'Aucun conquérant sur le terrain.' : 'Qu’aucun conquérant ne soit sur le terrain.'),
+        },
         effect: 'À chaque tour, annexe toutes les cases vides autour de lui (même à l’ennemi).',
     },
 ];
@@ -425,6 +469,12 @@ const isTrackedChallenge = (challenge) => challenge != null && typeof challenge 
 export const bonusProgress = (soldier, bonus) => {
     const { challenge } = bonus;
     if (!isTrackedChallenge(challenge)) return null;
+    // Défi « Magicien » : pas de compteur — l'affinité du soldat est lue
+    // directement (elle peut aussi bien disparaître qu'apparaître, via fusion).
+    if (challenge.metric === CHALLENGE_METRICS.HAS_AFFINITY) {
+        const current = soldier?.affinity ? 1 : 0;
+        return { current, goal: challenge.goal, done: current >= challenge.goal };
+    }
     const raw = soldier?.progress?.[challenge.metric] ?? 0;
     const current = Math.min(raw, challenge.goal);
     return { current, goal: challenge.goal, done: current >= challenge.goal };

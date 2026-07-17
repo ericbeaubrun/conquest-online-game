@@ -1,4 +1,4 @@
-import {incomeFor, playerAlive} from '@conquest/shared-engine/engine/selectors.js';
+import {incomeFor, movableSoldierCount, playerAlive} from '@conquest/shared-engine/engine/selectors.js';
 
 // Barre du haut : menu, numéro de tour, chrono, profils des joueurs (nom, or et
 // revenu) et bouton de fin de tour. Purement présentationnelle.
@@ -13,6 +13,7 @@ const TopBar = ({
                     turnTimer,
                     timeLeft,
                     canAct,
+                    menuOpen,
                     onToggleMenu,
                     onEndTurn,
                 }) => {
@@ -28,9 +29,16 @@ const TopBar = ({
 
     return (
         <div className="top-bar">
-            <div className="burger-menu" onClick={onToggleMenu}>
-                ☰
-            </div>
+            <button
+                type="button"
+                className={`burger-menu ${menuOpen ? 'burger-menu--open' : ''}`}
+                onClick={onToggleMenu}
+                aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+                aria-expanded={menuOpen}
+                title={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+            >
+                {menuOpen ? '✕' : '☰'}
+            </button>
             <div className="turn-counter" title="Numéro du tour">
                 Tour {turn}
                 {settings?.maxTurns ? `/${settings.maxTurns}` : ''}
@@ -109,6 +117,13 @@ const TopBar = ({
                         </div>
                     );
                 })}
+            </div>
+            <div
+                className="turn-counter"
+                title="Soldats qu'il reste à déplacer ce tour"
+            >
+                <img src="/characters/lvl1/SoldierLVL1.png" alt="" className="movable-count__icon"/>
+                {movableSoldierCount(state, activePlayerId)}
             </div>
             <button
                 className="end-turn-button"

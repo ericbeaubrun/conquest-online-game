@@ -103,7 +103,7 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
     );
 };
 
-const BonusPanel = ({soldier, selectionId, settings, bonusesEnabled, gold, canBuy, onBuy}) => {
+const BonusPanel = ({soldier, selectionId, settings, bonusesEnabled, gold, canBuy, onBuy, onClose}) => {
     const level = soldier.level || 1;
     // Niveau consulté : celui du soldat par défaut. On repart de son niveau à
     // chaque changement de soldat sélectionné.
@@ -120,6 +120,17 @@ const BonusPanel = ({soldier, selectionId, settings, bonusesEnabled, gold, canBu
 
     return (
         <div className="bonus-panel">
+            {onClose && (
+                <button
+                    type="button"
+                    className="bonus-panel__close"
+                    onClick={onClose}
+                    aria-label="Fermer"
+                    title="Fermer"
+                >
+                    <img src="/croix.png" alt="" draggable={false} />
+                </button>
+            )}
             <div className="bonus-list">
                 {offers.map((bonus) => (
                     <BonusCard
