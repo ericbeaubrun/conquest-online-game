@@ -33,6 +33,8 @@ export const fightKind = (mover, target) => {
 //   - 'unit'     : soldat ennemi ou déjà déplacé (specs seules, sans action)
 //   - 'building' : case portant une base / tour / maison (image + points de vie)
 //   - 'tree'     : arbre (récompense d'abattage + coût de revenu)
+//   - 'chest'    : coffre fermé (contenu encore inconnu)
+//   - 'loot'     : butin d'un coffre ouvert (effet au ramassage)
 //   - 'tile'     : case vide du territoire actif (cible de pose depuis la boutique)
 // Renvoie `null` si la case n'est pas sélectionnable.
 export function classifyCell(game, board, id) {
@@ -43,6 +45,8 @@ export function classifyCell(game, board, id) {
         return {id, kind: actionable ? 'soldier' : 'unit'};
     }
     if (placed?.type === 'tree') return {id, kind: 'tree'}; // infos de l'arbre
+    // Coffre et butin : panneau informatif dédié (contenu inconnu / effet du butin).
+    if (placed?.type === 'chest' || placed?.type === 'loot') return {id, kind: placed.type};
     // Base encore debout ou structure posée : panneau du bâtiment. Une base
     // détruite n'est plus un bâtiment : elle retombe dans les cases normales.
     if (placed || (board.baseIds.has(id) && !destroyedBases?.has(id))) return {id, kind: 'building'};

@@ -1,3 +1,4 @@
+import {useLayoutEffect, useRef} from 'react';
 import {incomeFor, movableSoldierCount, playerAlive} from '@conquest/shared-engine/engine/selectors.js';
 
 // Barre du haut : menu, numéro de tour, chrono, profils des joueurs (nom, or et
@@ -27,8 +28,32 @@ const TopBar = ({
         return player.name;
     };
 
+    // Hauteur réelle de la barre, exposée en variable CSS globale : elle varie
+    // selon la taille d'écran (passe sur 2 lignes en mobile, cf. _topbar.scss),
+    // le tiroir latéral (SideMenu) s'en sert pour ne jamais commencer sous la
+    // barre (voir --topbar-height dans _layout.scss).
+    const topBarRef = useRef(null);
+    useLayoutEffect(() => {
+        const el = topBarRef.current;
+        if (!el) return;
+        const update = () => {
+            document.documentElement.style.setProperty('--topbar-height', `${el.offsetHeight}px`);
+        };
+        update();
+        // ResizeObserver couvre les changements de contenu (nombre de joueurs,
+        // etc.) ; l'écouteur `resize` sert de filet pour le changement de
+        // palier responsive (rotation d'écran, redimensionnement de fenêtre).
+        const ro = new ResizeObserver(update);
+        ro.observe(el);
+        window.addEventListener('resize', update);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener('resize', update);
+        };
+    }, []);
+
     return (
-        <div className="top-bar">
+        <div className="top-bar" ref={topBarRef}>
             <button
                 type="button"
                 className={`burger-menu ${menuOpen ? 'burger-menu--open' : ''}`}
@@ -39,12 +64,12 @@ const TopBar = ({
             >
                 {menuOpen ? '✕' : '☰'}
             </button>
-            <div className="turn-counter" title="Numéro du tour">
+            <div className="turn-counter turn-counter--turn" title="Numéro du tour">
                 Tour {turn}
                 {settings?.maxTurns ? `/${settings.maxTurns}` : ''}
             </div>
             {online && !localPlayerId && (
-                <div className="turn-counter" title="Vous n'avez pas de siège dans cette partie">
+                <div className="turn-counter turn-counter--spectator" title="Vous n'avez pas de siège dans cette partie">
                     Spectateur
                 </div>
             )}
@@ -119,7 +144,7 @@ const TopBar = ({
                 })}
             </div>
             <div
-                className="turn-counter"
+                className="turn-counter turn-counter--movable"
                 title="Soldats qu'il reste à déplacer ce tour"
             >
                 <img src="/characters/lvl1/SoldierLVL1.png" alt="" className="movable-count__icon"/>

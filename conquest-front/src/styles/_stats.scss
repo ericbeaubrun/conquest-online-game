@@ -1,0 +1,110 @@
+// Overlay des graphiques statistiques (ouvert depuis le menu latéral).
+// Même langage visuel pixel que les panneaux : fond sombre, bordures franches,
+// liseré « double bordure », coins carrés.
+
+.stats-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 16; // au-dessus du tiroir (15) et de son overlay (14)
+
+  &__loading {
+    color: #fff;
+    font-size: 18px;
+    text-shadow: 0 1px 0 #000;
+  }
+}
+
+.stats-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(860px, 94vw);
+  height: min(560px, 88vh);
+  padding: 14px 16px 10px;
+  box-sizing: border-box;
+  color: #fff;
+  background: #1c1c1c;
+  border: 3px solid #000;
+  box-shadow: 0 0 0 3px #4a4a4a; // liseré « double bordure » pixel
+
+  // Croix accrochée au coin haut-droit, même style que celles des panneaux.
+  &__close {
+    position: absolute;
+    top: -16px;
+    right: -16px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: #fff;
+    font-size: 16px;
+    line-height: 1;
+    border: 2px solid #000;
+    background: #2c2c2c;
+    cursor: pointer;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+
+    &:hover {
+      background: #3a3a3a;
+    }
+  }
+
+  // Onglets : un bouton par graphique, l'actif en surbrillance verte (même
+  // accent que la carte sélectionnée du menu latéral).
+  &__tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  &__tab {
+    padding: 6px 10px;
+    font-size: 14px;
+    color: #fff;
+    background: #2a2a2a;
+    border: 2px solid #000;
+    box-shadow: inset 0 0 0 1px #4a4a4a;
+    cursor: pointer;
+
+    &:hover {
+      background: #3a3a3a;
+    }
+
+    &--active {
+      background: #2f6f4f !important;
+      box-shadow: inset 0 0 0 1px #4caf7d;
+    }
+  }
+
+  // Bascule de métrique (graphique « Armée ») : mêmes boutons, plus discrets.
+  &__toggle {
+    display: flex;
+    gap: 6px;
+
+    button {
+      padding: 4px 8px;
+      font-size: 13px;
+      color: #d0d0d0;
+      background: #2a2a2a;
+      border: 2px solid #000;
+      box-shadow: inset 0 0 0 1px #4a4a4a;
+      cursor: pointer;
+
+      &:hover {
+        background: #3a3a3a;
+      }
+    }
+  }
+
+  // Zone du graphique : prend tout l'espace restant (Recharts s'y adapte via
+  // ResponsiveContainer — le min-height:0 autorise le rétrécissement flex).
+  &__chart {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}

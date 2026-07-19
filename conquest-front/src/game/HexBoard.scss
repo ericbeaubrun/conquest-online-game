@@ -11,7 +11,7 @@ $stroke_width_4: 5;
   overflow: hidden;
   // Bordure épaisse à la couleur du joueur actif (posée via `style` inline) :
   // signale d'un coup d'œil à qui est le tour, tout autour du plateau.
-  border: 12px solid transparent;
+  border: 8px solid transparent;
 
   &__svg {
     width: 100%;
@@ -221,9 +221,9 @@ $stroke_width_4: 5;
   }
 }
 
-// Étiquette « attaque/pv » affichée en permanence aux coins d'un soldat
-// (attaque en haut à droite, points de vie en bas à droite ; taille fixée en
-// JS, proportionnelle à la case).
+// Étiquette « attaque/pv » chiffrée aux coins d'une unité (attaque en bas à
+// gauche, points de vie en bas à droite ; taille fixée en JS, proportionnelle à
+// la case). Forme par défaut, l'autre étant les jauges ci-dessous.
 .soldier-stat-label {
   font-family: $pixel-font;
   fill: #ffffff;
@@ -248,6 +248,40 @@ $stroke_width_4: 5;
     &--hp {
       fill: #b81f1f;
       stroke: #5c0d0d;
+    }
+  }
+}
+
+// Jauges « attaque/pv » dessinées sur une unité du plateau : vie en barre
+// horizontale sous l'unité, attaque en barre verticale sur son flanc gauche
+// (géométrie fixée en JS, proportionnelle à la case — voir `StatBars`).
+// `crispEdges` supprime l'anticrénelage : les bords restent francs comme ceux
+// des sprites, d'où le rendu « pixel art ».
+.stat-bar {
+  &__track,
+  &__fill {
+    pointer-events: none;
+    shape-rendering: crispEdges;
+  }
+
+  // Gouttière : le fond sombre cerné de noir sur lequel court le remplissage.
+  &__track {
+    fill: #14110f;
+    stroke: #000000;
+    stroke-width: 2px;
+  }
+
+  &__fill {
+    stroke: none;
+
+    // Points de vie : vert franc.
+    &--hp {
+      fill: #4fc03a;
+    }
+
+    // Attaque : orangé, pour se distinguer des PV au premier coup d'œil.
+    &--atk {
+      fill: #e08a2c;
     }
   }
 }

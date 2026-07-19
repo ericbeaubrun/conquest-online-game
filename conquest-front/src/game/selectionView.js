@@ -32,12 +32,6 @@ export function buildSelectionView(state, selection, hoverTarget) {
                 }
             : null;
 
-    // Arbre : on affiche ses infos (récompense + coût) et le joueur dont il
-    // occupe le territoire, le cas échéant.
-    const treeOwner =
-        selection?.kind === 'tree'
-            ? players.find((p) => p.id === ownership.get(selection.id)) || null
-            : null;
 
     // Case vide sélectionnée : la boutique bascule en « pose directe » (cliquer
     // un item le pose immédiatement sur cette case).
@@ -54,5 +48,29 @@ export function buildSelectionView(state, selection, hoverTarget) {
     const combatPreview =
         target && hoverTarget.kind === 'combat' ? {attacker: mover, defender: target} : null;
 
-    return {soldierView, buildingView, treeOwner, placeTarget, mergePreview, combatPreview};
+    // Arbre à détailler : soit l'arbre SÉLECTIONNÉ, soit — comme les aperçus de
+    // fusion et de combat — l'arbre abattable SURVOLÉ par le soldat sélectionné.
+    // On joint le joueur dont l'arbre occupe le territoire (null s'il est
+    // neutre) : c'est lui qui en paie l'entretien.
+    const treeId =
+        (mover && hoverTarget?.kind === 'chop' ? hoverTarget.id : null) ??
+        (selection?.kind === 'tree' ? selection.id : null);
+    const tree = treeId ? placements.get(treeId) : null;
+    const treeView = tree
+        ? {tree, owner: players.find((p) => p.id === ownership.get(treeId)) || null}
+        : null;
+
+    // Coffre / butin à détailler : soit la case SÉLECTIONNÉE, soit — comme les
+    // autres aperçus — le coffre ouvrable ou le butin ramassable SURVOLÉ par le
+    // soldat sélectionné. `loot` reste `null` pour un coffre encore fermé : c'est
+    // ce qui distingue les deux panneaux (contenu inconnu vs effet connu).
+    const chestId =
+        (mover && (hoverTarget?.kind === 'openChest' || hoverTarget?.kind === 'loot')
+            ? hoverTarget.id
+            : null) ??
+        (selection?.kind === 'chest' || selection?.kind === 'loot' ? selection.id : null);
+    const chest = chestId ? placements.get(chestId) : null;
+    const chestView = chest ? {loot: chest.type === 'loot' ? chest : null} : null;
+
+    return {soldierView, buildingView, treeView, chestView, placeTarget, mergePreview, combatPreview};
 }

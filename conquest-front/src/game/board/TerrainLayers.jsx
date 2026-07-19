@@ -4,7 +4,7 @@
 // ne touche que le viewBox).
 import {memo} from 'react';
 import {TERRAIN_COLORS} from '@conquest/shared-engine/data/terrain.js';
-import {CHOP_SRC, FIGHT_SRC, MERGE_SRC, MOVE_CLASS} from './constants.js';
+import {CHOP_SRC, FIGHT_SRC, MERGE_SRC, MOVE_CLASS, OPEN_CHEST_SRC} from './constants.js';
 import {fightKind, unitAt} from './targeting.js';
 
 export const Tiles = memo(function Tiles({cells}) {
@@ -30,9 +30,9 @@ export const Territory = memo(function Territory({cells, ownership, colors}) {
                     key={cell.id}
                     points={cell.points}
                     fill={color}
-                    fillOpacity={0.5}
+                    fillOpacity={0.72}
                     stroke={color}
-                    strokeOpacity={0.9}
+                    strokeOpacity={1}
                     strokeWidth={1}
                     strokeLinejoin="round"
                     pointerEvents="none"
@@ -120,6 +120,8 @@ export const Indicators = memo(function Indicators({moves, cellMap, size, game, 
                 return icon(id, FIGHT_SRC[fightKind(mover, unitAt(game, id))], 'c' + id, 0.6);
             case 'chop':
                 return icon(id, CHOP_SRC, 'h' + id);
+            case 'openChest':
+                return icon(id, OPEN_CHEST_SRC, 'k' + id);
             default:
                 return null;
         }

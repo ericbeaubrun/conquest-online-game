@@ -3,11 +3,10 @@ import {
     affinityLabel,
     atkRankLabel,
     behaviorLabel,
-    bonusLabel,
     hasUnlockedBonus,
     isSkeleton,
     isSummonedUnit,
-    levelRankLabel,
+    raceLabel,
     soldierSprite,
 } from '@conquest/shared-engine/data/soldier.js';
 import {SOLDIER_ATK_MAX} from '@conquest/shared-engine/engine/rules.js';
@@ -100,7 +99,7 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                     <span className="soldier-panel__atk-rank">
                         {atkRankLabel(soldier.atk, SOLDIER_ATK_MAX)}{' '}
                         <span className="soldier-panel__atk-race">
-                            {soldier.bonus ? bonusLabel(soldier.bonus) : levelRankLabel(level)}
+                            {raceLabel(soldier)}
                         </span>
                     </span>
                 )}

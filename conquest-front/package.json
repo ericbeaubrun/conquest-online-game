@@ -13,6 +13,7 @@
     "@conquest/shared-engine": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "recharts": "^3.9.2",
     "sass": "^1.81.0",
     "socket.io-client": "^4.8.1"
   },

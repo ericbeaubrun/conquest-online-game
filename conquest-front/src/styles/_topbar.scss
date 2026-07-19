@@ -1,7 +1,19 @@
 // Barre du haut : tour, chrono, profils des joueurs, fin de tour.
+//
+// Toutes les « boîtes » de la barre (burger, tour, chrono, soldats restants,
+// fin de tour) partagent la même hauteur et la même échelle de police/icônes,
+// pilotées par les variables --topbar-h / --topbar-font / --topbar-icon /
+// --topbar-avatar ci-dessous. Les media queries ne font que redéfinir ces
+// variables (desktop → tablette → mobile) : la mise en page reste uniforme,
+// seule l'échelle change.
 
 // ---- Barre du haut ----
 .top-bar {
+  --topbar-h: 44px;
+  --topbar-font: 20px;
+  --topbar-icon: 22px;
+  --topbar-avatar: 36px;
+
   flex: 0 0 auto;
   background-color: #2b2b2b;
   color: white;
@@ -23,12 +35,12 @@
 // est ouvert (voir TopBar.jsx), pour signaler qu'il sert aussi à le refermer.
 .burger-menu {
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: var(--topbar-h);
+  height: var(--topbar-h);
   display: grid;
   place-items: center;
   padding: 0;
-  font-size: 20px;
+  font-size: calc(var(--topbar-font) * 0.9);
   line-height: 1;
   color: white;
   background: rgba(255, 255, 255, 0.1);
@@ -50,9 +62,13 @@
 
 .turn-counter {
   flex: 0 0 auto;
-  font-size: 22px;
+  height: var(--topbar-h);
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  font-size: var(--topbar-font);
   letter-spacing: 0.04em;
-  padding: 4px 12px;
+  padding: 0 calc(var(--topbar-font) * 0.5);
   border: 2px solid #000;
   box-shadow: 0 0 0 2px #4a4a4a;
   background: rgba(255, 255, 255, 0.1);
@@ -64,19 +80,23 @@
 // (même boîte « pixel » que le compteur de tour, juste avant le bouton de
 // fin de tour).
 .movable-count__icon {
-  width: 20px;
-  height: 20px;
+  width: var(--topbar-icon);
+  height: var(--topbar-icon);
   margin-right: 4px;
-  vertical-align: -5px;
+  vertical-align: middle;
   image-rendering: pixelated;
 }
 
 // Chrono du tour (réglage turnTimer) : même boîte « pixel » que le compteur.
 .turn-timer {
   flex: 0 0 auto;
-  font-size: 22px;
+  height: var(--topbar-h);
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  font-size: var(--topbar-font);
   letter-spacing: 0.04em;
-  padding: 4px 12px;
+  padding: 0 calc(var(--topbar-font) * 0.5);
   border: 2px solid #000;
   box-shadow: 0 0 0 2px #4a4a4a;
   background: rgba(255, 255, 255, 0.1);
@@ -97,6 +117,12 @@
   }
 }
 
+@keyframes marching-ants {
+  to {
+    background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px;
+  }
+}
+
 
 .players-info {
   display: flex;
@@ -105,6 +131,11 @@
   justify-content: center;
   gap: clamp(12px, 5vw, 48px);
   min-width: 0;
+  // Marge de respiration : sans elle, la bordure « fourmi » du joueur actif
+  // (::after en inset négatif, cf. .player-profile--active) déborde de la
+  // boîte de contenu et se fait couper net par l'`overflow-x: auto` du
+  // conteneur en mobile.
+  padding: 6px;
 }
 
 // Profil d'un joueur : avatar (+ badges), nom, or et revenu. Compact et carré
@@ -120,12 +151,32 @@
   padding: 2px 6px;
   color: inherit;
   opacity: 0.55;
+  position: relative;
   transition: opacity 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 
+  // Joueur actif : bordure « fourmi » (marching ants) qui défile, plus
+  // visible qu'un simple liseré statique pour repérer le tour en cours au
+  // premier coup d'œil. Technique 100% CSS (4 dégradés répétés + décalage de
+  // `background-position` animé, chaque côté défilant dans le sens horaire).
   &--active {
     opacity: 1;
-    border-color: currentColor;
     background: rgba(255, 255, 255, 0.08);
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      pointer-events: none;
+      background-image:
+        linear-gradient(90deg, currentColor 50%, transparent 50%),
+        linear-gradient(90deg, currentColor 50%, transparent 50%),
+        linear-gradient(0deg, currentColor 50%, transparent 50%),
+        linear-gradient(0deg, currentColor 50%, transparent 50%);
+      background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+      background-size: 8px 2px, 8px 2px, 2px 8px, 2px 8px;
+      background-position: 0 0, 0 100%, 0 0, 100% 0;
+      animation: marching-ants 0.5s infinite linear;
+    }
   }
 
   // Joueur éliminé (plus aucune case ni soldat) : profil éteint, sans stats.
@@ -178,8 +229,8 @@
 }
 
 .player-avatar {
-  width: 32px;
-  height: 32px;
+  width: var(--topbar-avatar);
+  height: var(--topbar-avatar);
   border: 2px solid #000;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5); // liseré « double bordure » pixel
   display: flex;
@@ -244,10 +295,13 @@
 }
 
 // Fin de tour : couleur du joueur actif (posée via `style` inline, repli sur
-// le rouge si elle manque), agrandi pour rester la cible la plus visible de
-// la barre.
+// le rouge si elle manque). Même hauteur que les autres boîtes de la barre
+// (voir --topbar-h), mais un peu plus large pour rester la cible la plus
+// visible de la barre.
 .end-turn-button {
   flex: 0 0 auto;
+  height: var(--topbar-h);
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -255,7 +309,7 @@
   color: white;
   border: 3px solid #000;
   box-shadow: 0 0 0 2px #4a4a4a;
-  padding: 10px 20px;
+  padding: 0 calc(var(--topbar-h) * 0.4);
   cursor: pointer;
   line-height: 1;
 
@@ -271,9 +325,90 @@
   }
 
   &__icon {
-    width: 32px;
-    height: 32px;
+    width: var(--topbar-icon);
+    height: var(--topbar-icon);
     display: block;
     image-rendering: pixelated;
+  }
+}
+
+// ---- Responsive ----
+// Le nom, l'or et le revenu de chaque joueur restent visibles à toutes les
+// tailles (données essentielles) : ils passent sur leur propre ligne plutôt
+// que d'être masqués. Le numéro de tour et le compteur de soldats restent
+// eux aussi affichés, regroupés avec le burger et le bouton de fin de tour
+// sur la première ligne. Seule l'échelle (--topbar-*) change d'un palier à
+// l'autre : la mise en page des boîtes reste identique et harmonieuse.
+
+// Tablette : resserre la barre, rien n'est encore masqué.
+@media (max-width: 900px) {
+  .top-bar {
+    --topbar-h: 38px;
+    --topbar-font: 17px;
+    --topbar-icon: 18px;
+    --topbar-avatar: 30px;
+
+    gap: 8px;
+    padding: 6px 8px;
+  }
+
+  .players-info {
+    gap: clamp(8px, 3vw, 24px);
+  }
+
+  .player-profile__name {
+    font-size: 14px;
+  }
+
+  .player-stats {
+    font-size: 15px;
+  }
+}
+
+// Mobile : la rangée des joueurs (nom, or, revenu) passe sur sa propre ligne
+// avec défilement horizontal plutôt qu'un écrasement qui les rendrait
+// illisibles. Le numéro de tour et le compteur de soldats restent visibles,
+// regroupés sur la première ligne avec le burger et le bouton de fin de tour.
+@media (max-width: 600px) {
+  .top-bar {
+    --topbar-h: 32px;
+    --topbar-font: 14px;
+    --topbar-icon: 15px;
+    --topbar-avatar: 26px;
+
+    flex-wrap: wrap;
+    row-gap: 6px;
+    gap: 6px;
+  }
+
+  // Compteur de soldats + bouton de fin de tour : poussés à droite de la
+  // première ligne (le burger et le numéro de tour restent à gauche).
+  .turn-counter--movable {
+    margin-left: auto;
+  }
+
+  // Profils des joueurs : leur propre ligne, centrée (défilement horizontal
+  // si trop de joueurs pour tenir).
+  .players-info {
+    order: 10;
+    flex-basis: 100%;
+    justify-content: center;
+    overflow-x: auto;
+    gap: 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .player-profile {
+    flex: 0 0 auto;
+    max-width: 90px;
+  }
+
+  .player-profile__name {
+    font-size: 13px;
+  }
+
+  .player-stats {
+    font-size: 14px;
+    gap: 6px;
   }
 }

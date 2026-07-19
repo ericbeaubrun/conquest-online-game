@@ -1,0 +1,98 @@
+// Notifications « toast » : pile de messages éphémères en haut à droite de
+// l'écran, informant des actions de jeu (achats, combats, morts, effets de
+// bonus). Même langage visuel pixel-art que les autres panneaux flottants.
+@use 'tokens' as *;
+
+.toasts {
+  // Positionné DANS `.game-content` (déjà `position: relative`, et déjà placé
+  // sous la barre du haut par le layout flex de `.game-container`) plutôt qu'en
+  // `fixed` sur le viewport : on évite ainsi de dupliquer/deviner la hauteur —
+  // variable (portraits des joueurs, responsive) — de la barre du haut.
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  max-width: min(360px, calc(100vw - 24px));
+  // Sous le tiroir latéral (15) et son overlay (14) : le menu ouvert les masque.
+  z-index: 13;
+  pointer-events: none; // le conteneur ne bloque pas le plateau…
+}
+
+.toast {
+  pointer-events: auto; // …mais chaque toast reste cliquable (pour le masquer).
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  font-family: $pixel-font;
+  font-size: 18px;
+  line-height: 1.15;
+  text-align: left;
+  color: #fff;
+  background: #1c1c1c;
+  border: 3px solid #000;
+  box-shadow: 0 0 0 3px #4a4a4a;
+  opacity: $panel-opacity;
+  cursor: pointer;
+  // Bord gauche coloré par le type d'évènement (défini par les variantes).
+  border-left-width: 6px;
+  animation: toast-in 0.18s ease-out;
+
+  &:hover {
+    opacity: 1;
+  }
+
+  &__dot {
+    flex: 0 0 auto;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #000;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
+  }
+
+  &__text {
+    flex: 1 1 auto;
+  }
+
+  // ---- Teintes par type (bord gauche) ----
+  &--buy {
+    border-left-color: #ffd766; // or
+  }
+
+  &--merge {
+    border-left-color: #6bc8ff; // bleu clair (comme l'aperçu de fusion)
+  }
+
+  &--combat {
+    border-left-color: #ff9d4d; // orange
+  }
+
+  &--death {
+    border-left-color: #ff6b6b; // rouge
+  }
+
+  // Évènement majeur : base détruite.
+  &--base {
+    border-left-color: #ff3b3b;
+    background: #331717;
+  }
+
+  &--bonus {
+    border-left-color: #b98bff; // violet (effets de bonus)
+  }
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateX(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: $panel-opacity;
+  }
+}

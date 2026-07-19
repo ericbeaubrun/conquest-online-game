@@ -1,18 +1,26 @@
-import {useEffect, useMemo, useState} from "react";
+import {lazy, Suspense, useEffect, useMemo, useState} from "react";
 import HexBoard from "./game/HexBoard.jsx";
 import Shop from "./game/Shop.jsx";
 import SoldierPanel from "./game/SoldierPanel.jsx";
 import BuildingPanel from "./game/BuildingPanel.jsx";
 import TreePanel from "./game/TreePanel.jsx";
+import ChestPanel from "./game/ChestPanel.jsx";
 import MergePreview from "./game/MergePreview.jsx";
 import CombatPreview from "./game/CombatPreview.jsx";
 import TopBar from "./game/TopBar.jsx";
 import SideMenu from "./game/SideMenu.jsx";
 import GameOverOverlay from "./game/GameOverOverlay.jsx";
+import Toasts from "./game/Toasts.jsx";
 import {useTurnTimer} from "./game/useTurnTimer.js";
+import {useToasts} from "./game/useToasts.js";
 import {buildSelectionView} from "./game/selectionView.js";
 import {endTurn, placeItem, buyBonus, resetGame} from "@conquest/shared-engine/engine/actions.js";
 import {isAffinityItem} from "@conquest/shared-engine/data/items.js";
+
+// Overlay des statistiques chargé en LAZY : Recharts (et les composants de
+// graphiques) restent dans un chunk séparé, téléchargé au premier clic sur un
+// bouton de statistique du menu latéral — le chargement initial ne paie rien.
+const StatsOverlay = lazy(() => import("./game/stats/StatsOverlay.jsx"));
 
 const GameLayout = ({session, onExit}) => {
     // État PARTAGÉ de la partie (tour, joueurs, possession, or...) fourni par la
@@ -42,15 +50,21 @@ const GameLayout = ({session, onExit}) => {
     const [selection, setSelection] = useState(null);
     // Cible survolée, soldat sélectionné : { id, kind } — 'merge' | 'combat'.
     const [hoverTarget, setHoverTarget] = useState(null);
+    // Graphique statistique ouvert (id du catalogue STAT_CHARTS), null = fermé.
+    const [statsChart, setStatsChart] = useState(null);
 
     const {turnTimer, timeLeft} = useTurnTimer(state, dispatch);
+    // Notifications « toast » dérivées du journal d'évènements de l'état (achats,
+    // combats, morts, effets de bonus). Alimenté aussi bien en local qu'en online
+    // (les actions des adversaires et des bots voyagent dans l'état).
+    const {toasts, dismiss: dismissToast} = useToasts(state);
 
     const colorOf = (playerId) => players.find((p) => p.id === playerId)?.color;
     const activeColor = colorOf(activePlayerId);
     const winner = winnerId ? players.find((p) => p.id === winnerId) : null;
 
     // Panneaux et aperçus dérivés de la sélection / du survol.
-    const {soldierView, buildingView, treeOwner, placeTarget, mergePreview, combatPreview} = useMemo(
+    const {soldierView, buildingView, treeView, chestView, placeTarget, mergePreview, combatPreview} = useMemo(
         () => buildSelectionView(state, selection, hoverTarget),
         [state, selection, hoverTarget]
     );
@@ -142,9 +156,35 @@ const GameLayout = ({session, onExit}) => {
             {menuOpen && (
                 <div className="side-menu-overlay" onClick={() => setMenuOpen(false)}/>
             )}
-            <SideMenu open={menuOpen} onExit={onExit}/>
+            <SideMenu
+                open={menuOpen}
+                // Ouvrir un graphique referme le tiroir : l'overlay prend l'écran.
+                onOpenStats={(chartId) => {
+                    setStatsChart(chartId);
+                    setMenuOpen(false);
+                }}
+                onExit={onExit}
+            />
+
+            {statsChart && (
+                <Suspense
+                    fallback={
+                        <div className="stats-overlay">
+                            <p className="stats-overlay__loading">Chargement des graphiques…</p>
+                        </div>
+                    }
+                >
+                    <StatsOverlay
+                        state={state}
+                        chart={statsChart}
+                        onSelect={setStatsChart}
+                        onClose={() => setStatsChart(null)}
+                    />
+                </Suspense>
+            )}
 
             <div className="game-content">
+                <Toasts toasts={toasts} onDismiss={dismissToast}/>
                 <HexBoard
                     game={state}
                     dispatch={dispatch}
@@ -157,10 +197,12 @@ const GameLayout = ({session, onExit}) => {
                     onHoverTarget={setHoverTarget}
                 />
                 {/* Un seul panneau occupe le bas de l'écran à la fois. Priorité :
-                    aperçu de fusion / combat (survol d'une cible), puis les
-                    caractéristiques du soldat / bâtiment / arbre sélectionné,
-                    enfin la boutique (en mode pose directe quand une case vide
-                    est sélectionnée). */}
+                    aperçu de fusion / combat (survol d'une cible), puis l'arbre
+                    — survolé pour abattage ou sélectionné, l'aperçu primant donc
+                    sur le panneau du soldat qui s'en approche —, puis les
+                    caractéristiques du soldat / bâtiment sélectionné, enfin la
+                    boutique (en mode pose directe quand une case vide est
+                    sélectionnée). */}
                 {mergePreview ? (
                     <MergePreview
                         from={mergePreview.from}
@@ -175,6 +217,14 @@ const GameLayout = ({session, onExit}) => {
                         attackerColor={colorOf(combatPreview.attacker.playerId)}
                         defenderColor={colorOf(combatPreview.defender.playerId)}
                     />
+                ) : treeView ? (
+                    <TreePanel
+                        tree={treeView.tree}
+                        owner={treeView.owner}
+                        settings={settings}
+                    />
+                ) : chestView ? (
+                    <ChestPanel loot={chestView.loot}/>
                 ) : soldierView ? (
                     <SoldierPanel
                         soldier={soldierView}
@@ -198,8 +248,6 @@ const GameLayout = ({session, onExit}) => {
                         settings={settings}
                         onClose={() => setSelection(null)}
                     />
-                ) : selection?.kind === "tree" ? (
-                    <TreePanel owner={treeOwner} settings={settings}/>
                 ) : (
                     <Shop
                         selectedItem={selectedItem}

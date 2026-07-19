@@ -16,7 +16,14 @@ import {
 // lire leurs défis, mais un soldat n'achète que les bonus de SON niveau — les
 // autres niveaux sont en consultation seule (cadenas).
 
-// Une carte de bonus : portrait, prix / entretien, défi, effet, et action.
+// Une statistique du bonus monte-t-elle, descend-elle ou ne bouge-t-elle pas
+// par rapport à celle du soldat qui le consulte ? Sert à colorer la valeur.
+const statTrend = (current, next) => {
+    if (current == null || next === current) return 'same';
+    return next > current ? 'up' : 'down';
+};
+
+// Une carte de bonus : portrait, statistiques, prix / entretien, défi, effet et action.
 const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownLevel, onBuy}) => {
     const unlocked = isBonusUnlocked(soldier, bonus, settings);
     const equipped = soldier.bonus === bonus.id;
@@ -72,6 +79,23 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
                         ) : null}
                     </span>
                 </div>
+                {/* Profil de statistiques du bonus : ce que le soldat DEVIENT en
+                    l'équipant. Affiché avant le défi et l'effet, car c'est la
+                    première chose à comparer d'un bonus à l'autre. Les valeurs
+                    qui changent par rapport au soldat actuel sont mises en
+                    évidence (gain ou perte). */}
+                {bonus.stats && (
+                    <p className="bonus-card__stats">
+                        <img src="/coeurPlein.png" alt="PV" className="bonus-card__line-icon"/>
+                        <span className={`bonus-card__stat bonus-card__stat--${statTrend(soldier.hp, bonus.stats.hp)}`}>
+                            {bonus.stats.hp} PV
+                        </span>
+                        <img src="/epeePlein.png" alt="Attaque" className="bonus-card__line-icon"/>
+                        <span className={`bonus-card__stat bonus-card__stat--${statTrend(soldier.atk, bonus.stats.atk)}`}>
+                            {bonus.stats.atk} ATK
+                        </span>
+                    </p>
+                )}
                 <p className={`bonus-card__challenge ${unlocked ? 'bonus-card__challenge--done' : ''}`}>
                     <img src="/defi.png" alt="Défi" className="bonus-card__line-icon"/>
                     <span className="bonus-card__line-text">{challengeText(soldier, bonus, settings)}</span>

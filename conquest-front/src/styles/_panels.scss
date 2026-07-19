@@ -272,6 +272,7 @@
   display: flex;
   flex-direction: column;
   gap: clamp(6px, 1.5vw, 10px);
+  @include pixel-scrollbar;
 }
 
 .bonus-card {
@@ -392,6 +393,27 @@
     display: flex;
     align-items: flex-start;
     gap: 5px;
+  }
+
+  // Profil de statistiques du bonus (ce que le soldat DEVIENT en l'équipant).
+  &__stats {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.2;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  // Valeur d'une statistique, colorée selon l'écart avec celle du soldat :
+  // vert si elle monte, rouge si elle descend, neutre si elle ne bouge pas.
+  &__stat {
+    margin-right: 6px;
+    font-weight: 700;
+
+    &--up { color: #5bd35b; }
+    &--down { color: #ff6b6b; }
+    &--same { color: #d8d8d8; }
   }
 
   // Icônes de ligne (défi = parchemin, effet = épée) : pixel net, non déformées.

@@ -32,5 +32,7 @@ export function deserializeState(raw) {
         placements: new Map(raw.placements),
         movedSoldiers: new Set(raw.movedSoldiers),
         destroyedBases: new Set(raw.destroyedBases || []),
+        // Parties persistées avant l'ajout des statistiques : historique vide.
+        statsHistory: raw.statsHistory || [],
     };
 }

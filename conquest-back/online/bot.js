@@ -9,10 +9,12 @@
 
 import { getLogicalBoard } from '@conquest/shared-engine/engine/board.js';
 import { computeReachable } from '@conquest/shared-engine/engine/selectors.js';
-import { moveSoldier, attackSoldier, chopTree } from '@conquest/shared-engine/engine/actions.js';
+import { moveSoldier, attackSoldier, chopTree, openChest } from '@conquest/shared-engine/engine/actions.js';
 
 // Valeur d'un type de coup (plus haut = préféré). 'move'/'merge' = 0 : ignorés.
-const PRIORITY = { conquer: 3, combat: 2, chop: 1 };
+// Un butin à portée passe avant tout : il est gratuit et disparaîtrait sinon au
+// profit de l'adversaire.
+const PRIORITY = { loot: 4, conquer: 3, combat: 2, chop: 1, openChest: 1 };
 
 // Profils de difficulté : un bot FACILE joue peu (forte chance d'arrêter son tour
 // après chaque coup) et n'attaque pas ; un bot DIFFICILE joue tout, à fond.
@@ -49,6 +51,7 @@ export function pickBotAction(state) {
     if (!best) return null;
     if (best.kind === 'combat') return attackSoldier(best.fromId, best.toId);
     if (best.kind === 'chop') return chopTree(best.fromId, best.toId);
-    // 'conquer' = déplacement terminal sur une case hors territoire.
+    if (best.kind === 'openChest') return openChest(best.fromId, best.toId);
+    // 'conquer' et 'loot' = déplacements terminaux (hors territoire / sur un butin).
     return moveSoldier(best.fromId, best.toId);
 }

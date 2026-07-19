@@ -59,7 +59,9 @@ export const ColorPicker = ({ value, used, onChange, disabled }) => {
                                         onChange(c.value);
                                         setOpen(false);
                                     }}
-                                />
+                                >
+                                    {taken && <img src="/croix.png" alt="" className="color-picker__taken-icon" />}
+                                </button>
                             );
                         })}
                     </div>

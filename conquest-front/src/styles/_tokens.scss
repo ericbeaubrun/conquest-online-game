@@ -7,3 +7,35 @@ $pixel-font: "VT323", "Courier New", monospace;
 // panneau de combat) : laisse deviner le plateau derrière sans nuire à la
 // lisibilité.
 $panel-opacity: 0.9;
+
+// Scrollbar sombre, carrée (pas d'arrondi) : remplace le style clair par défaut
+// du navigateur sur les zones défilables (boutique, panneau des bonus...).
+@mixin pixel-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3a #1c1c1c;
+
+  &::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #1c1c1c;
+    border: 1px solid #000;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #3a3a3a;
+    border: 1px solid #000;
+    box-shadow: inset 0 0 0 1px #4a4a4a;
+    border-radius: 0;
+
+    &:hover {
+      background: #4a4a4a;
+    }
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: #1c1c1c;
+  }
+}

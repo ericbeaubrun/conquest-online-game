@@ -124,5 +124,17 @@ export function createInitialState(mapId = DEFAULT_MAP_ID, setup = null, seed = 
         movedSoldiers: new Set(),
         gold: Object.fromEntries(players.map((p) => [p.id, settings.startingGold])),
         uidSeq: 0, // compteur d'identifiants de soldats (déterministe, sérialisable)
+        // Journal d'évènements de jeu (achats, combats, morts, effets de bonus…) :
+        // alimenté PAR LE REDUCER au fil des actions, il voyage dans l'état (donc
+        // sur le fil en online, bots compris) et sert à afficher des notifications
+        // « toast » côté front. `eventSeq` numérote les évènements de façon
+        // monotone : le front n'affiche que ceux dont la `seq` dépasse la dernière
+        // vue. Le journal est plafonné (voir `emit` dans reducer.js).
+        events: [],
+        eventSeq: 0,
+        // Historique statistique : un instantané par tour complet (voir
+        // `statsSnapshot` dans stats.js), alimenté par le reducer en fin de
+        // tour. Nourrit les graphiques d'évolution du menu latéral.
+        statsHistory: [],
     };
 }

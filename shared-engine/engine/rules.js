@@ -23,6 +23,8 @@ export const BUILDING_UPKEEP = {
     attackTower: TOWER_UPKEEP,
     defenseTower: TOWER_UPKEEP,
     tree: 0,
+    chest: 0,
+    loot: 0,
 };
 
 // Arbres (forêts) : objets neutres qui apparaissent au fil de la partie. Un
@@ -34,25 +36,67 @@ export const TREE_MAX_RATIO = 0.1; // au plus 10% des cases couvertes d'arbres
 export const TREE_TURN_RAMP = 20; // montée en intensité jusqu'à ce tour
 export const TREE_SPAWN_CHANCE = 0.5; // proba de base par tentative (mise à l'échelle)
 
-// Statistiques de soldat : valeur de départ et plafond atteignable.
-export const SOLDIER_HP_DEFAULT = 20;
-export const SOLDIER_HP_MAX = 100;
-export const SOLDIER_ATK_DEFAULT = 10;
-export const SOLDIER_ATK_MAX = 100;
+// Statistiques de soldat : valeur de départ (niveau 1) et plafond atteignable.
+// Les plafonds sont calés sur le barème ci-dessous : 16 est l'attaque la plus
+// haute du jeu (soldat lvl 5, dragon), 32 les PV les plus hauts (Prêtre).
+export const SOLDIER_HP_DEFAULT = 2;
+export const SOLDIER_HP_MAX = 32;
+export const SOLDIER_ATK_DEFAULT = 1;
+export const SOLDIER_ATK_MAX = 16;
 
-// Les trois affinités possibles. Défini ici (et non importé de soldier.js) pour
-// éviter une dépendance circulaire : soldier.js importe déjà rules.js.
+// Barème d'un soldat ORDINAIRE par niveau (attaque / points de vie). Source de
+// vérité unique : achat en boutique, fusion et affichage y puisent tous.
+//
+// L'attaque double à chaque niveau ; les PV doublent aussi, SAUF au niveau 5 qui
+// plafonne à ceux du niveau 4 — le dernier palier échange sa robustesse contre
+// sa force de frappe. C'est pourquoi ce barème est une TABLE explicite et non
+// une formule : la progression n'est pas régulière.
+//
+// Les réglages de partie `soldierAtk` / `soldierHp` redéfinissent le niveau 1 ;
+// les niveaux suivants suivent alors les mêmes proportions (voir
+// `purchasedSoldierStats`).
+export const SOLDIER_LEVEL_STATS = {
+    1: {atk: 1, hp: 2},
+    2: {atk: 2, hp: 4},
+    3: {atk: 4, hp: 8},
+    4: {atk: 8, hp: 16},
+    5: {atk: 16, hp: 16},
+};
+
+// Les trois affinités ÉLÉMENTAIRES. Défini ici (et non importé de soldier.js)
+// pour éviter une dépendance circulaire : soldier.js importe déjà rules.js.
+// C'est la liste de tout ce qui se gagne au hasard ou à l'achat : boutique,
+// arbres élémentaires, butin de coffre, don du « Magicien ».
 export const AFFINITY_IDS = ['fire', 'ice', 'lightning'];
+
+// Le BOUCLIER est une affinité à part : il ne s'achète pas et ne se trouve pas,
+// il est conféré au soldat qui équipe le bonus « Paladin » (voir
+// `reduceBuyBonus`). D'où son absence d'`AFFINITY_IDS` — sans quoi il finirait
+// en boutique et dans les tirages aléatoires.
+//
+// Là où les éléments s'annulent entre eux, le bouclier protège son porteur des
+// combats qui n'en valent pas la peine : il ne peut ni attaquer ni être attaqué
+// par un autre bouclier, ni par une unité SANS affinité. Il ne se bat donc que
+// contre le feu, la glace et la foudre (voir `canFight`).
+export const SHIELD_AFFINITY = 'shield';
 
 // Affinité du soldat issu d'une fusion :
 //   - sans affinité + affinité X            => X
 //   - affinité X + affinité X               => X
 //   - affinité X + affinité Y (différentes) => la TROISIÈME affinité (ni X ni Y)
+//   - bouclier + bouclier                   => bouclier
+//   - bouclier + sans affinité              => bouclier
+//   - bouclier + élément X                  => X (l'élément l'emporte)
 // Fonction PURE, réutilisée par l'application comme par l'aperçu d'interface.
 export function mergeAffinity(a, b) {
     if (!a) return b ?? null;
     if (!b) return a;
     if (a === b) return a;
+    // Le bouclier n'est pas un élément et ne se combine pas : face à un VRAI
+    // élément, il s'efface et l'élément l'emporte. (Bouclier + bouclier et
+    // bouclier + rien sont déjà réglés au-dessus et donnent bien le bouclier.)
+    if (a === SHIELD_AFFINITY) return b;
+    if (b === SHIELD_AFFINITY) return a;
     return AFFINITY_IDS.find((id) => id !== a && id !== b) ?? null;
 }
 
@@ -79,11 +123,17 @@ export function canMerge(from, to) {
 }
 
 export function mergedSoldier(from, to) {
+    const level = Math.min((to.level || 1) + 1, MERGE_MAX);
+    // Les statistiques s'additionnent, puis sont ramenées au barème du niveau
+    // atteint : c'est lui qui fait foi. Sans ce plafond, deux soldats lvl 4
+    // (8/16 chacun) donneraient un lvl 5 à 32 PV alors que le barème en prévoit
+    // 16, et les bonus ramassés en coffre feraient dériver la table.
+    const ceiling = SOLDIER_LEVEL_STATS[level] ?? SOLDIER_LEVEL_STATS[MERGE_MAX];
     return {
         ...to,
-        level: (to.level || 1) + 1,
-        hp: Math.min((to.hp || 0) + (from.hp || 0), SOLDIER_HP_MAX),
-        atk: Math.min((to.atk || 0) + (from.atk || 0), SOLDIER_ATK_MAX),
+        level,
+        hp: Math.min((to.hp || 0) + (from.hp || 0), ceiling.hp, SOLDIER_HP_MAX),
+        atk: Math.min((to.atk || 0) + (from.atk || 0), ceiling.atk, SOLDIER_ATK_MAX),
         affinity: mergeAffinity(from.affinity, to.affinity),
     };
 }
@@ -117,10 +167,10 @@ export function combatResult(attacker, defender) {
 // de `placements`) mais partage ce barème. Les tours possèdent une attaque :
 // elles ripostent quand un soldat les attaque (mêmes règles que le combat).
 export const BUILDING_STATS = {
-    base: {hp: 1000, hpMax: 1000},
-    house: {hp: 20, hpMax: 20},
-    attackTower: {hp: 50, hpMax: 50, atk: 10, atkMax: 100},
-    defenseTower: {hp: 200, hpMax: 200, atk: 1, atkMax: 1},
+    base: {hp: 64, hpMax: 64},
+    house: {hp: 2, hpMax: 2},
+    attackTower: {hp: 4, hpMax: 4, atk: 4, atkMax: 4},
+    defenseTower: {hp: 8, hpMax: 8, atk: 1, atkMax: 1},
 };
 
 // Plafonds de PV / d'attaque d'une unité quelconque (soldat ou bâtiment),
@@ -146,11 +196,26 @@ export function isAttackable(unit) {
 }
 
 // Deux unités de MÊME affinité (feu, glace, foudre) refusent le combat : leurs
-// éléments s'annulent. Ne concerne en pratique que les soldats — les structures
-// (maison, tour, base) ne portent jamais d'affinité et restent donc toujours
-// assiégeables. Par défaut le combat est AUTORISÉ : seule l'égalité de deux
-// affinités RÉELLES le refuse. Fonction PURE partagée par `computeReachable`
-// (cibles proposées) et le reducer (validation de l'attaque).
+// éléments s'annulent. Le BOUCLIER refuse en plus le combat contre une unité
+// SANS affinité : un paladin ne s'abaisse pas à croiser le fer avec un soldat
+// ordinaire, et un soldat ordinaire ne peut rien contre lui. Il ne reste donc
+// au bouclier que les trois éléments comme adversaires.
+//
+// Ne concerne en pratique que les soldats — les structures (maison, tour, base)
+// ne portent jamais d'affinité. Elles restent assiégeables par tous, bouclier
+// compris : la règle ci-dessous ne parle que d'unités qui SE battent, et une
+// structure sans affinité qu'on assiège n'est pas un duel.
+//
+// Par défaut le combat est AUTORISÉ. Fonction PURE partagée par
+// `computeReachable` (cibles proposées) et le reducer (validation de l'attaque).
 export function canFight(attacker, defender) {
-    return !(attacker?.affinity && attacker.affinity === defender?.affinity);
+    const a = attacker?.affinity ?? null;
+    const b = defender?.affinity ?? null;
+    // Affinités identiques (deux boucliers compris) : elles s'annulent.
+    if (a && a === b) return false;
+    // Bouclier contre unité sans affinité, dans un sens comme dans l'autre.
+    // Réservé aux SOLDATS : une structure sans affinité reste assiégeable.
+    if (a === SHIELD_AFFINITY && !b && defender?.type === 'soldier') return false;
+    if (b === SHIELD_AFFINITY && !a && attacker?.type === 'soldier') return false;
+    return true;
 }

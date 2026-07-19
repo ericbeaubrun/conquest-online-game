@@ -59,6 +59,7 @@ const CLIENT_ALLOWED_ACTIONS = new Set([
     'MERGE_SOLDIER',
     'ATTACK_SOLDIER',
     'CHOP_TREE',
+    'OPEN_CHEST',
     'PLACE_ITEM',
     'BUY_BONUS',
     'END_TURN',

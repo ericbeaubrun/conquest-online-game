@@ -7,8 +7,11 @@ import {upkeepFor} from '@conquest/shared-engine/data/soldier.js';
 //   - gain  (entretien négatif, ex. maison) : en jaune, « +N [pièce] / tour pour <joueur> » ;
 //   - nul   : « Aucun ».
 // `owner` est le joueur propriétaire ({ name, color }) ou null (case neutre).
-const UpkeepSpec = ({unit, owner, settings}) => {
-    const cost = upkeepFor(unit, settings);
+// `cost` force le montant au lieu de le lire au barème des unités : les arbres
+// sont taxés par le TERRITOIRE (`treeUpkeep`, voir `treeUpkeepTotal`) et non par
+// `upkeepFor`, qui ne connaît que les unités possédées.
+const UpkeepSpec = ({unit, owner, settings, cost: costProp}) => {
+    const cost = costProp ?? upkeepFor(unit, settings);
     const forWhom = owner ? (
         <>
             {' '}

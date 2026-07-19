@@ -12,6 +12,7 @@ export const MOVE_SOLDIER = 'MOVE_SOLDIER';
 export const MERGE_SOLDIER = 'MERGE_SOLDIER';
 export const ATTACK_SOLDIER = 'ATTACK_SOLDIER';
 export const CHOP_TREE = 'CHOP_TREE';
+export const OPEN_CHEST = 'OPEN_CHEST';
 export const PLACE_ITEM = 'PLACE_ITEM';
 export const BUY_BONUS = 'BUY_BONUS';
 export const END_TURN = 'END_TURN';
@@ -22,6 +23,9 @@ export const moveSoldier = (fromId, toId) => ({type: MOVE_SOLDIER, fromId, toId}
 export const mergeSoldier = (fromId, toId) => ({type: MERGE_SOLDIER, fromId, toId});
 export const attackSoldier = (fromId, toId) => ({type: ATTACK_SOLDIER, fromId, toId});
 export const chopTree = (fromId, toId) => ({type: CHOP_TREE, fromId, toId});
+// Ouverture d'un coffre par un soldat adjacent : il ne prend PAS la case, le
+// coffre y laisse un butin à ramasser ensuite d'un simple déplacement.
+export const openChest = (fromId, toId) => ({type: OPEN_CHEST, fromId, toId});
 // `level` (soldats uniquement) : achète directement un soldat de ce niveau
 // (défaut 1). Ignoré pour les autres items. Voir `soldierCostForLevel`.
 export const placeItem = (cellId, itemType, level = 1) => ({type: PLACE_ITEM, cellId, itemType, level});

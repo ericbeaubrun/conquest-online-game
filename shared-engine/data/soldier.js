@@ -5,20 +5,27 @@
 
 import {
     SOLDIER_UPKEEP,
-    SKELETON_UPKEEP,
     BUILDING_UPKEEP,
     SOLDIER_HP_DEFAULT,
     SOLDIER_ATK_DEFAULT,
     SOLDIER_HP_MAX,
     SOLDIER_ATK_MAX,
     MERGE_MAX,
+    SHIELD_AFFINITY,
+    SOLDIER_LEVEL_STATS,
 } from '../engine/rules.js';
 import { ITEM_COST } from './items.js';
+import { isSkeleton, isSummonedUnit, unitUpkeep, unitLabel } from './units.js';
 
+// Affinités affichables. Les trois premières s'achètent et se trouvent ; le
+// BOUCLIER, lui, ne s'obtient qu'en équipant le bonus « Paladin » — il ne figure
+// donc pas dans `AFFINITY_IDS` (tirages et boutique), seulement ici pour être
+// nommé et illustré dans les panneaux.
 export const AFFINITIES = [
     { id: 'fire', label: 'Feu' },
     { id: 'ice', label: 'Glace' },
     { id: 'lightning', label: 'Foudre' },
+    { id: SHIELD_AFFINITY, label: 'Bouclier' },
 ];
 
 // La liste des bonus (id + libellé) est dérivée des offres détaillées plus bas
@@ -38,6 +45,7 @@ ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
     COMBATS_SURVIVED: 'combatsSurvived', // combats terminés en vie
     SKELETONS_KILLED: 'skeletonsKilled', // squelettes tués au combat
     TOWERS_BOUGHT: 'towersBought', // tours (attaque/défense) bâties par le joueur
+    CHESTS_OPENED: 'chestsOpened', // coffres ouverts par le soldat
     DRUID_TREES_KEPT: 'druidTreesKept', // arbres sur son territoire (à la dernière fin de tour)
     PALADIN_IDLE_TURNS: 'paladinIdleTurns', // tours consécutifs terminés sans agir
     NO_TREES_ON_TERRITORY: 'noTreesOnTerritory', // aucun arbre sur son territoire (à la dernière fin de tour)
@@ -46,73 +54,57 @@ ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
     NO_CONQUEROR_ON_BOARD: 'noConquerorOnBoard', // aucun soldat « Conquérant » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
     NO_KING_ON_BOARD: 'noKingOnBoard', // aucun soldat « Roi » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
     NO_WARLOCK_ON_BOARD: 'noWarlockOnBoard', // aucun soldat « Démoniste » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
+    NO_SORCERER_ON_BOARD: 'noSorcererOnBoard', // aucun soldat « Sorcier » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
 };
 
-// Les squelettes invoqués (Mort-vivant, Démoniste) sont un SOUS-TYPE d'unité :
-// mécaniquement ils occupent le plateau comme des soldats (déplacement, combat,
-// territoire) mais portent le marqueur `unit: 'skeleton'`. Ils ne fusionnent pas
-// et ne peuvent pas recevoir de bonus. `isSkeleton` est l'unique test partagé.
-export const isSkeleton = (u) => !!u && u.unit === 'skeleton';
-
-// Une unité INVOQUÉE (squelette, arbre-druide) occupe le plateau comme un soldat
-// mais ne fusionne jamais et ne porte aucun bonus. `isSkeleton` reste le test
-// spécifique au squelette (défi « Chevalier noir »). Toute unité invoquée porte
-// un marqueur `unit` ; un soldat ordinaire n'en a pas.
-export const isSummonedUnit = (u) => !!u && !!u.unit;
+// Les sous-types d'unités (squelette, arbre-druide, dragon, créatures du
+// sorcier) vivent dans leur propre catalogue : `data/units.js` décrit leurs
+// sprites, statistiques, libellés et tailles de rendu. On réexporte ici les
+// tests les plus utilisés pour ne pas éclater les imports des appelants.
+export {isSkeleton, isSummonedUnit};
 
 // Un soldat peut-il RECEVOIR une affinité (feu / glace / foudre) achetée en
-// boutique ? Il doit être un vrai soldat — les unités invoquées (squelette,
-// arbre-druide) n'en portent jamais — et ne pas en avoir déjà une : une
-// affinité ne se remplace pas. Test PUR partagé par le reducer (validation) et
-// l'interface (cases ciblables).
+// boutique ? Toute unité posée sur le plateau le peut — invocations et créatures
+// d'envoûtement comprises — à la seule condition de ne pas en avoir déjà une :
+// une affinité ne se remplace jamais. Celles qui en portent déjà l'ont héritée
+// de leur origine (voir `makeUnit` / `makeCursed`). Test PUR partagé par le
+// reducer (validation) et l'interface (cases ciblables).
 export const canReceiveAffinity = (u) =>
-    !!u && u.type === 'soldier' && !isSummonedUnit(u) && u.affinity == null;
+    !!u && u.type === 'soldier' && u.affinity == null;
 
-// Bonus « Alchimiste » : à chaque fin de tour de son propriétaire, il renforce
-// l'allié adjacent le mieux portant et sans affinité.
+// Bonus « Alchimiste » : à chaque fin de tour de son propriétaire, il transmute
+// sa propre chair en arme — il se retire des PV pour armer l'allié adjacent le
+// moins offensif. Même logique d'échange que le « Prêtre », dans l'autre sens.
 export const ALCHEMIST_ATK_BUFF = 1; // +attaque procurée à l'allié ciblé
-export const ALCHEMIST_HP_BUFF = 2; // +PV procurés à l'allié ciblé
+export const ALCHEMIST_HP_COST = 1; // PV que l'alchimiste se retire en échange
+
+// Bonus « Prêtre » : à chaque fin de tour de son propriétaire, il donne de sa
+// propre vie pour soigner l'allié adjacent le plus mal en point.
+export const PRIEST_HP_GIFT = 1; // PV rendus à l'allié ciblé
+export const PRIEST_HP_COST = 1; // PV que le prêtre se retire en échange
 
 // Bonus « Magicien » : à chaque fin de tour de son propriétaire, il donne 1
 // affinité (aléatoire) à UN allié adjacent sans affinité, et rapporte cette
 // prime d'or à chaque don.
 export const MAGICIAN_GOLD_REWARD = 10;
 
-// Bonus « Guerrier » : en l'équipant, le soldat voit ses statistiques portées à
-// ces valeurs, et chaque ennemi qu'il tue rapporte cette prime d'or.
-export const WARRIOR_HP = 50;
-export const WARRIOR_ATK = 50;
+// Bonus « Guerrier » : chaque ennemi qu'il tue rapporte cette prime d'or.
 export const WARRIOR_KILL_REWARD = 20;
 
-// Squelette invoqué par le bonus « Mort-vivant » : unité alliée qui remplace le
-// soldat sur sa case au moment de sa mort. Sprite et statistiques dédiés.
-export const SKELETON_SRC = '/characters/lvl2/skeleton1.png';
-export const SKELETON_HP = 5;
-export const SKELETON_ATK = 5;
-
-// Bonus « Démoniste » : en l'équipant, le soldat prend ces statistiques, et à
-// chaque fin de tour il invoque un squelette allié fragile (skeleton2) sur une
-// case voisine libre.
-export const WARLOCK_HP = 100;
-export const WARLOCK_ATK = 10;
-export const SKELETON2_SRC = '/characters/lvl5/skeleton2.png';
-export const SKELETON2_HP = 1;
-export const SKELETON2_ATK = 5;
+// Bonus « Démoniste » : à chaque fin de tour il invoque un squelette allié
+// (l'espèce « skeleton2 » du catalogue `units.js`) sur une case voisine libre.
 export const WARLOCK_SUMMON_CHANCE = 0.5; // proba d'invocation par tour et par démoniste
 
 // Bonus « Vampire » : à chaque fin de tour de son propriétaire, il draine ce
-// nombre de PV à CHAQUE soldat allié adjacent (sans jamais le descendre sous
-// 1 PV : il n'achève pas ses propres alliés) et récupère pour lui le total volé.
+// nombre de PV à UN SEUL soldat allié adjacent — le mieux portant, celui qui le
+// supportera le mieux — sans jamais le descendre sous 1 PV (il n'achève pas ses
+// propres alliés), et récupère pour lui les PV volés.
 export const VAMPIRE_DRAIN = 1;
 
 // Bonus « Druide » : au lieu de récolter un arbre, le druide le TRANSFORME en
-// une unité alliée « arbre-druide » — un combattant de niveau 2 non fusionnable,
-// aux statistiques dédiées, qui occupe la case de l'arbre. Le défi se débloque
-// en ayant DRUID_TREES_REQUIRED arbres sur son territoire.
-export const DRUID_TREE_SRC = '/characters/lvl4/druidTree.png';
-export const DRUID_TREE_HP = 15;
-export const DRUID_TREE_ATK = 30;
-export const DRUID_TREE_LEVEL = 2;
+// une unité alliée « arbre-druide » (espèce `druidTree` du catalogue
+// `units.js`), qui occupe la case de l'arbre. Le défi se débloque en ayant
+// DRUID_TREES_REQUIRED arbres sur son territoire.
 export const DRUID_TREES_REQUIRED = 5; // arbres à avoir sur son territoire
 
 // Défi « Paladin » : nombre de tours CONSÉCUTIFS que le soldat doit terminer sans
@@ -130,6 +122,12 @@ export const PALADIN_IDLE_TURNS = 3;
 //   - src       : visuel pixel (null tant que l'asset n'existe pas encore)
 //   - requiredLevel : niveau de soldat requis (et unique) pour ce bonus
 //   - price    : coût en or (`null` => « Gratuit »)
+//   - stats    : { atk, hp } que le soldat PREND en équipant le bonus. Chaque
+//                bonus a son propre profil — le Prêtre encaisse (1/32), le
+//                Vampire frappe et meurt vite (8/1) — et ces valeurs REMPLACENT
+//                celles du niveau (voir `reduceBuyBonus`). C'est le cœur de
+//                l'équilibrage : un bonus se choisit autant pour sa silhouette
+//                de statistiques que pour son effet.
 //   - challenge : défi à accomplir pour débloquer. Soit une chaîne (défi pas
 //                 encore branché), soit un objet suivi { metric, goal, describe }
 //                 où `describe(courant, objectif)` produit le texte d'avancement.
@@ -141,6 +139,7 @@ export const BONUS_OFFERS = [
         label: 'Bûcheron',
         src: '/characters/lvl1/lumberJack.png',
         requiredLevel: 1,
+        stats: {atk: 1, hp: 2},
         price: 10,
         challenge: {
             metric: CHALLENGE_METRICS.TREES_CHOPPED,
@@ -154,6 +153,7 @@ export const BONUS_OFFERS = [
         label: 'Aventurier',
         src: '/characters/lvl1/aventurer.png',
         requiredLevel: 1,
+        stats: {atk: 1, hp: 2},
         price: 10,
         challenge: {
             metric: CHALLENGE_METRICS.CASES_CONQUERED,
@@ -167,6 +167,7 @@ export const BONUS_OFFERS = [
         label: 'Coureur',
         src: '/characters/lvl1/runner.png',
         requiredLevel: 1,
+        stats: {atk: 1, hp: 2},
         price: null,
         challenge: {
             metric: CHALLENGE_METRICS.CASES_TRAVELED_OWN,
@@ -180,6 +181,7 @@ export const BONUS_OFFERS = [
         label: 'Fermier',
         src: '/characters/lvl2/farmer.png',
         requiredLevel: 1,
+        stats: {atk: 1, hp: 2},
         price: 20,
         challenge: {
             metric: CHALLENGE_METRICS.ENEMY_TREES_CHOPPED,
@@ -195,6 +197,7 @@ export const BONUS_OFFERS = [
         label: 'Voleur',
         src: '/characters/lvl2/thief.png',
         requiredLevel: 2,
+        stats: {atk: 2, hp: 4},
         price: 10,
         challenge: {
             metric: CHALLENGE_METRICS.ENEMY_CASES_CONQUERED,
@@ -208,6 +211,7 @@ export const BONUS_OFFERS = [
         label: 'Mort-vivant',
         src: '/characters/lvl2/undead.png',
         requiredLevel: 2,
+        stats: {atk: 2, hp: 4},
         price: null,
         challenge: {
             metric: CHALLENGE_METRICS.ENEMIES_KILLED_L2,
@@ -221,6 +225,7 @@ export const BONUS_OFFERS = [
         label: 'Viking',
         src: '/characters/lvl2/viking.png',
         requiredLevel: 2,
+        stats: {atk: 2, hp: 4},
         price: 40,
         upkeep: 10,
         challenge: {
@@ -236,6 +241,7 @@ export const BONUS_OFFERS = [
         label: 'Guerrier',
         src: '/characters/lvl2/GoldWarrior.png',
         requiredLevel: 2,
+        stats: {atk: 4, hp: 6},
         price: 50,
         challenge: {
             metric: CHALLENGE_METRICS.COMBATS_SURVIVED,
@@ -255,8 +261,13 @@ export const BONUS_OFFERS = [
         label: 'Ninja',
         src: '/characters/lvl3/ninja.png',
         requiredLevel: 3,
+        stats: {atk: 2, hp: 8},
         price: null,
-        challenge: null,
+        challenge: {
+            metric: CHALLENGE_METRICS.CHESTS_OPENED,
+            goal: 1,
+            describe: (c, g) => `Ouvrir ${c}/${g} coffre.`,
+        },
         effect: 'Se déplace à travers tout (soldats, structures, arbres), mais ne peut pas attaquer à travers un obstacle.',
     },
     {
@@ -264,6 +275,7 @@ export const BONUS_OFFERS = [
         label: 'Vampire',
         src: '/characters/lvl3/vampire.png',
         requiredLevel: 3,
+        stats: {atk: 8, hp: 1},
         price: 120,
         upkeep: 1,
         challenge: {
@@ -272,13 +284,14 @@ export const BONUS_OFFERS = [
             describe: (c, g) =>
                 c >= g ? 'Territoire sans arbre.' : 'N’avoir aucun arbre sur son territoire.',
         },
-        effect: 'Chaque tour, vole 1 PV à chaque allié adjacent.',
+        effect: 'Chaque tour, vole 1 PV à l’allié adjacent ayant le plus de PV.',
     },
     {
         id: 'magician',
         label: 'Magicien',
         src: '/characters/lvl3/magicien.png',
         requiredLevel: 3,
+        stats: {atk: 2, hp: 2},
         price: 50,
         challenge: {
             metric: CHALLENGE_METRICS.HAS_AFFINITY,
@@ -292,6 +305,7 @@ export const BONUS_OFFERS = [
         label: 'Alchimiste',
         src: '/characters/lvl3/alchemist.png',
         requiredLevel: 3,
+        stats: {atk: 1, hp: 16},
         price: 76,
         upkeep: 5,
         challenge: {
@@ -299,7 +313,7 @@ export const BONUS_OFFERS = [
             goal: 2,
             describe: (c, g) => (c >= g ? `${g} maisons possédées.` : `Posséder ${c}/${g} maisons.`),
         },
-        effect: '+1 atk / +2 PV à l’allié adjacent sans affinité ayant le plus de PV.',
+        effect: 'Se retire 1 PV pour donner +1 atk à l’allié adjacent le moins offensif.',
     },
 
     // ---- Niveau 4 ----
@@ -308,6 +322,7 @@ export const BONUS_OFFERS = [
         label: 'Prêtre',
         src: '/characters/lvl4/pretre.png',
         requiredLevel: 4,
+        stats: {atk: 1, hp: 32},
         price: 30,
         upkeep: 12,
         challenge: {
@@ -315,13 +330,14 @@ export const BONUS_OFFERS = [
             goal: 2,
             describe: (c, g) => (c >= g ? `${g} maisons possédées.` : `Posséder ${c}/${g} maisons.`),
         },
-        effect: 'Retire 1 attaque à lui-même pour donner 2 PV à l’allié adjacent ayant le plus d’attaque.',
+        effect: 'Se retire 1 PV pour en donner 1 à l’allié adjacent le plus mal en point.',
     },
     {
         id: 'blackKnight',
         label: 'Chevalier noir',
         src: '/characters/lvl4/darkWarrior.png',
         requiredLevel: 4,
+        stats: {atk: 8, hp: 12},
         price: 40,
         upkeep: 10,
         challenge: {
@@ -336,6 +352,7 @@ export const BONUS_OFFERS = [
         label: 'Paladin',
         src: '/characters/lvl4/paladin.png',
         requiredLevel: 4,
+        stats: {atk: 8, hp: 12},
         price: 100,
         upkeep: 20,
         challenge: {
@@ -346,13 +363,15 @@ export const BONUS_OFFERS = [
                     ? `${PALADIN_IDLE_TURNS} tours sans agir accomplis.`
                     : `Terminer son tour sans agir (${c}/${g} tours consécutifs).`,
         },
-        effect: 'Récupère 2 PV à chaque tour.',
+        effect:
+            'Porte l’affinité Bouclier divin : ne peut ni attaquer ni être attaqué par une unité à bouclier ou sans affinité.',
     },
     {
         id: 'druid',
         label: 'Druide',
         src: '/characters/lvl4/druid.png',
         requiredLevel: 4,
+        stats: {atk: 1, hp: 8},
         price: null,
         upkeep: 10,
         challenge: {
@@ -368,17 +387,23 @@ export const BONUS_OFFERS = [
     {
         id: 'sorcerer',
         label: 'Sorcier',
-        src: null,
+        src: '/characters/lvl5/sorceler.png',
         requiredLevel: 5,
-        price: 500,
-        challenge: 'Lancer 5 sorts en une partie.',
-        effect: 'Attaque à distance de 2 cases.',
+        stats: {atk: 4, hp: 1},
+        price: 100,
+        challenge: {
+            metric: CHALLENGE_METRICS.NO_SORCERER_ON_BOARD,
+            goal: 1,
+            describe: (c, g) => (c >= g ? 'Aucun sorcier sur le terrain.' : 'Qu’aucun sorcier ne soit sur le terrain.'),
+        },
+        effect: 'Envoûte les rois, démonistes et conquérants ennemis (1/1, sans effet) ; sans cible, invoque un dragon (100/100).',
     },
     {
         id: 'warlock',
         label: 'Démoniste',
         src: '/characters/lvl5/demonist.png',
         requiredLevel: 5,
+        stats: {atk: 1, hp: 16},
         price: 100,
         upkeep: 40,
         challenge: {
@@ -393,6 +418,7 @@ export const BONUS_OFFERS = [
         label: 'Roi',
         src: '/characters/lvl5/king.png',
         requiredLevel: 5,
+        stats: {atk: 1, hp: 2},
         price: 100,
         challenge: {
             metric: CHALLENGE_METRICS.NO_KING_ON_BOARD,
@@ -406,6 +432,7 @@ export const BONUS_OFFERS = [
         label: 'Conquérant',
         src: '/characters/lvl5/conquerant.png',
         requiredLevel: 5,
+        stats: {atk: 4, hp: 4},
         price: 100,
         upkeep: 20,
         challenge: {
@@ -421,9 +448,18 @@ export const BONUS_OFFERS = [
 // tant qu'un de ses soldats porte ce bonus (est en vie).
 export const KING_INCOME_MULT = 1.5;
 
-// Bonus « Paladin » : PV régénérés à chaque fin de tour de son propriétaire
-// (plafonnés au maximum d'un soldat).
-export const PALADIN_HP_REGEN = 2;
+// Bonus « Sorcier » : à la fin du tour de son propriétaire, il ENVOÛTE les
+// soldats ENNEMIS portant l'un des trois autres bonus de niveau 5. Le soldat
+// touché est remplacé par une créature dérisoire (1/1) qui reste au service de
+// son propriétaire mais perd son bonus et son effet ; seule son AFFINITÉ
+// survit au sort. Chaque bonus a sa créature.
+// Les créatures elles-mêmes (cochon, corbeau, grenouille) et le dragon sont des
+// espèces du catalogue `units.js` : c'est leur champ `curseOf` qui désigne le
+// bonus qu'elles remplacent (voir `curseFor` / `isCursable`).
+//
+// Faute de cible à envoûter (aucun roi, démoniste ni conquérant sur le
+// plateau), le sorcier invoque à la place UN dragon — une seule fois, sans quoi
+// il en produirait un par tour.
 
 // Bonus disponibles pour un niveau de soldat donné (un bonus = un seul niveau).
 export const bonusOffersForLevel = (level) =>
@@ -535,17 +571,21 @@ export const MAX_SOLDIER_PURCHASE_LEVEL = MERGE_MAX;
 const clampPurchaseLevel = (level) =>
     Math.max(1, Math.min(MAX_SOLDIER_PURCHASE_LEVEL, Math.floor(level || 1)));
 
-// Statistiques d'un soldat acheté au niveau donné : PV et attaque de base
-// (configurables par partie) doublés à chaque niveau, plafonnés comme une fusion.
+// Statistiques d'un soldat au niveau donné, d'après le barème `SOLDIER_LEVEL_STATS`
+// (voir rules.js). Les réglages de partie `soldierAtk` / `soldierHp` redéfinissent
+// le NIVEAU 1 ; les niveaux suivants gardent alors les mêmes proportions que le
+// barème — un niveau 4 vaut 8× l'attaque et 8× les PV d'un niveau 1, quels que
+// soient les réglages.
 export function purchasedSoldierStats(level, settings) {
     const lvl = clampPurchaseLevel(level);
+    const ref = SOLDIER_LEVEL_STATS[lvl] ?? SOLDIER_LEVEL_STATS[1];
+    const base = SOLDIER_LEVEL_STATS[1];
     const baseHp = settings?.soldierHp ?? SOLDIER_HP_DEFAULT;
     const baseAtk = settings?.soldierAtk ?? SOLDIER_ATK_DEFAULT;
-    const factor = 2 ** (lvl - 1);
     return {
         level: lvl,
-        hp: Math.min(baseHp * factor, SOLDIER_HP_MAX),
-        atk: Math.min(baseAtk * factor, SOLDIER_ATK_MAX),
+        hp: Math.min(Math.round((baseHp * ref.hp) / base.hp), SOLDIER_HP_MAX),
+        atk: Math.min(Math.round((baseAtk * ref.atk) / base.atk), SOLDIER_ATK_MAX),
     };
 }
 
@@ -593,8 +633,12 @@ export const bonusPriceOf = (bonus, settings) =>
 export const upkeepFor = (unit, settings) => {
     if (!unit) return 0;
     if (unit.type === 'soldier') {
-        if (isSkeleton(unit)) return settings?.upkeep?.skeleton ?? SKELETON_UPKEEP;
-        if (unit.unit === 'druidTree') return 0; // arbre-druide : unité invoquée sans entretien
+        // Unité invoquée / envoûtée : barème propre à son espèce (`units.js`).
+        // Seul le squelette en a un, surchargeable par partie.
+        if (isSummonedUnit(unit)) {
+            if (isSkeleton(unit)) return settings?.upkeep?.skeleton ?? unitUpkeep(unit);
+            return unitUpkeep(unit);
+        }
         const lvl = unit.level || 1;
         const base = settings?.upkeep?.[`soldier${lvl}`] ?? SOLDIER_UPKEEP[lvl] ?? 0;
         return base + (unit.bonus ? bonusUpkeep(unit.bonus, settings) : 0);
@@ -664,3 +708,14 @@ export const LEVEL_RANKS = ['Ignorant', 'Initié', 'Érudit', 'Stratège', 'Éve
 // Titre de niveau pour un soldat donné (borné aux niveaux définis).
 export const levelRankLabel = (level) =>
     LEVEL_RANKS[Math.max(1, Math.min(LEVEL_RANKS.length, level || 1)) - 1];
+
+// « Race » affichée d'une unité, par ordre de priorité :
+//   - unité invoquée / envoûtée : le nom de son ESPÈCE (« Dragon », « Corbeau »,
+//     « Squelette »…). Son niveau ne veut rien dire pour elle — un dragon n'est
+//     pas un « Ignorant » — et elle ne portera jamais de bonus ;
+//   - soldat avec bonus : le nom du bonus (« Bûcheron », « Roi »…) ;
+//   - soldat ordinaire : son titre de niveau (« Ignorant », « Initié »…).
+// Source de vérité unique de ce libellé, partagée par le panneau du soldat et
+// les notifications.
+export const raceLabel = (unit) =>
+    unitLabel(unit) ?? (unit?.bonus ? bonusLabel(unit.bonus) : levelRankLabel(unit?.level));

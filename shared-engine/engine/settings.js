@@ -8,7 +8,13 @@
 // entretiens, prix/entretiens des bonus) pour rester alignées automatiquement.
 
 import {ITEM_COST} from '../data/items.js';
-import {SOLDIER_UPKEEP, TOWER_UPKEEP, SKELETON_UPKEEP} from './rules.js';
+import {
+    SOLDIER_UPKEEP,
+    TOWER_UPKEEP,
+    SKELETON_UPKEEP,
+    SOLDIER_HP_DEFAULT,
+    SOLDIER_ATK_DEFAULT,
+} from './rules.js';
 import {BONUS_OFFERS} from '../data/soldier.js';
 
 // --- Seuils par défaut des conditions de victoire (repli si non fournis) ---
@@ -48,10 +54,13 @@ export const DEFAULT_SETTINGS = {
     treeSpawnChance: 50, // % de chance qu'une vague d'arbres apparaisse par tour
     treeSpawnMin: 0, // nombre minimum d'arbres par vague
     treeSpawnMax: 2, // nombre maximum d'arbres par vague
+    chestsEnabled: true,
+    chestSpawnChance: 10, // % de chance qu'un coffre apparaisse par tour
+    chestMax: 5, // nombre de coffres pouvant coexister sur le plateau
     // Unités
     bonusesEnabled: true,
-    soldierHp: 10,
-    soldierAtk: 5,
+    soldierHp: SOLDIER_HP_DEFAULT, // PV d'un soldat de niveau 1 (barème SOLDIER_LEVEL_STATS)
+    soldierAtk: SOLDIER_ATK_DEFAULT, // attaque d'un soldat de niveau 1
     bonusEnabled: DEFAULT_BONUS_ENABLED, // bonus autorisés (activables un par un)
     bonusChallengeEnabled: DEFAULT_BONUS_CHALLENGE_ENABLED, // défis actifs (désactivables un par un)
     bonusPrice: DEFAULT_BONUS_PRICE, // prix d'achat par bonus

@@ -7,6 +7,7 @@ import {
     MERGE_SOLDIER,
     ATTACK_SOLDIER,
     CHOP_TREE,
+    OPEN_CHEST,
     PLACE_ITEM,
     BUY_BONUS,
     END_TURN,
@@ -16,6 +17,7 @@ import {
 import {getLogicalBoard, createInitialState} from './board.js';
 import {makeRng} from './rng.js';
 import {computeReachable, incomeFor, checkVictory} from './selectors.js';
+import {statsSnapshot} from './stats.js';
 import {
     SOLDIER_HP_DEFAULT,
     SOLDIER_ATK_DEFAULT,
@@ -30,30 +32,25 @@ import {
     TREE_REWARD,
     TREE_MAX_RATIO,
     AFFINITY_IDS,
+    SHIELD_AFFINITY,
 } from './rules.js';
 import {ITEM_COST, isAffinityItem} from '../data/items.js';
+import {makeTree, treeReward, treeAffinity, canChopTree} from '../data/trees.js';
+import {makeChest, makeLoot, lootGold, lootHp, lootAtk, lootAffinity, lootUnit} from '../data/chests.js';
+import {unitKindById, curseFor, isCursable} from '../data/units.js';
 import {
     CHALLENGE_METRICS,
     BONUS_OFFERS,
     bonusPriceOf,
     isBonusUnlocked,
-    SKELETON_SRC,
-    SKELETON_HP,
-    SKELETON_ATK,
-    WARRIOR_HP,
-    WARRIOR_ATK,
     WARRIOR_KILL_REWARD,
     ALCHEMIST_ATK_BUFF,
-    ALCHEMIST_HP_BUFF,
+    ALCHEMIST_HP_COST,
+    PRIEST_HP_GIFT,
+    PRIEST_HP_COST,
     KING_INCOME_MULT,
     isSkeleton,
-    WARLOCK_HP,
-    WARLOCK_ATK,
-    SKELETON2_SRC,
-    SKELETON2_HP,
-    SKELETON2_ATK,
     WARLOCK_SUMMON_CHANCE,
-    PALADIN_HP_REGEN,
     PALADIN_IDLE_TURNS,
     VAMPIRE_DRAIN,
     isSummonedUnit,
@@ -61,14 +58,46 @@ import {
     unlockedBonusIds,
     purchasedSoldierStats,
     soldierCostForLevel,
-    DRUID_TREE_SRC,
-    DRUID_TREE_HP,
-    DRUID_TREE_ATK,
-    DRUID_TREE_LEVEL,
     DRUID_TREES_REQUIRED,
     MAGICIAN_GOLD_REWARD,
 } from '../data/soldier.js';
 import {getNeighbors, hexId} from '../data/hex.js';
+
+// Nombre maximum d'évènements conservés dans le journal (`state.events`). Le
+// front n'affiche que les nouveaux (via `seq`), mais le journal voyage dans
+// l'état sérialisé/persisté : on le borne pour ne pas le laisser croître sans fin.
+const EVENT_CAP = 40;
+
+// Ajoute un ou plusieurs évènements au journal de l'état, de façon PURE et
+// DÉTERMINISTE (mêmes entrées -> mêmes `seq`). Chaque évènement reçoit une `seq`
+// monotone croissante (`eventSeq`) ; le journal est tronqué aux `EVENT_CAP`
+// derniers. Les évènements sont des objets de DONNÉES (kind + payload) : leur
+// mise en forme en texte se fait côté front (voir `toastMessages.js`), afin que
+// l'engine reste sans dépendance d'affichage. Ignorer les entrées `null`/`false`
+// permet d'écrire `emit(state, cond && {...})`.
+function emit(state, ...events) {
+    const list = events.filter(Boolean);
+    if (!list.length) return state;
+    let seq = state.eventSeq || 0;
+    const stamped = list.map((e) => ({...e, seq: (seq += 1)}));
+    const merged = [...(state.events || []), ...stamped];
+    const events2 = merged.length > EVENT_CAP ? merged.slice(merged.length - EVENT_CAP) : merged;
+    return {...state, events: events2, eventSeq: seq};
+}
+
+// Instantané minimal d'une unité pour un évènement (titre du soldat, camp,
+// structure…). Le front reconstitue le libellé complet à partir de ces champs.
+function unitSnapshot(unit) {
+    if (!unit) return null;
+    return {
+        type: unit.type,
+        playerId: unit.playerId,
+        atk: unit.atk,
+        level: unit.level,
+        bonus: unit.bonus ?? null,
+        unit: unit.unit ?? null, // sous-type invoqué (skeleton / druidTree) le cas échéant
+    };
+}
 
 // Fabrique un soldat neuf avec ses caractéristiques par défaut. Centralisé ici
 // pour que toute création de soldat parte du même modèle (stats + specs).
@@ -90,46 +119,50 @@ function makeSoldier(playerId, uid, settings) {
     };
 }
 
-// Squelette invoqué par les bonus « Mort-vivant » (à la mort du porteur) et
-// « Démoniste » (chaque tour). C'est un soldat allié à part entière (il se
-// déplace, combat, compte pour le territoire) mais avec son propre sprite
-// (`skin`) et des statistiques réduites. Il ne porte aucun bonus et ne peut donc
-// pas en réinvoquer un autre. Les caractéristiques (skin/hp/atk) sont
-// paramétrables pour distinguer les deux invocations.
-function makeSkeleton(playerId, uid, {skin = SKELETON_SRC, hp = SKELETON_HP, atk = SKELETON_ATK} = {}) {
+// Fabrique une unité INVOQUÉE d'après son espèce au catalogue (`data/units.js`) :
+// squelette (« Mort-vivant », « Démoniste »), arbre-druide (« Druide »), dragon
+// (« Sorcier »). Toutes sont des soldats alliés à part entière — elles se
+// déplacent, combattent et tiennent du territoire — mais leur marqueur `unit`
+// leur interdit la fusion et les bonus. Sprite, statistiques et niveau viennent
+// tous de l'espèce : cette fonction est le seul endroit qui les assemble.
+//
+// `affinity` est l'élément dont l'unité NAÎT, hérité de son origine : celle de
+// l'invocateur pour un squelette, celle de l'arbre pour un arbre-druide. Sans
+// élément à hériter elle naît neutre (dragon, gobelin) — et pourra en gagner un
+// plus tard comme n'importe quelle unité (boutique, coffre, arbre élémentaire).
+function makeUnit(kindId, playerId, uid, affinity = null) {
+    const kind = unitKindById(kindId);
     return {
         type: 'soldier',
-        unit: 'skeleton', // sous-type : occupe le plateau comme un soldat, mais
-        playerId, //          ne fusionne pas et ne porte jamais de bonus.
+        unit: kind.unit ?? kind.id,
+        playerId,
         uid,
-        level: 1,
-        hp,
-        atk,
-        affinity: null,
+        level: kind.level ?? 1,
+        hp: kind.hp,
+        atk: kind.atk,
+        affinity,
         bonus: null,
         behavior: null,
-        skin,
+        skin: kind.src,
         progress: {},
     };
 }
 
-// Arbre-druide invoqué par le bonus « Druide » : quand un druide cible un arbre,
-// celui-ci se change en cette unité alliée (au lieu d'être récolté). Combattant
-// à part entière (déplacement, combat, territoire) au sprite dédié, de niveau 2
-// mais NON fusionnable et sans bonus — comme un squelette, via le marqueur `unit`.
-function makeDruidTree(playerId, uid) {
+// Créature issue d'un envoûtement du « Sorcier ». Contrairement à une invocation,
+// elle REMPLACE un soldat existant : celui-ci garde son propriétaire, sa case,
+// son orientation et son AFFINITÉ, mais prend les traits de l'espèce (1/1) et
+// perd bonus, comportement et défis. Le marqueur `unit` rend le sort définitif :
+// la créature ne fusionne plus et ne peut plus recevoir de bonus.
+function makeCursed(victim, kind) {
     return {
-        type: 'soldier',
-        unit: 'druidTree', // sous-type invoqué : ne fusionne pas, ne porte pas de bonus.
-        playerId,
-        uid,
-        level: DRUID_TREE_LEVEL,
-        hp: DRUID_TREE_HP,
-        atk: DRUID_TREE_ATK,
-        affinity: null,
+        ...victim,
+        unit: kind.unit ?? kind.id,
+        level: kind.level ?? 1,
+        hp: kind.hp,
+        atk: kind.atk,
         bonus: null,
         behavior: null,
-        skin: DRUID_TREE_SRC,
+        skin: kind.src,
         progress: {},
     };
 }
@@ -151,7 +184,11 @@ function reduceMove(state, {fromId, toId}) {
     const board = getLogicalBoard(state.mapId);
     const reachable = computeReachable(state, board, fromId);
     const dest = reachable.moves.get(toId);
-    if (!dest || (dest.kind !== 'move' && dest.kind !== 'conquer')) return state;
+    if (!dest || (dest.kind !== 'move' && dest.kind !== 'conquer' && dest.kind !== 'loot')) return state;
+    // Ramassage d'un butin de coffre : c'est un déplacement comme un autre, mais
+    // la case porte un objet à s'approprier — traité à part pour ne pas alourdir
+    // le déplacement ordinaire.
+    if (dest.kind === 'loot') return reduceTakeLoot(state, fromId, toId, soldier);
 
     // Avancement des défis du soldat : une conquête compte 1 case conquise ; un
     // repositionnement dans son territoire compte le nombre de cases parcourues.
@@ -223,7 +260,10 @@ function reduceMerge(state, {fromId, toId}) {
     placements.delete(fromId);
     placements.set(toId, merged);
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
-    return {...state, placements, movedSoldiers};
+    return emit(
+        {...state, placements, movedSoldiers},
+        {kind: 'merge', playerId: merged.playerId, atk: merged.atk, level: merged.level}
+    );
 }
 
 // Case d'approche au CORPS À CORPS : la plus proche case *où le soldat peut se
@@ -303,6 +343,11 @@ function reduceAttack(state, {fromId, toId}) {
     placements.delete(fromId);
     let uidSeq = state.uidSeq;
 
+    // Évènements du combat (notifications), dans l'ordre : l'engagement, puis les
+    // morts et effets de bonus au fil du règlement. Instantanés pris AVANT combat
+    // (le titre du soldat mort reflète bien ce qu'il était).
+    const events = [{kind: 'attack', attacker: unitSnapshot(mover), defender: unitSnapshot(to)}];
+
     // Applique l'issue du combat sur une case : l'unité survivante garde ses PV
     // à jour ; l'unité morte quitte le plateau, sauf « Mort-vivant » qui laisse
     // un squelette allié (5/10) sur sa case. Renvoie l'unité morte (ou null).
@@ -318,9 +363,14 @@ function reduceAttack(state, {fromId, toId}) {
             placements.set(id, survivor);
             return null;
         }
+        // L'unité meurt : notification de mort (avec son titre/camp). « Mort-vivant »
+        // laisse en plus un squelette allié sur sa case — un effet de bonus notifié.
+        events.push({kind: 'death', unit: unitSnapshot(unit)});
         if (unit.type === 'soldier' && unit.bonus === 'undead') {
             uidSeq += 1;
-            placements.set(id, makeSkeleton(unit.playerId, `s${uidSeq}`));
+            // Le squelette se relève avec l'élément de celui dont il est la dépouille.
+            placements.set(id, makeUnit('skeleton', unit.playerId, `s${uidSeq}`, unit.affinity ?? null));
+            events.push({kind: 'bonusUndead', playerId: unit.playerId});
         } else {
             placements.delete(id);
         }
@@ -340,6 +390,7 @@ function reduceAttack(state, {fromId, toId}) {
             baseHp = {...state.baseHp};
             delete baseHp[toId];
             deadDefender = to;
+            events.push({kind: 'death', unit: unitSnapshot(to)}); // base rasée
         } else {
             baseHp = {...state.baseHp, [toId]: defender.hp};
         }
@@ -389,6 +440,7 @@ function reduceAttack(state, {fromId, toId}) {
                     hp: Math.min((knight.hp || 0) + (to.hp || 0), SOLDIER_HP_MAX),
                     atk: Math.min((knight.atk || 0) + (to.atk || 0), SOLDIER_ATK_MAX),
                 };
+                events.push({kind: 'bonusBlackKnight', playerId: from.playerId});
             }
             placements.set(attackerFinalId, knight);
         }
@@ -403,7 +455,10 @@ function reduceAttack(state, {fromId, toId}) {
     }
 
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
-    return {...state, placements, ownership, gold, movedSoldiers, uidSeq, baseHp, destroyedBases};
+    return emit(
+        {...state, placements, ownership, gold, movedSoldiers, uidSeq, baseHp, destroyedBases},
+        ...events
+    );
 }
 
 // Abattage d'un arbre : comme le combat, c'est une action au CORPS À CORPS. Si
@@ -423,6 +478,8 @@ function reduceChop(state, {fromId, toId}) {
 
     const tree = state.placements.get(toId);
     if (!tree || tree.type !== 'tree') return state;
+    // Un arbre élémentaire refuse la hache d'un soldat de même affinité.
+    if (!canChopTree(from, tree)) return state;
 
     // Case d'où abattre l'arbre : la case du soldat s'il est déjà collé, sinon la
     // case libre adjacente à l'arbre la plus proche qu'il puisse atteindre.
@@ -444,7 +501,10 @@ function reduceChop(state, {fromId, toId}) {
         placements.delete(fromId); // …et le druide quitte sa case de départ
         placements.set(chopFromId, druid); // le druide se tient sur sa case d'approche
         const uidSeq = state.uidSeq + 1;
-        placements.set(toId, makeDruidTree(state.activePlayerId, `s${uidSeq}`)); // …remplacé par l'unité
+        // …remplacé par l'unité, qui hérite de l'élément de l'arbre transformé
+        // (un arbre de feu donne un arbre-druide de feu ; un arbre ordinaire, une
+        // unité neutre).
+        placements.set(toId, makeUnit('druidTree', state.activePlayerId, `s${uidSeq}`, treeAffinity(tree)));
         // Les deux cases portent une unité alliée : elles appartiennent désormais
         // au joueur (invariant : une unité se tient sur son propre territoire).
         let ownership = state.ownership;
@@ -457,7 +517,10 @@ function reduceChop(state, {fromId, toId}) {
             ownership.set(chopFromId, state.activePlayerId);
         }
         const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
-        return {...state, placements, ownership, movedSoldiers, uidSeq};
+        return emit(
+            {...state, placements, ownership, movedSoldiers, uidSeq},
+            {kind: 'bonusDruid', playerId: from.playerId}
+        );
     }
 
     // Avancement des défis : +1 arbre abattu, et +1 si l'arbre était sur une
@@ -466,6 +529,14 @@ function reduceChop(state, {fromId, toId}) {
     const treeOwner = state.ownership.get(toId);
     if (treeOwner != null && treeOwner !== state.activePlayerId) {
         chopper = withProgress(chopper, CHALLENGE_METRICS.ENEMY_TREES_CHOPPED, 1);
+    }
+
+    // Arbre élémentaire abattu par un soldat SANS affinité : l'élément de
+    // l'arbre passe au bûcheron (une affinité ne se remplace jamais, et le cas
+    // « même affinité » est déjà refusé plus haut).
+    const gained = treeAffinity(tree);
+    if (gained && chopper.affinity == null) {
+        chopper = {...chopper, affinity: gained};
     }
 
     // Oriente le bûcheron vers l'arbre depuis sa case d'approche.
@@ -488,11 +559,172 @@ function reduceChop(state, {fromId, toId}) {
     }
     // Récompense configurable ; le bonus « Bûcheron » la double.
     const baseReward = state.settings?.treeReward ?? TREE_REWARD;
-    const reward = from.bonus === 'lumberjack' ? baseReward * 2 : baseReward;
+    // Récompense modulée par l'essence de l'arbre ; le bonus « Bûcheron » la double.
+    const kindReward = treeReward(tree, baseReward);
+    const reward = from.bonus === 'lumberjack' ? kindReward * 2 : kindReward;
     const purse = state.gold[state.activePlayerId] || 0;
     const gold = {...state.gold, [state.activePlayerId]: purse + reward};
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
     return {...state, placements, ownership, gold, movedSoldiers};
+}
+
+// Ouverture d'un coffre : action au CORPS À CORPS, comme l'abattage — le soldat
+// s'approche si besoin, puis ouvre. À la différence de l'abattage il ne PREND
+// PAS la case : le coffre y laisse un butin, qu'il faudra venir ramasser en s'y
+// déplaçant (un tour plus tard, ou avec un autre soldat). Le contenu est tiré au
+// sort ICI (et non à l'apparition du coffre) ; la graine avancée est persistée.
+function reduceOpenChest(state, {fromId, toId}) {
+    const from = state.placements.get(fromId);
+    if (!from || from.type !== 'soldier') return state;
+    if (from.playerId !== state.activePlayerId) return state;
+    if (state.movedSoldiers.has(from.uid)) return state;
+
+    const board = getLogicalBoard(state.mapId);
+    const reachable = computeReachable(state, board, fromId);
+    const dest = reachable.moves.get(toId);
+    if (!dest || dest.kind !== 'openChest') return state;
+
+    const chest = state.placements.get(toId);
+    if (!chest || chest.type !== 'chest') return state;
+
+    // Case d'où ouvrir le coffre : celle du soldat s'il est déjà collé, sinon la
+    // case libre adjacente au coffre la plus proche qu'il puisse atteindre.
+    const openFromId = approachCell(board, reachable, fromId, toId);
+    if (openFromId == null) return state; // aucune approche possible
+
+    // Avancement du défi « Ninja » : +1 coffre ouvert au crédit de l'ouvreur.
+    let opener = withProgress(from, CHALLENGE_METRICS.CHESTS_OPENED, 1);
+    // Oriente l'ouvreur vers le coffre depuis sa case d'approche.
+    const target = board.cellMap.get(toId);
+    const openQ = Number(openFromId.split(',')[0]);
+    if (target && target.q !== openQ) {
+        opener = {...opener, facing: target.q > openQ ? 'right' : 'left'};
+    }
+
+    const rng = makeRng(state.rngSeed);
+    const pid = state.activePlayerId;
+    const loot = makeLoot(rng);
+    const placements = new Map(state.placements);
+    placements.delete(fromId); // le soldat quitte sa case de départ…
+    placements.set(openFromId, opener); // …et se tient sur sa case d'approche
+
+    // Le RENFORT fait exception : il ne se ramasse pas. La créature sort du
+    // coffre déjà ralliée à l'ouvreur et prend la case du coffre (personne ne
+    // peut donc la lui souffler). Les autres butins restent au sol à ramasser.
+    const reinforcement = lootUnit(loot);
+    let uidSeq = state.uidSeq;
+    let ownership = state.ownership;
+    if (reinforcement) {
+        uidSeq += 1;
+        placements.set(toId, makeUnit(reinforcement, pid, `s${uidSeq}`));
+        // Une unité se tient toujours sur son propre territoire.
+        if (state.ownership.get(toId) !== pid) {
+            ownership = new Map(state.ownership);
+            ownership.set(toId, pid);
+        }
+    } else {
+        placements.set(toId, loot); // le coffre laisse place à son butin
+    }
+
+    const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
+    return emit(
+        {...state, placements, ownership, movedSoldiers, uidSeq, rngSeed: rng.seed},
+        {kind: 'chestOpened', playerId: pid, loot: loot.kind},
+        reinforcement && {kind: 'lootUnit', playerId: pid, unit: reinforcement}
+    );
+}
+
+// Ramassage du butin d'un coffre ouvert : un déplacement ordinaire sur la case
+// du butin, qui applique aussitôt son effet (or, statistique ou affinité — le
+// renfort, lui, est déjà rallié dès l'ouverture). La case est prise au passage, comme une
+// conquête : le butin est neutre et peut se trouver n'importe où. Le tour du
+// soldat est consommé.
+function reduceTakeLoot(state, fromId, toId, soldier) {
+    const loot = state.placements.get(toId);
+    if (!loot || loot.type !== 'loot') return state;
+
+    let taker = soldier;
+    const fromQ = Number(fromId.split(',')[0]);
+    const toQ = Number(toId.split(',')[0]);
+    if (toQ !== fromQ) taker = {...taker, facing: toQ > fromQ ? 'right' : 'left'};
+
+    const pid = state.activePlayerId;
+    const events = [];
+    let gold = state.gold;
+
+    // Or : versé directement dans la bourse.
+    const coins = lootGold(loot);
+    if (coins > 0) {
+        gold = {...state.gold, [pid]: (state.gold[pid] || 0) + coins};
+        events.push({kind: 'lootGold', playerId: pid, amount: coins});
+    }
+
+    // Cœur / épée : renforcent le ramasseur, sans dépasser les plafonds du jeu.
+    // Un butin ramassé au plafond est perdu — l'évènement le dit (`gained`).
+    const hp = lootHp(loot);
+    if (hp > 0) {
+        const before = taker.hp || 0;
+        const after = Math.min(before + hp, SOLDIER_HP_MAX);
+        taker = {...taker, hp: after};
+        events.push({kind: 'lootStat', playerId: pid, stat: 'hp', amount: after - before});
+    }
+    const atk = lootAtk(loot);
+    if (atk > 0) {
+        const before = taker.atk || 0;
+        const after = Math.min(before + atk, SOLDIER_ATK_MAX);
+        taker = {...taker, atk: after};
+        events.push({kind: 'lootStat', playerId: pid, stat: 'atk', amount: after - before});
+    }
+
+    // Affinité : offerte au ramasseur, s'il n'en a pas déjà une (une affinité ne
+    // se remplace jamais).
+    const affinity = lootAffinity(loot);
+    if (affinity) {
+        const gained = taker.affinity == null;
+        if (gained) taker = {...taker, affinity};
+        events.push({kind: 'lootAffinity', playerId: pid, affinity, gained});
+    }
+
+    const placements = new Map(state.placements);
+    placements.delete(fromId); // le soldat quitte sa case…
+    placements.set(toId, taker); // …et s'installe sur celle du butin
+
+    // La case du butin devient sienne (même invariant qu'une conquête : un
+    // soldat se tient toujours sur son propre territoire).
+    let ownership = state.ownership;
+    if (state.ownership.get(toId) !== pid) {
+        ownership = new Map(state.ownership);
+        ownership.set(toId, pid);
+    }
+    const movedSoldiers = new Set(state.movedSoldiers).add(soldier.uid);
+    return emit({...state, placements, ownership, gold, movedSoldiers}, ...events);
+}
+
+// Apparition de coffres en fin de tour, sur le même principe que les arbres mais
+// bien plus rare : un seul coffre par tour au plus (`chestSpawnChance`), et
+// jamais plus de `chestMax` sur le plateau à la fois. Prend la carte des items
+// déjà mise à jour par les apparitions précédentes.
+function spawnChests(state, board, placementsIn, rng) {
+    const s = state.settings;
+    if (s && s.chestsEnabled === false) return placementsIn;
+
+    const max = Math.max(0, s?.chestMax ?? 5);
+    let chests = 0;
+    for (const p of placementsIn.values()) if (p.type === 'chest') chests += 1;
+    if (chests >= max) return placementsIn;
+
+    const chance = (s?.chestSpawnChance ?? 10) / 100;
+    if (rng.next() >= chance) return placementsIn;
+
+    // Cases éligibles : libres, non bloquées (eau), hors base.
+    const eligible = board.cells.filter(
+        (c) => !c.blocked && !board.baseIds.has(c.id) && !placementsIn.has(c.id)
+    );
+    if (!eligible.length) return placementsIn;
+
+    const placements = new Map(placementsIn);
+    placements.set(eligible[rng.int(eligible.length)].id, makeChest());
+    return placements;
 }
 
 // Apparition d'arbres en fin de tour. Chaque tour, une « vague » d'arbres a une
@@ -532,7 +764,7 @@ function spawnTrees(state, board, rng) {
     for (let i = 0; i < want && eligible.length; i += 1) {
         const idx = rng.int(eligible.length);
         const [cell] = eligible.splice(idx, 1);
-        placements.set(cell.id, {type: 'tree'});
+        placements.set(cell.id, makeTree(rng)); // essence tirée au coefficient d'apparition
     }
     return placements;
 }
@@ -544,7 +776,7 @@ function spawnTrees(state, board, rng) {
 // Un fermier ne produit QUE s'il se tient lui-même sur une case frontière (sa
 // case borde au moins une case qui n'appartient pas au joueur) : un fermier
 // enfoui au cœur du territoire ne fait rien pousser.
-function spawnFarmerTrees(state, board, placementsIn, rng) {
+function spawnFarmerTrees(state, board, placementsIn, rng, events) {
     // Rien à faire si les arbres sont désactivés en configuration.
     if (state.settings && state.settings.treesEnabled === false) return placementsIn;
     const pid = state.activePlayerId;
@@ -572,22 +804,30 @@ function spawnFarmerTrees(state, board, placementsIn, rng) {
     if (!eligible.length) return placementsIn;
 
     const placements = new Map(placementsIn);
+    let planted = 0;
     for (let f = 0; f < farmers; f += 1) {
         const want = rng.int(3); // 0, 1 ou 2 arbres
         for (let i = 0; i < want && eligible.length; i += 1) {
             const idx = rng.int(eligible.length);
             const [cell] = eligible.splice(idx, 1); // case consommée (un arbre max)
-            placements.set(cell.id, {type: 'tree'});
+            placements.set(cell.id, makeTree(rng)); // essence tirée au coefficient d'apparition
+            planted += 1;
         }
     }
+    if (planted > 0) events?.push({kind: 'bonusFarmer', playerId: pid, count: planted});
     return placements;
 }
 
 // Bonus « Alchimiste » : à la fin du tour de son propriétaire, chaque alchimiste
-// renforce UN allié adjacent — le soldat allié voisin sans affinité ayant le
-// plus de PV — de +1 attaque et +2 PV (plafonnés). Chaque alchimiste agit sur sa
-// propre cible ; un même allié peut cumuler les buffs de plusieurs alchimistes.
-function applyAlchemists(state, board, placementsIn) {
+// SACRIFIE 1 de ses PV pour donner +1 attaque (plafonnée) à UN allié adjacent —
+// le soldat allié voisin le MOINS offensif, celui qui en a le plus besoin.
+// Chaque alchimiste agit sur sa propre cible ; un même allié peut cumuler les
+// dons de plusieurs alchimistes.
+//
+// L'échange n'a lieu que s'il profite aux deux bouts : un alchimiste à 1 PV ne
+// se sacrifie pas (il mourrait), et personne ne se saigne pour un allié dont
+// l'attaque est déjà au plafond.
+function applyAlchemists(state, board, placementsIn, events) {
     const pid = state.activePlayerId;
     // Repère les cases des alchimistes du joueur actif via la géométrie de la carte.
     const alchemistCells = [];
@@ -602,9 +842,15 @@ function applyAlchemists(state, board, placementsIn) {
     for (const id of alchemistCells) {
         const cell = board.cellMap.get(id);
         if (!cell) continue;
-        // Cibles éligibles : soldats alliés adjacents SANS affinité (jamais soi-même).
+        // Un alchimiste ne se sacrifie pas jusqu'à la mort : il lui faut plus de
+        // PV que ce que coûte la transmutation.
+        const alchemist = placements.get(id);
+        if ((alchemist.hp || 0) <= ALCHEMIST_HP_COST) continue;
+        // Cible : le soldat allié adjacent le MOINS offensif (jamais soi-même),
+        // en ignorant ceux dont l'attaque est déjà au plafond — les armer de
+        // plus ne ferait que gâcher les PV de l'alchimiste.
         let bestId = null;
-        let bestHp = -1;
+        let bestAtk = Infinity;
         for (const n of getNeighbors(cell.q, cell.r)) {
             const nid = hexId(n.q, n.r);
             const ally = placements.get(nid);
@@ -612,20 +858,21 @@ function applyAlchemists(state, board, placementsIn) {
                 ally &&
                 ally.type === 'soldier' &&
                 ally.playerId === pid &&
-                ally.affinity == null &&
-                (ally.hp || 0) > bestHp
+                (ally.atk || 0) < SOLDIER_ATK_MAX &&
+                (ally.atk || 0) < bestAtk
             ) {
-                bestHp = ally.hp || 0;
+                bestAtk = ally.atk || 0;
                 bestId = nid;
             }
         }
         if (bestId == null) continue;
+        placements.set(id, {...alchemist, hp: (alchemist.hp || 0) - ALCHEMIST_HP_COST});
         const ally = placements.get(bestId);
         placements.set(bestId, {
             ...ally,
-            hp: Math.min((ally.hp || 0) + ALCHEMIST_HP_BUFF, SOLDIER_HP_MAX),
             atk: Math.min((ally.atk || 0) + ALCHEMIST_ATK_BUFF, SOLDIER_ATK_MAX),
         });
+        events?.push({kind: 'bonusAlchemist', playerId: pid});
     }
     return placements;
 }
@@ -634,7 +881,7 @@ function applyAlchemists(state, board, placementsIn) {
 // donne 1 affinité (tirée au sort) à UN allié adjacent sans affinité — jamais
 // lui-même — et rapporte MAGICIAN_GOLD_REWARD or à son propriétaire par don.
 // Renvoie la carte des items ET l'or gagné (0 si aucun don).
-function applyMagicians(state, board, placementsIn, rng) {
+function applyMagicians(state, board, placementsIn, rng, events) {
     const pid = state.activePlayerId;
     const magicianCells = [];
     for (const [id, p] of placementsIn) {
@@ -663,15 +910,19 @@ function applyMagicians(state, board, placementsIn, rng) {
         const affinity = AFFINITY_IDS[rng.int(AFFINITY_IDS.length)];
         placements.set(targetId, {...ally, affinity});
         goldGained += MAGICIAN_GOLD_REWARD;
+        events?.push({kind: 'bonusMagician', playerId: pid, affinity, gold: MAGICIAN_GOLD_REWARD});
     }
     return {placements, goldGained};
 }
 
-// Bonus « Prêtre » : à la fin du tour de son propriétaire, chaque prêtre
-// retire 1 point d'attaque à lui-même (jamais sous 0) pour donner 2 PV à
-// l'allié adjacent ayant le plus d'attaque (jamais lui-même). Sans cible
-// éligible, il ne perd rien.
-function applyPriests(state, board, placementsIn) {
+// Bonus « Prêtre » : à la fin du tour de son propriétaire, chaque prêtre prend
+// sur sa propre vie pour soigner l'allié adjacent le PLUS MAL EN POINT (jamais
+// lui-même). Sans cible éligible, il ne perd rien.
+//
+// Comme pour l'« Alchimiste », l'échange n'a lieu que s'il profite aux deux
+// bouts : un prêtre à 1 PV ne se sacrifie pas (il mourrait), et personne ne se
+// saigne pour un allié déjà au maximum de ses PV.
+function applyPriests(state, board, placementsIn, events) {
     const pid = state.activePlayerId;
     const priestCells = [];
     for (const [id, p] of placementsIn) {
@@ -685,8 +936,14 @@ function applyPriests(state, board, placementsIn) {
     for (const id of priestCells) {
         const cell = board.cellMap.get(id);
         if (!cell) continue;
+        // Un prêtre ne se sacrifie pas jusqu'à la mort : il lui faut plus de PV
+        // que ce qu'il donne.
+        const priest = placements.get(id);
+        if ((priest.hp || 0) <= PRIEST_HP_COST) continue;
+        // Cible : le soldat allié adjacent ayant le MOINS de PV, en ignorant
+        // ceux déjà au maximum — les soigner gâcherait la vie du prêtre.
         let bestId = null;
-        let bestAtk = -1;
+        let bestHp = Infinity;
         for (const n of getNeighbors(cell.q, cell.r)) {
             const nid = hexId(n.q, n.r);
             const ally = placements.get(nid);
@@ -694,17 +951,18 @@ function applyPriests(state, board, placementsIn) {
                 ally &&
                 ally.type === 'soldier' &&
                 ally.playerId === pid &&
-                (ally.atk || 0) > bestAtk
+                (ally.hp || 0) < SOLDIER_HP_MAX &&
+                (ally.hp || 0) < bestHp
             ) {
-                bestAtk = ally.atk || 0;
+                bestHp = ally.hp || 0;
                 bestId = nid;
             }
         }
         if (bestId == null) continue;
-        const priest = placements.get(id);
-        placements.set(id, {...priest, atk: Math.max((priest.atk || 0) - 1, 0)});
+        placements.set(id, {...priest, hp: (priest.hp || 0) - PRIEST_HP_COST});
         const ally = placements.get(bestId);
-        placements.set(bestId, {...ally, hp: Math.min((ally.hp || 0) + 2, SOLDIER_HP_MAX)});
+        placements.set(bestId, {...ally, hp: Math.min((ally.hp || 0) + PRIEST_HP_GIFT, SOLDIER_HP_MAX)});
+        events?.push({kind: 'bonusPriest', playerId: pid});
     }
     return placements;
 }
@@ -716,19 +974,21 @@ function applyPriests(state, board, placementsIn) {
 // base). L'invocation n'est pas systématique : elle a une chance fixe de se
 // produire chaque tour. Renvoie la carte des items et le compteur d'uid mis à
 // jour.
-function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn, rng) {
+function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn, rng, events) {
     const pid = state.activePlayerId;
-    const warlockCells = [];
+    // On retient le démoniste LUI-MÊME et pas seulement sa case : son squelette
+    // héritera de son élément.
+    const warlocks = [];
     for (const [id, p] of placementsIn) {
         if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'warlock' && !state.movedSoldiers.has(p.uid)) {
-            warlockCells.push(id);
+            warlocks.push([id, p]);
         }
     }
-    if (!warlockCells.length) return {placements: placementsIn, uidSeq: uidSeqIn};
+    if (!warlocks.length) return {placements: placementsIn, uidSeq: uidSeqIn};
 
     const placements = new Map(placementsIn);
     let uidSeq = uidSeqIn;
-    for (const id of warlockCells) {
+    for (const [id, warlock] of warlocks) {
         const cell = board.cellMap.get(id);
         if (!cell) continue;
         // Tirage : l'invocation ne se déclenche qu'avec une certaine probabilité.
@@ -748,38 +1008,90 @@ function spawnWarlockSkeletons(state, board, placementsIn, uidSeqIn, rng) {
             });
         if (!spot) continue;
         uidSeq += 1;
-        placements.set(
-            spot,
-            makeSkeleton(pid, `s${uidSeq}`, {
-                skin: SKELETON2_SRC,
-                hp: SKELETON2_HP,
-                atk: SKELETON2_ATK,
-            })
-        );
+        placements.set(spot, makeUnit('skeleton2', pid, `s${uidSeq}`, warlock.affinity ?? null));
+        events?.push({kind: 'bonusWarlock', playerId: pid});
     }
     return {placements, uidSeq};
 }
 
-// Bonus « Paladin » : à la fin du tour de son propriétaire, chaque paladin
-// régénère quelques PV (plafonnés au maximum d'un soldat).
-function healPaladins(state, placementsIn) {
+// Bonus « Sorcier » : à la fin du tour de son propriétaire, chaque sorcier jette
+// son sort sur TOUS les soldats ENNEMIS portant l'un des trois autres bonus de
+// niveau 5 — le roi devient un cochon, le démoniste une couronne, le conquérant
+// une grenouille : des créatures 1/1 sans effet, qui gardent leur affinité et
+// restent à leur propriétaire (voir `makeCursed`).
+//
+// Si le plateau ne porte AUCUNE de ces trois cibles (ni chez l'ennemi, ni chez
+// soi), le sort se reporte sur une invocation : un dragon 100/100 sur une case
+// libre du territoire, voisine du sorcier. Une seule fois par sorcier
+// (`dragonSummoned`), sans quoi il en produirait un à chaque tour.
+function applySorcerers(state, board, placementsIn, uidSeqIn, events) {
     const pid = state.activePlayerId;
-    let placements = null; // copié à la volée seulement si un paladin soigne
+    const sorcererCells = [];
     for (const [id, p] of placementsIn) {
-        if (p.type !== 'soldier' || p.playerId !== pid || p.bonus !== 'paladin') continue;
-        const healed = Math.min((p.hp || 0) + PALADIN_HP_REGEN, SOLDIER_HP_MAX);
-        if (healed === p.hp) continue;
-        if (!placements) placements = new Map(placementsIn);
-        placements.set(id, {...p, hp: healed});
+        if (p.type === 'soldier' && p.playerId === pid && p.bonus === 'sorcerer') sorcererCells.push(id);
     }
-    return placements || placementsIn;
+    if (!sorcererCells.length) return {placements: placementsIn, uidSeq: uidSeqIn};
+
+    // Cibles : les porteurs des bonus envoûtables. On distingue les ENNEMIS (à
+    // envoûter) de la présence GLOBALE, qui seule conditionne l'invocation du
+    // dragon : un roi allié suffit à priver le sorcier de son dragon.
+    const victims = [];
+    let anyOnBoard = false;
+    for (const [id, p] of placementsIn) {
+        if (p.type !== 'soldier' || !isCursable(p.bonus)) continue;
+        anyOnBoard = true;
+        if (p.playerId !== pid) victims.push(id);
+    }
+
+    const placements = new Map(placementsIn);
+    let uidSeq = uidSeqIn;
+
+    if (victims.length) {
+        for (const id of victims) {
+            const victim = placements.get(id);
+            placements.set(id, makeCursed(victim, curseFor(victim.bonus)));
+        }
+        events?.push({kind: 'bonusSorcerer', playerId: pid, count: victims.length});
+        return {placements, uidSeq};
+    }
+    if (anyOnBoard) return {placements: placementsIn, uidSeq}; // cibles alliées seules : rien à faire
+
+    // Aucune cible nulle part : invocation du dragon, une fois par sorcier.
+    let summoned = false;
+    for (const id of sorcererCells) {
+        const sorcerer = placements.get(id);
+        if (sorcerer.dragonSummoned) continue;
+        const cell = board.cellMap.get(id);
+        if (!cell) continue;
+        const spot = getNeighbors(cell.q, cell.r)
+            .map((n) => hexId(n.q, n.r))
+            .find((nid) => {
+                const ncell = board.cellMap.get(nid);
+                return (
+                    ncell &&
+                    !ncell.blocked &&
+                    !board.baseIds.has(nid) &&
+                    !placements.has(nid) &&
+                    state.ownership.get(nid) === pid
+                );
+            });
+        if (!spot) continue; // aucune case d'accueil : le sorcier retentera au prochain tour
+        uidSeq += 1;
+        placements.set(spot, makeUnit('dragon', pid, `s${uidSeq}`));
+        placements.set(id, {...sorcerer, dragonSummoned: true});
+        summoned = true;
+        events?.push({kind: 'bonusSorcererDragon', playerId: pid});
+    }
+    return summoned ? {placements, uidSeq} : {placements: placementsIn, uidSeq: uidSeqIn};
 }
 
 // Bonus « Vampire » : à la fin du tour de son propriétaire, chaque vampire draine
-// VAMPIRE_DRAIN PV à CHAQUE soldat allié adjacent (jamais en dessous de 1 PV, pour
-// ne pas achever ses propres alliés) et récupère pour lui le total ainsi volé
-// (plafonné au maximum d'un soldat). Modifie la carte des items.
-function applyVampires(state, board, placementsIn) {
+// VAMPIRE_DRAIN PV à UN SEUL soldat allié adjacent — le MIEUX PORTANT, celui qui
+// s'en remettra le mieux — et récupère pour lui les PV volés (plafonnés au
+// maximum d'un soldat). Un allié à 1 PV n'est jamais mordu : le vampire n'achève
+// pas les siens, et un voisin exsangue ne fait donc pas écran à un autre.
+// Modifie la carte des items.
+function applyVampires(state, board, placementsIn, events) {
     const pid = state.activePlayerId;
     const vampireCells = [];
     for (const [id, p] of placementsIn) {
@@ -791,21 +1103,27 @@ function applyVampires(state, board, placementsIn) {
     for (const id of vampireCells) {
         const cell = board.cellMap.get(id);
         if (!cell) continue;
-        let stolen = 0;
+        // Victime : le soldat allié adjacent ayant le PLUS de PV, à condition
+        // qu'il lui en reste à donner (jamais en dessous de 1 PV).
+        let victimId = null;
+        let bestHp = 1; // un allié à 1 PV n'a rien à céder : il ne peut pas être choisi
         for (const n of getNeighbors(cell.q, cell.r)) {
             const nid = hexId(n.q, n.r);
             const ally = placements.get(nid);
             if (!ally || ally.type !== 'soldier' || ally.playerId !== pid) continue;
-            // On draine au plus VAMPIRE_DRAIN, sans jamais descendre l'allié sous 1 PV.
-            const drain = Math.min(VAMPIRE_DRAIN, Math.max(0, (ally.hp || 0) - 1));
-            if (drain <= 0) continue;
-            placements.set(nid, {...ally, hp: (ally.hp || 0) - drain});
-            stolen += drain;
+            if ((ally.hp || 0) > bestHp) {
+                bestHp = ally.hp || 0;
+                victimId = nid;
+            }
         }
-        if (stolen > 0) {
-            const vamp = placements.get(id);
-            placements.set(id, {...vamp, hp: Math.min((vamp.hp || 0) + stolen, SOLDIER_HP_MAX)});
-        }
+        if (victimId == null) continue;
+        const victim = placements.get(victimId);
+        // On draine au plus VAMPIRE_DRAIN, sans jamais descendre la victime sous 1 PV.
+        const stolen = Math.min(VAMPIRE_DRAIN, (victim.hp || 0) - 1);
+        placements.set(victimId, {...victim, hp: (victim.hp || 0) - stolen});
+        const vamp = placements.get(id);
+        placements.set(id, {...vamp, hp: Math.min((vamp.hp || 0) + stolen, SOLDIER_HP_MAX)});
+        events?.push({kind: 'bonusVampire', playerId: pid, amount: stolen});
     }
     return placements;
 }
@@ -815,9 +1133,10 @@ function applyVampires(state, board, placementsIn) {
 // non bloquées, hors base — qu'elles soient neutres OU déjà possédées par un
 // adversaire. Modifie la carte des propriétés (`ownership`), pas les items ; prend
 // la carte des items de fin de tour pour savoir quelles cases sont vraiment vides.
-function applyConquerors(state, board, placements, ownershipIn) {
+function applyConquerors(state, board, placements, ownershipIn, events) {
     const pid = state.activePlayerId;
     let ownership = null; // copié à la volée seulement si une case est annexée
+    let annexed = 0;
     for (const [id, p] of placements) {
         if (p.type !== 'soldier' || p.playerId !== pid || p.bonus !== 'conqueror') continue;
         const cell = board.cellMap.get(id);
@@ -830,8 +1149,10 @@ function applyConquerors(state, board, placements, ownershipIn) {
             if ((ownership || ownershipIn).get(nid) === pid) continue; // déjà à nous
             if (!ownership) ownership = new Map(ownershipIn);
             ownership.set(nid, pid);
+            annexed += 1;
         }
     }
+    if (annexed > 0) events?.push({kind: 'bonusConqueror', playerId: pid, count: annexed});
     return ownership || ownershipIn;
 }
 
@@ -1004,7 +1325,10 @@ function reducePlaceAffinity(state, cellId, affinity) {
     const placements = new Map(state.placements);
     placements.set(cellId, {...soldier, affinity});
     const gold = {...state.gold, [state.activePlayerId]: purse - cost};
-    return {...state, placements, gold};
+    return emit(
+        {...state, placements, gold},
+        {kind: 'buyAffinity', playerId: state.activePlayerId, affinity, cost}
+    );
 }
 
 // Pose d'un item (soldat, maison, tour) sur une case du territoire actif, ou
@@ -1056,7 +1380,11 @@ function reducePlace(state, {cellId, itemType, level = 1}) {
         }
     }
     const gold = {...state.gold, [state.activePlayerId]: purse - cost};
-    return {...state, placements, gold, uidSeq};
+    // Notification d'achat : un soldat (avec son niveau) ou une structure.
+    const bought = itemType === 'soldier'
+        ? {kind: 'buySoldier', playerId: state.activePlayerId, level, cost}
+        : {kind: 'buyBuilding', playerId: state.activePlayerId, itemType, cost};
+    return emit({...state, placements, gold, uidSeq}, bought);
 }
 
 // Achat/équipement d'un bonus pour un soldat. Conditions : c'est bien le soldat
@@ -1080,21 +1408,29 @@ function reduceBuyBonus(state, {cellId, bonusId}) {
     const purse = state.gold[state.activePlayerId] || 0;
     if (purse < price) return state; // fonds insuffisants
 
-    // Bonus « Guerrier » : équiper le bonus porte aussitôt les statistiques du
-    // soldat à leur nouveau palier.
+    // Équiper un bonus, c'est PRENDRE SON PROFIL de statistiques : chaque bonus
+    // porte les siennes au catalogue (voir `BONUS_OFFERS.stats`), et elles
+    // remplacent celles du niveau. C'est le levier d'équilibrage principal — un
+    // Prêtre devient un mur (1/32), un Vampire une lame de verre (8/1).
     const equipped = {...soldier, bonus: bonusId};
-    if (bonusId === 'warrior') {
-        equipped.hp = WARRIOR_HP;
-        equipped.atk = WARRIOR_ATK;
-    } else if (bonusId === 'warlock') {
-        equipped.hp = WARLOCK_HP;
-        equipped.atk = WARLOCK_ATK;
+    if (bonus.stats) {
+        equipped.atk = bonus.stats.atk;
+        equipped.hp = bonus.stats.hp;
+    }
+    if (bonusId === 'paladin') {
+        // Bonus « Paladin » : équiper le bonus, c'est prendre le BOUCLIER. Il
+        // REMPLACE l'élément que le soldat portait éventuellement — le bouclier
+        // est l'attribut du paladin, pas une affinité de plus.
+        equipped.affinity = SHIELD_AFFINITY;
     }
 
     const placements = new Map(state.placements);
     placements.set(cellId, equipped);
     const gold = {...state.gold, [state.activePlayerId]: purse - price};
-    return {...state, placements, gold};
+    return emit(
+        {...state, placements, gold},
+        {kind: 'buyBonus', playerId: state.activePlayerId, bonusId, cost: price, atk: soldier.atk, level: soldier.level}
+    );
 }
 
 // Fin de tour : le joueur actif encaisse son revenu, puis la main passe au
@@ -1104,6 +1440,9 @@ function reduceEndTurn(state) {
     const {players, activePlayerId} = state;
     const idx = players.findIndex((p) => p.id === activePlayerId);
     const nextIdx = (idx + 1) % players.length;
+    // Évènements accumulés pendant les effets de fin de tour (bonus automatiques),
+    // émis en une fois à la fin (voir `emit`).
+    const events = [];
     let income = incomeFor(state, activePlayerId); // net de l'entretien des unités
     // Bonus « Roi » : tant qu'un soldat-roi du joueur est en vie, +50% de revenu.
     let hasKing = false;
@@ -1113,7 +1452,11 @@ function reduceEndTurn(state) {
             break;
         }
     }
-    if (hasKing) income = Math.floor(income * KING_INCOME_MULT);
+    if (hasKing) {
+        const boosted = Math.floor(income * KING_INCOME_MULT);
+        if (boosted > income) events.push({kind: 'bonusKing', playerId: activePlayerId, amount: boosted - income});
+        income = boosted;
+    }
     const board = getLogicalBoard(state.mapId);
     // Générateur aléatoire déterministe repris à la graine courante de l'état.
     // Toutes les apparitions/invocations de ce tour puisent dans ce flux, puis
@@ -1121,22 +1464,26 @@ function reduceEndTurn(state) {
     const rng = makeRng(state.rngSeed);
     // Apparition normale des arbres, puis apparition « Fermier » (frontière).
     let placements = spawnTrees(state, board, rng);
-    placements = spawnFarmerTrees(state, board, placements, rng);
+    placements = spawnFarmerTrees(state, board, placements, rng, events);
+    // Apparition (rare) d'un coffre à ouvrir.
+    placements = spawnChests(state, board, placements, rng);
     // Renfort « Alchimiste » sur les alliés adjacents avant de passer la main.
-    placements = applyAlchemists(state, board, placements);
-    // Régénération « Paladin ».
-    placements = healPaladins(state, placements);
+    placements = applyAlchemists(state, board, placements, events);
     // Soin « Prêtre » : sacrifie 1 attaque pour soigner l'allié le plus offensif.
-    placements = applyPriests(state, board, placements);
+    placements = applyPriests(state, board, placements, events);
     // Ponction « Vampire » : draine 1 PV à chaque allié adjacent, au profit du vampire.
-    placements = applyVampires(state, board, placements);
+    placements = applyVampires(state, board, placements, events);
     // Don « Magicien » : offre une affinité à un allié adjacent, contre de l'or.
-    const magicianResult = applyMagicians(state, board, placements, rng);
+    const magicianResult = applyMagicians(state, board, placements, rng, events);
     placements = magicianResult.placements;
     income += magicianResult.goldGained;
     // Invocation « Démoniste » : un squelette fragile par démoniste.
-    const summon = spawnWarlockSkeletons(state, board, placements, state.uidSeq, rng);
+    const summon = spawnWarlockSkeletons(state, board, placements, state.uidSeq, rng, events);
     placements = summon.placements;
+    // Sort « Sorcier » : envoûte les rois / démonistes / conquérants ennemis,
+    // ou invoque un dragon s'il n'y a aucune de ces cibles sur le plateau.
+    const sorcery = applySorcerers(state, board, placements, summon.uidSeq, events);
+    placements = sorcery.placements;
     // Défi « Druide » : progression du compteur « 5 arbres gardés N tours ».
     // Placé après les apparitions d'arbres pour compter l'état de fin de tour.
     placements = trackDruidChallenge(state, placements);
@@ -1154,6 +1501,7 @@ function reduceEndTurn(state) {
     placements = trackNoBonusOnBoardChallenge(state, placements, 'warlock', CHALLENGE_METRICS.NO_WARLOCK_ON_BOARD);
     placements = trackNoBonusOnBoardChallenge(state, placements, 'king', CHALLENGE_METRICS.NO_KING_ON_BOARD);
     placements = trackNoBonusOnBoardChallenge(state, placements, 'conqueror', CHALLENGE_METRICS.NO_CONQUEROR_ON_BOARD);
+    placements = trackNoBonusOnBoardChallenge(state, placements, 'sorcerer', CHALLENGE_METRICS.NO_SORCERER_ON_BOARD);
     // Acquittement des notifications de bonus : les bonus débloqués et réclamables
     // des soldats du joueur qui vient de jouer rejoignent leur `bonusSeen`. La
     // notification ne réapparaîtra donc plus, même si le bonus reste non réclamé.
@@ -1168,18 +1516,26 @@ function reduceEndTurn(state) {
     }
     placements = acked;
     // Annexion « Conquérant » : les cases vides adjacentes rejoignent le joueur.
-    const ownership = applyConquerors(state, board, placements, state.ownership);
-    return {
+    const ownership = applyConquerors(state, board, placements, state.ownership, events);
+    let next = {
         ...state,
         placements,
         ownership,
-        uidSeq: summon.uidSeq,
+        uidSeq: sorcery.uidSeq,
         rngSeed: rng.seed, // graine avancée : la suite de la partie reste déterministe
         gold: {...state.gold, [activePlayerId]: (state.gold[activePlayerId] || 0) + income},
         turn: nextIdx === 0 ? state.turn + 1 : state.turn,
         activePlayerId: players[nextIdx].id,
         movedSoldiers: new Set(),
     };
+    // Historique statistique : à chaque TOUR COMPLET (retour au premier joueur),
+    // photo des indicateurs de chaque joueur, étiquetée du tour qui s'achève.
+    // Alimente les graphiques d'évolution (menu latéral) ; déterministe, il
+    // voyage dans l'état sérialisé (mêmes courbes en local et en online).
+    if (nextIdx === 0) {
+        next = {...next, statsHistory: [...(state.statsHistory || []), statsSnapshot(next, state.turn)]};
+    }
+    return emit(next, ...events);
 }
 
 export function gameReducer(state, action) {
@@ -1211,6 +1567,9 @@ export function gameReducer(state, action) {
             break;
         case CHOP_TREE:
             next = reduceChop(state, action);
+            break;
+        case OPEN_CHEST:
+            next = reduceOpenChest(state, action);
             break;
         case PLACE_ITEM:
             next = reducePlace(state, action);

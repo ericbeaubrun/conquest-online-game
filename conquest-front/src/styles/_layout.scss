@@ -32,8 +32,12 @@
   color: white;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 64px 16px 16px;
+  gap: 16px;
+  // La topbar peut être plus haute qu'il n'y paraît (elle passe sur 2 lignes en
+  // mobile, cf. _topbar.scss) : --topbar-height est mesurée en direct par
+  // TopBar (ResizeObserver) pour que le premier bouton du tiroir ne soit jamais
+  // masqué dessous. Fallback 64px si la variable n'est pas encore posée.
+  padding: calc(var(--topbar-height, 64px) + 16px) 16px 16px;
   z-index: 15;
   overflow-y: auto;
   transform: translateX(-100%);
@@ -46,11 +50,11 @@
   button {
     background-color: #555;
     border: 2px solid #000;
-    padding: 8px 10px;
+    padding: 7px 10px;
     color: white;
     cursor: pointer;
     text-align: left;
-    font-size: 18px;
+    font-size: 15px;
 
     &:hover {
       background-color: #666;
@@ -61,10 +65,10 @@
 .menu-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 
   &__title {
-    font-size: 16px;
+    font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: #a9a9a9;
@@ -96,5 +100,5 @@
   flex: 1 1 auto;
   position: relative;
   min-height: 0; // indispensable pour que le flex enfant puisse rétrécir
-  background: radial-gradient(circle at 50% 40%, #dfe9f3 0%, #b9c8dc 100%);
+  background: radial-gradient(circle at 50% 40%, #3a4552 0%, #1c222b 100%);
 }

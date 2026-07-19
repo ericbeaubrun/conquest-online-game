@@ -20,6 +20,7 @@ import {
     mergeSoldier,
     attackSoldier,
     chopTree,
+    openChest,
     placeItem,
 } from '@conquest/shared-engine/engine/actions.js';
 import {classifyCell} from './board/targeting.js';
@@ -37,6 +38,11 @@ import {Bases, BonusNotifications, Buildings, PlacementPreview} from './board/Un
 import './HexBoard.scss';
 
 const NO_MOVES = {moves: new Map(), allies: []};
+
+// Types de cibles dont le survol ouvre un aperçu en bas de l'écran : fusion,
+// combat et abattage (panneau de l'arbre visé). Un simple déplacement ou une
+// conquête n'ont rien à prévisualiser.
+const PREVIEW_KINDS = new Set(['merge', 'combat', 'chop', 'openChest', 'loot']);
 
 const HexBoard = ({
                       game,
@@ -119,13 +125,18 @@ const HexBoard = ({
     // Case actuellement survolée (pour n'afficher les stats chiffrées que sur
     // l'unité pointée). `null` hors du plateau.
     const [hoveredCellId, setHoveredCellId] = useState(null);
-    // Bouton « afficher toutes les stats » : force l'affichage des nombres
+    // Bouton « afficher toutes les stats » : force l'affichage des stats
     // d'attaque/PV sur toutes les unités posées, sans avoir à survoler.
     const [showAllStats, setShowAllStats] = useState(false);
+    // Second bouton : forme sous laquelle ces stats sont dessinées — jauges
+    // (barre de PV horizontale sous l'unité, barre d'attaque verticale sur son
+    // flanc gauche) ou nombres aux coins de l'unité. N'influe QUE sur le rendu :
+    // les cases concernées restent les mêmes (`visibleStatIds`).
+    const [statBars, setStatBars] = useState(false);
 
-    // Cases dont les stats chiffrées (attaque / points de vie) s'affichent : la
-    // case survolée, et — quand un soldat est sélectionné — le soldat lui-même
-    // ainsi que toutes ses cibles atteignables. Ailleurs, aucun nombre — sauf si
+    // Cases dont les jauges (attaque / points de vie) s'affichent : la case
+    // survolée, et — quand un soldat est sélectionné — le soldat lui-même ainsi
+    // que toutes ses cibles atteignables. Ailleurs, aucune jauge — sauf si
     // `showAllStats` force l'affichage sur toutes les unités du plateau.
     const visibleStatIds = useMemo(() => {
         if (showAllStats) return new Set([...placements.keys(), ...baseCells.map((c) => c.id)]);
@@ -189,6 +200,7 @@ const HexBoard = ({
             if (dest.kind === 'merge') dispatch(mergeSoldier(from, id));
             else if (dest.kind === 'combat') dispatch(attackSoldier(from, id));
             else if (dest.kind === 'chop') dispatch(chopTree(from, id));
+            else if (dest.kind === 'openChest') dispatch(openChest(from, id));
             else dispatch(moveSoldier(from, id));
             onSelect(null);
             return;
@@ -200,7 +212,7 @@ const HexBoard = ({
         onSelect(selection && next?.id === selection.id ? null : next); // `next` peut être null.
     };
 
-    // --- Survol : aperçu de fusion ou de combat selon la cible pointée. ---
+    // --- Survol : aperçu de fusion, de combat ou d'arbre selon la cible pointée. ---
     const onHover = (e) => {
         const id = cellIdAt(e.clientX, e.clientY);
         setHoveredCellId(id);
@@ -211,10 +223,10 @@ const HexBoard = ({
             onHoverTarget(null);
             return;
         }
+        // Seules les cibles dotées d'un aperçu remontent : fusion, combat et
+        // abattage (le panneau de l'arbre visé).
         const move = reachable.moves.get(id);
-        onHoverTarget(move && (move.kind === 'merge' || move.kind === 'combat')
-            ? {id, kind: move.kind}
-            : null);
+        onHoverTarget(move && PREVIEW_KINDS.has(move.kind) ? {id, kind: move.kind} : null);
     };
     const onLeave = () => {
         setHoveredCellId(null);
@@ -267,12 +279,14 @@ const HexBoard = ({
                     destroyedBases={destroyedBases}
                     baseHp={baseHp}
                     visibleStatIds={visibleStatIds}
+                    statBars={statBars}
                 />
                 <Buildings
                     placements={placements}
                     cellMap={cellMap}
                     size={itemSize}
                     visibleStatIds={visibleStatIds}
+                    statBars={statBars}
                 />
                 <BonusNotifications
                     placements={placements}
@@ -327,6 +341,15 @@ const HexBoard = ({
                     title="Afficher les stats de toutes les unités"
                 >
                     ⚔
+                </button>
+                <button
+                    className={statBars ? 'hex-board__controls-btn--active' : ''}
+                    onClick={() => setStatBars((v) => !v)}
+                    aria-pressed={statBars}
+                    aria-label="Afficher les stats en jauges plutôt qu'en nombres"
+                    title={statBars ? 'Stats en nombres' : 'Stats en jauges'}
+                >
+                    ▤
                 </button>
             </div>
         </div>

@@ -11,6 +11,7 @@ import {
     isAttackable,
 } from './rules.js';
 import {upkeepFor} from '../data/soldier.js';
+import {canChopTree} from '../data/trees.js';
 import {getLogicalBoard} from './board.js';
 import {DOMINATION_PERCENT, ECONOMY_GOAL} from './settings.js';
 
@@ -70,8 +71,33 @@ export function computeReachable(state, board, startId) {
             // Arbre : infranchissable, mais abattable par un soldat adjacent.
             // Abattage = action de contact, uniquement depuis une case stable (le
             // ninja ne peut pas abattre un arbre à travers un obstacle).
+            // Un arbre élémentaire n'est pas abattable par un soldat de même
+            // affinité : la case reste alors un simple obstacle.
             if (placed && placed.type === 'tree') {
-                if (standable.has(curId) && !moves.has(nid)) moves.set(nid, {kind: 'chop'});
+                if (standable.has(curId) && !moves.has(nid) && canChopTree(mover, placed)) {
+                    moves.set(nid, {kind: 'chop'});
+                }
+                ghostAdvance();
+                continue;
+            }
+            // Coffre : infranchissable comme un arbre, mais OUVRABLE par un
+            // soldat adjacent. Action de contact, donc uniquement depuis une
+            // case stable (le ninja n'ouvre pas à travers un obstacle). Le
+            // soldat ne prend pas la case : le coffre y laisse son butin.
+            if (placed && placed.type === 'chest') {
+                if (standable.has(curId) && !moves.has(nid)) {
+                    moves.set(nid, {kind: 'openChest'});
+                }
+                ghostAdvance();
+                continue;
+            }
+            // Butin laissé par un coffre ouvert : on le ramasse en se DÉPLAÇANT
+            // dessus. Case terminale (on s'y arrête, sans la traverser), quel
+            // que soit son propriétaire — le butin n'appartient à personne.
+            if (placed && placed.type === 'loot') {
+                if (standable.has(curId) && !moves.has(nid)) {
+                    moves.set(nid, {kind: 'loot'});
+                }
                 ghostAdvance();
                 continue;
             }
