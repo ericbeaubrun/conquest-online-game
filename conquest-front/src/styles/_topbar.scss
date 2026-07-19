@@ -1,112 +1,105 @@
 // Barre du haut : tour, chrono, profils des joueurs, fin de tour.
 //
-// Toutes les « boîtes » de la barre (burger, tour, chrono, soldats restants,
-// fin de tour) partagent la même hauteur et la même échelle de police/icônes,
-// pilotées par les variables --topbar-h / --topbar-font / --topbar-icon /
-// --topbar-avatar ci-dessous. Les media queries ne font que redéfinir ces
-// variables (desktop → tablette → mobile) : la mise en page reste uniforme,
-// seule l'échelle change.
+// Parti pris : une seule cible visuellement « cliquable » — le bouton de fin
+// de tour. Tout le reste (burger, tour, chrono, soldats restants, profils) est
+// du texte posé sur le fond, sans cadre ni liseré : c'est ce qui rend la barre
+// lisible d'un coup d'œil malgré la densité d'informations.
+//
+// La barre se découpe en trois zones : contexte à gauche (burger, tour, chrono),
+// joueurs au centre, action à droite (soldats restants, fin de tour).
+//
+// L'échelle est pilotée par les variables --topbar-* ci-dessous ; les media
+// queries ne font que les redéfinir (desktop → tablette → mobile). Les hauteurs
+// sont des multiples de 4px pour que la grille pixel tombe juste.
+@use 'tokens' as *;
 
 // ---- Barre du haut ----
 .top-bar {
-  --topbar-h: 44px;
+  --topbar-h: 56px;
   --topbar-font: 20px;
-  --topbar-icon: 22px;
-  --topbar-avatar: 36px;
+  --topbar-icon: 18px;
+  // Carré de couleur qui remplace l'avatar. Il monte sur les deux étages du
+  // profil (nom + stats), ce qui laisse largement la place au « IA » des bots
+  // (cf. .player-profile__chip).
+  --topbar-chip: 34px;
+  --topbar-btn-h: 32px;
 
   flex: 0 0 auto;
-  background-color: #2b2b2b;
-  color: white;
+  height: var(--topbar-h);
+  background-color: var(--ink-900);
+  color: var(--ink-050);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 16px;
+  padding: 0 12px;
   position: relative;
+  // Séparation nette d'avec le plateau : bordure franche + liseré interne,
+  // jamais d'ombre floue (le flou casse le rendu pixel).
+  border-bottom: 2px solid #000;
+  box-shadow: inset 0 -3px 0 var(--ink-600);
   // Doit rester AU-DESSUS du tiroir latéral (z-index 15) et de son overlay
   // (14) une fois ouvert, sinon le burger devient inatteignable pour le
   // refermer (un flex item avec z-index crée son propre contexte
   // d'empilement même en position statique — d'où ce z-index explicite).
   z-index: 16;
+
+  // Toutes les icônes de la barre sont des PNG pixel-art : rendu net une fois
+  // pour toutes plutôt que par icône.
+  img {
+    image-rendering: pixelated;
+    display: block;
+  }
 }
 
-// Bouton burger : même style « pixel » que le reste de la barre (bordure
-// franche + liseré), en flux normal (aligné avec les autres éléments de la
-// barre via `align-items: center` du parent). Change en croix quand le menu
-// est ouvert (voir TopBar.jsx), pour signaler qu'il sert aussi à le refermer.
+// Bouton burger : plus de cadre, juste le glyphe. Il s'allume au survol et
+// passe en croix quand le menu est ouvert (voir TopBar.jsx), pour signaler
+// qu'il sert aussi à le refermer.
 .burger-menu {
   flex: 0 0 auto;
-  width: var(--topbar-h);
-  height: var(--topbar-h);
+  width: calc(var(--topbar-font) * 1.4);
+  height: calc(var(--topbar-font) * 1.4);
   display: grid;
   place-items: center;
   padding: 0;
-  font-size: calc(var(--topbar-font) * 0.9);
+  font-size: calc(var(--topbar-font) * 0.95);
   line-height: 1;
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
-  border: 2px solid #000;
-  box-shadow: 0 0 0 2px #4a4a4a;
+  color: var(--ink-300);
+  background: none;
+  border: none;
   cursor: pointer;
   user-select: none;
   font-family: inherit;
+  transition: color 0.12s ease;
 
-  &:hover {
-    background: rgba(255, 255, 255, 0.2);
-  }
-
+  &:hover,
   &--open {
-    background: #555;
-    box-shadow: 0 0 0 2px #ffd766;
+    color: var(--ink-050);
   }
 }
 
+// Texte de contexte à gauche du burger. Ne reste que le chrono depuis que le
+// numéro de tour est passé dans le tiroir latéral ; la classe est conservée
+// pour la mise en forme commune (encre, taille, pas de sélection).
 .turn-counter {
   flex: 0 0 auto;
-  height: var(--topbar-h);
   display: inline-flex;
   align-items: center;
-  box-sizing: border-box;
   font-size: var(--topbar-font);
-  letter-spacing: 0.04em;
-  padding: 0 calc(var(--topbar-font) * 0.5);
-  border: 2px solid #000;
-  box-shadow: 0 0 0 2px #4a4a4a;
-  background: rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.06em;
+  color: var(--ink-300);
   white-space: nowrap;
   user-select: none;
+
 }
 
-// Icône soldat, devant le nombre de soldats qu'il reste à déplacer ce tour
-// (même boîte « pixel » que le compteur de tour, juste avant le bouton de
-// fin de tour).
-.movable-count__icon {
-  width: var(--topbar-icon);
-  height: var(--topbar-icon);
-  margin-right: 4px;
-  vertical-align: middle;
-  image-rendering: pixelated;
-}
-
-// Chrono du tour (réglage turnTimer) : même boîte « pixel » que le compteur.
+// Chrono du tour (réglage turnTimer) : simple accent doré, sans cadre — sa
+// couleur suffit à le distinguer.
 .turn-timer {
-  flex: 0 0 auto;
-  height: var(--topbar-h);
-  display: inline-flex;
-  align-items: center;
-  box-sizing: border-box;
-  font-size: var(--topbar-font);
-  letter-spacing: 0.04em;
-  padding: 0 calc(var(--topbar-font) * 0.5);
-  border: 2px solid #000;
-  box-shadow: 0 0 0 2px #4a4a4a;
-  background: rgba(255, 255, 255, 0.1);
-  white-space: nowrap;
-  user-select: none;
+  color: var(--accent-gold);
 
   // Dernières secondes : accent rouge clignotant.
   &--low {
-    color: #ff6b6b;
-    border-color: #7a2b2b;
+    color: var(--accent-danger);
     animation: timer-blink 0.6s steps(2, start) infinite;
   }
 }
@@ -117,144 +110,224 @@
   }
 }
 
-@keyframes marching-ants {
-  to {
-    background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px;
+// Mention « spectateur » (en ligne, sans siège) : discrète, en encre
+// secondaire — elle n'a pas à concurrencer les données de jeu. Bordure
+// TIRETÉE, pour se distinguer au premier regard des cadres pleins des profils
+// et du bouton : ce n'est pas un joueur, c'est un état de la session.
+.spectator-tag {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: var(--topbar-btn-h);
+  box-sizing: border-box;
+  font-size: calc(var(--topbar-font) * 0.8);
+  letter-spacing: 0.08em;
+  color: var(--ink-300);
+  background: var(--ink-800);
+  border: 2px dashed var(--ink-600);
+  padding: 0 8px;
+  white-space: nowrap;
+  user-select: none;
+
+  // Pastille en guise d'« œil » : évite d'allonger encore le libellé.
+  &::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    background: var(--ink-300);
+    flex: 0 0 auto;
   }
 }
-
 
 .players-info {
   display: flex;
   flex: 1;
-  align-items: center;
+  // `stretch` et non `center` : un joueur éliminé n'affiche plus ses stats,
+  // son profil est donc plus court d'une ligne. Sans l'étirement, il flotte au
+  // milieu d'une rangée de cadres plus hauts et casse l'alignement. Les cadres
+  // s'alignent ainsi sur le plus haut, sans hauteur codée en dur.
+  align-items: stretch;
   justify-content: center;
-  gap: clamp(12px, 5vw, 48px);
+  gap: clamp(10px, 2vw, 20px);
   min-width: 0;
-  // Marge de respiration : sans elle, la bordure « fourmi » du joueur actif
-  // (::after en inset négatif, cf. .player-profile--active) déborde de la
-  // boîte de contenu et se fait couper net par l'`overflow-x: auto` du
-  // conteneur en mobile.
-  padding: 6px;
+  // Marge de respiration : sans elle, le liseré du joueur actif (box-shadow en
+  // débord de 2px) se fait couper net par l'`overflow-x` du conteneur.
+  padding: 3px;
+  // Les profils ne se compriment plus (cf. .player-profile) : si la rangée ne
+  // tient pas — beaucoup de joueurs, noms longs, écran étroit — elle défile
+  // plutôt que d'écraser les profils jusqu'à l'illisible.
+  overflow-x: auto;
+  @include pixel-scrollbar;
+
+  // Largeur max des noms, décroissante avec le nombre de joueurs (`--player-count`
+  // est posé par TopBar.jsx). Le plancher `max(...)` évite qu'une partie à 6+
+  // joueurs réduise les noms à deux lettres.
+  // Rappel : `ch` sous-estime VT323 (cf. __name), ces valeurs sont mesurées.
+  // Donne 18 / 15 / 12 / 9 pour 2 / 3 / 4 / 5 joueurs.
+  --name-ch: max(9, 24 - var(--player-count, 2) * 3);
 }
 
-// Profil d'un joueur : avatar (+ badges), nom, or et revenu. Compact et carré
-// (pixel-art) : pas d'arrondi, bordures franches, aucune ombre floue.
+// Profil d'un joueur, sur une seule ligne : carré de couleur, nom, badge IA,
+// or, revenu. L'identité passe par le nom et la couleur — un avatar de 36px
+// n'ajoutait que de la hauteur.
+//
+// Chaque profil est un conteneur « pixel » à part entière (fond, bordure
+// franche, aucun arrondi) : à 4 joueurs, des profils sans cadre se lisaient
+// comme une seule bouillie de texte. Le cadre découpe la rangée en blocs
+// distincts avant même qu'on lise quoi que ce soit.
+//
+// Les joueurs inactifs restent LISIBLES (encre secondaire) plutôt que rendus
+// translucides : c'est le joueur actif qu'on met en avant — cadre à sa couleur
+// et texte en encre principale.
 .player-profile {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  max-width: 110px; // borne la largeur : les noms longs sont tronqués (voir __name)
-  background: transparent;
-  border: 2px solid transparent;
-  padding: 2px 6px;
-  color: inherit;
-  opacity: 0.55;
-  position: relative;
-  transition: opacity 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  gap: 7px;
+  // Un profil ne se comprime PAS : sans ça, à 4 joueurs, le `min-width: 0` du
+  // nom laisse le flex l'écraser jusqu'à 0px de large et il disparaît purement
+  // et simplement. La rangée déborde plutôt en défilement (cf. .players-info).
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: 3px 8px;
+  font-size: calc(var(--topbar-font) * 0.95);
+  line-height: 1;
+  color: var(--ink-300);
+  background: var(--ink-800);
+  border: 2px solid #000;
+  user-select: none;
+  transition: color 0.12s ease, background 0.12s ease;
 
-  // Joueur actif : bordure « fourmi » (marching ants) qui défile, plus
-  // visible qu'un simple liseré statique pour repérer le tour en cours au
-  // premier coup d'œil. Technique 100% CSS (4 dégradés répétés + décalage de
-  // `background-position` animé, chaque côté défilant dans le sens horaire).
+  // Joueur actif : liseré à sa couleur posé en `style` inline (box-shadow non
+  // floue = double bordure pixel, pas une ombre), fond légèrement relevé et
+  // texte en encre principale. Le liseré est à l'EXTÉRIEUR du cadre noir, ce
+  // qui donne le classique « noir + couleur » du pixel art.
   &--active {
-    opacity: 1;
-    background: rgba(255, 255, 255, 0.08);
-
-    &::after {
-      content: '';
-      position: absolute;
-      inset: -4px;
-      pointer-events: none;
-      background-image:
-        linear-gradient(90deg, currentColor 50%, transparent 50%),
-        linear-gradient(90deg, currentColor 50%, transparent 50%),
-        linear-gradient(0deg, currentColor 50%, transparent 50%),
-        linear-gradient(0deg, currentColor 50%, transparent 50%);
-      background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-      background-size: 8px 2px, 8px 2px, 2px 8px, 2px 8px;
-      background-position: 0 0, 0 100%, 0 0, 100% 0;
-      animation: marching-ants 0.5s infinite linear;
-    }
+    color: var(--ink-050);
+    background: #1b1f27;
   }
 
   // Joueur éliminé (plus aucune case ni soldat) : profil éteint, sans stats.
+  //
+  // Volontairement PAS d'`opacity` sur tout le profil : elle effacerait aussi
+  // la bordure noire du conteneur, le bloc se dissoudrait et casserait le
+  // rythme de la rangée. On éteint donc chaque partie séparément — fond plus
+  // sombre que les autres, nom barré, carré de couleur désaturé — en laissant
+  // la croix à pleine intensité, puisque c'est elle qui porte l'information.
   &--eliminated {
-    opacity: 0.32;
-    filter: grayscale(1);
+    background: #0a0c10;
+    border-color: #000;
+    color: #5a6270;
+
+    .player-profile__name {
+      text-decoration: line-through;
+      text-decoration-thickness: 2px;
+    }
+
+    // Le carré s'éteint : le joueur ne tient plus rien sur le plateau, sa
+    // couleur n'y désigne plus aucune case. Un VOILE et non un `filter` :
+    // le filtre se propagerait aux enfants et grisrait aussi la croix, qui
+    // doit justement rester le seul élément vif du profil.
+    .player-profile__chip::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 12, 16, 0.72);
+    }
   }
 
-  // Avatar + badges superposés (couronne « vous », croix « éliminé »).
-  &__avatar-box {
+  // Carré de couleur du joueur, qui remplace l'avatar. Il porte aussi le repère
+  // « IA » des bots : deux pastilles côte à côte revenaient à payer deux fois
+  // pour un seul emplacement d'identité. Le carré est donc agrandi jusqu'à
+  // pouvoir accueillir les deux lettres, ce qui reste plus compact que
+  // carré + badge séparés. La croix « éliminé » se pose par-dessus.
+  &__chip {
     position: relative;
-    line-height: 0;
+    flex: 0 0 auto;
+    width: var(--topbar-chip);
+    height: var(--topbar-chip);
+    display: grid;
+    place-items: center;
+    // Liseré noir : sur un fond sombre, les couleurs de joueur foncées
+    // (bleu nuit, violet) se fondaient dans le cadre du profil.
+    border: 1px solid #000;
+  }
+
+  // « IA » inscrit dans le carré. Contour noir sur toutes les faces : la
+  // couleur du joueur est arbitraire, le texte doit rester lisible sur du
+  // jaune vif comme sur du bleu nuit.
+  &__ai {
+    font-size: calc(var(--topbar-chip) * 0.5);
+    line-height: 1;
+    letter-spacing: 0;
+    color: #fff;
+    text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;
   }
 
   &__badge {
     position: absolute;
-    image-rendering: pixelated;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     pointer-events: none;
   }
 
-  // Couronne du joueur local (en ligne) : posée sur le coin haut-gauche.
-  &__badge--local {
-    top: -8px;
-    left: -8px;
-    width: 16px;
-    height: 16px;
+  // Couronne du joueur local, en flux normal juste avant le carré de couleur.
+  &__crown {
+    flex: 0 0 auto;
+    width: var(--topbar-icon);
+    height: var(--topbar-icon);
   }
 
-  // Croix d'élimination : centrée, par-dessus l'avatar.
+  // Croix d'élimination : centrée sur le carré, qu'elle couvre presque en
+  // entier — c'est un état à repérer d'un coup d'œil, pas un détail. Passe
+  // AU-DESSUS du voile qui éteint le carré (cf. --eliminated), sinon elle
+  // s'assombrirait avec lui.
   &__badge--dead {
-    top: 50%;
-    left: 50%;
-    width: 26px;
-    height: 26px;
-    transform: translate(-50%, -50%);
+    width: calc(var(--topbar-chip) * 0.85);
+    height: calc(var(--topbar-chip) * 0.85);
+    z-index: 1;
   }
 
-  // Nom du joueur : une seule ligne, tronquée si trop longue (« Bot Difficile »,
-  // pseudos longs) pour ne pas casser la rangée à 4+ joueurs.
+  // Colonne texte à droite du carré : nom au-dessus, or et revenu dessous.
+  // Empiler les deux étages plutôt que de tout aligner rend le profil
+  // sensiblement plus étroit — l'or et le revenu passent « sous » le nom au
+  // lieu de s'ajouter à sa largeur — pour quelques pixels de hauteur en plus.
+  &__col {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  // Nom du joueur : une seule ligne, tronquée si trop longue (pseudos longs,
+  // « Bot Difficile ») pour ne pas pousser les stats hors de la barre.
+  // `min-width: 0` est indispensable sur un flex item pour que l'ellipse
+  // s'applique, au lieu que le nom impose sa largeur intrinsèque.
+  // NB : `ch` mesure le « 0 » de la police, plus étroit que la moyenne réelle
+  // en VT323 (letter-spacing global compris). Les valeurs ci-dessous sont donc
+  // calées sur le rendu mesuré, pas sur un nombre de caractères théorique :
+  // « Malicieux » (9 signes) réclame ~11ch pour tenir sans ellipse.
   &__name {
-    max-width: 100%;
-    font-size: 15px;
-    line-height: 1.1;
-    letter-spacing: 0.02em;
+    min-width: 0;
+    max-width: calc(var(--name-ch, 15) * 1ch);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    user-select: none;
   }
+
 }
 
-.player-avatar {
-  width: var(--topbar-avatar);
-  height: var(--topbar-avatar);
-  border: 2px solid #000;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5); // liseré « double bordure » pixel
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  // Repère bot (pas d'asset dédié) : occupe l'essentiel de la case, contraste
-  // noir/blanc pour rester lisible sur n'importe quelle couleur de joueur.
-  &__bot {
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1;
-    letter-spacing: 0.01em;
-    color: #fff;
-    text-shadow: 0 0 2px #000, 0 0 2px #000, 1px 1px 0 #000;
-    user-select: none;
-  }
-}
-
+// Or et revenu, sous le nom : un cran plus petits que lui, pour que le nom
+// reste la porte d'entrée du profil.
 .player-stats {
   display: flex;
-  flex-direction: row;
-  gap: 10px;
-  font-size: 17px;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  font-size: calc(var(--topbar-font) * 0.8);
 }
 
 // Pièce d'or (image) inline dans les textes de prix (boutique, bonus).
@@ -271,47 +344,67 @@
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+  // Par défaut la stat hérite de l'encre du profil (secondaire pour les
+  // joueurs inactifs) : seul le joueur actif reçoit les couleurs sémantiques
+  // ci-dessous. Sans ça, quatre profils colorés donnent un sapin de Noël.
+  color: inherit;
 
-  // Pièce d'or (image) alignée sur le texte, rendu pixel net.
+  // Dimensionnée en `em` : la pièce suit la police des stats, plus petite que
+  // celle du nom, sans avoir à la recalculer à chaque palier responsive.
   &__coin {
-    width: 16px;
-    height: 16px;
-    display: block;
-    image-rendering: pixelated;
+    width: 1em;
+    height: 1em;
+    // Hors de son tour, le chiffre passe en encre secondaire : la pièce doit
+    // suivre, sinon elle reste le seul point de couleur vive du profil et
+    // attire l'œil sur le joueur qu'on cherche justement à ne pas mettre en
+    // avant. Elle reprend sa couleur pour le joueur actif (ci-dessous).
+    filter: grayscale(1) brightness(0.85);
+  }
+}
+
+.player-profile--active .stat {
+  // Or en réserve.
+  &--gold {
+    color: var(--accent-gold);
   }
 
-  // Or en réserve : même jaune que l'or affiché sur l'onglet de la boutique.
-  &--gold {
-    color: #ffd766;
+  &__coin {
+    filter: none;
   }
 
   // Revenu par tour : vert s'il est positif, rouge s'il est nul ou négatif.
   &--positive {
-    color: #7cf76a;
+    color: var(--accent-life);
   }
+
   &--negative {
-    color: #ff6b6b;
+    color: var(--accent-danger);
   }
 }
 
-// Fin de tour : couleur du joueur actif (posée via `style` inline, repli sur
-// le rouge si elle manque). Même hauteur que les autres boîtes de la barre
-// (voir --topbar-h), mais un peu plus large pour rester la cible la plus
-// visible de la barre.
+// Fin de tour : la seule cible encadrée et colorée de la barre, dans la
+// couleur du joueur actif (posée via `style` inline, repli sur le rouge si
+// elle manque). Le texte est en encre très sombre pour rester lisible
+// quelle que soit la couleur du joueur.
 .end-turn-button {
   flex: 0 0 auto;
-  height: var(--topbar-h);
+  // Poussé tout à droite : c'est le seul élément de la zone d'action depuis que
+  // le compteur de soldats l'a rejoint.
+  margin-left: auto;
+  height: var(--topbar-btn-h);
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  justify-content: center;
-  background-color: #f04e4e;
-  color: white;
-  border: 3px solid #000;
-  box-shadow: 0 0 0 2px #4a4a4a;
-  padding: 0 calc(var(--topbar-h) * 0.4);
-  cursor: pointer;
+  gap: 6px;
+  background-color: var(--accent-danger);
+  color: #06101c;
+  border: 2px solid #000;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: calc(var(--topbar-font) * 0.95);
+  letter-spacing: 0.06em;
   line-height: 1;
+  cursor: pointer;
 
   &:hover {
     filter: brightness(1.15);
@@ -319,7 +412,7 @@
 
   // Hors de son tour : bouton éteint, non cliquable.
   &:disabled {
-    opacity: 0.45;
+    opacity: 0.35;
     cursor: default;
     filter: none;
   }
@@ -327,88 +420,95 @@
   &__icon {
     width: var(--topbar-icon);
     height: var(--topbar-icon);
-    display: block;
-    image-rendering: pixelated;
+  }
+
+  // Soldats restant à déplacer, entre les deux icônes. Le séparateur vertical
+  // évite de lire « soldat 3 » et « passer » comme un seul bloc : le compteur
+  // renseigne, l'icône de droite agit.
+  &__count {
+    font-size: calc(var(--topbar-font) * 1.05);
+    padding-right: 6px;
+    border-right: 2px solid rgba(0, 0, 0, 0.35);
   }
 }
 
 // ---- Responsive ----
 // Le nom, l'or et le revenu de chaque joueur restent visibles à toutes les
 // tailles (données essentielles) : ils passent sur leur propre ligne plutôt
-// que d'être masqués. Le numéro de tour et le compteur de soldats restent
-// eux aussi affichés, regroupés avec le burger et le bouton de fin de tour
-// sur la première ligne. Seule l'échelle (--topbar-*) change d'un palier à
-// l'autre : la mise en page des boîtes reste identique et harmonieuse.
+// que d'être masqués. Seule l'échelle (--topbar-*) change d'un palier à
+// l'autre : la mise en page reste identique.
 
 // Tablette : resserre la barre, rien n'est encore masqué.
 @media (max-width: 900px) {
   .top-bar {
-    --topbar-h: 38px;
-    --topbar-font: 17px;
-    --topbar-icon: 18px;
-    --topbar-avatar: 30px;
+    --topbar-h: 50px;
+    --topbar-font: 18px;
+    --topbar-icon: 16px;
+    --topbar-chip: 30px;
+    --topbar-btn-h: 28px;
 
-    gap: 8px;
-    padding: 6px 8px;
+    gap: 12px;
+    padding: 0 8px;
   }
 
+  // Un cran plus serré que sur desktop : 17 / 14 / 11 / 8 pour 2 / 3 / 4 / 5.
+  // À 11, « Malicieux » — le plus long libellé de bot — tient encore tout juste
+  // sans ellipse, et quatre profils rentrent sans faire défiler la rangée.
   .players-info {
-    gap: clamp(8px, 3vw, 24px);
-  }
-
-  .player-profile__name {
-    font-size: 14px;
-  }
-
-  .player-stats {
-    font-size: 15px;
-  }
-}
-
-// Mobile : la rangée des joueurs (nom, or, revenu) passe sur sa propre ligne
-// avec défilement horizontal plutôt qu'un écrasement qui les rendrait
-// illisibles. Le numéro de tour et le compteur de soldats restent visibles,
-// regroupés sur la première ligne avec le burger et le bouton de fin de tour.
-@media (max-width: 600px) {
-  .top-bar {
-    --topbar-h: 32px;
-    --topbar-font: 14px;
-    --topbar-icon: 15px;
-    --topbar-avatar: 26px;
-
-    flex-wrap: wrap;
-    row-gap: 6px;
-    gap: 6px;
-  }
-
-  // Compteur de soldats + bouton de fin de tour : poussés à droite de la
-  // première ligne (le burger et le numéro de tour restent à gauche).
-  .turn-counter--movable {
-    margin-left: auto;
-  }
-
-  // Profils des joueurs : leur propre ligne, centrée (défilement horizontal
-  // si trop de joueurs pour tenir).
-  .players-info {
-    order: 10;
-    flex-basis: 100%;
-    justify-content: center;
-    overflow-x: auto;
-    gap: 16px;
-    -webkit-overflow-scrolling: touch;
+    --name-ch: max(8, 23 - var(--player-count, 2) * 3);
   }
 
   .player-profile {
-    flex: 0 0 auto;
-    max-width: 90px;
-  }
-
-  .player-profile__name {
-    font-size: 13px;
+    gap: 6px;
+    padding: 0 6px;
   }
 
   .player-stats {
-    font-size: 14px;
     gap: 6px;
+  }
+}
+
+// Mobile : la rangée des joueurs passe sur sa propre ligne, avec défilement
+// horizontal plutôt qu'un écrasement qui la rendrait illisible. Le tour, le
+// chrono, les soldats restants et la fin de tour tiennent sur la première.
+@media (max-width: 600px) {
+  .top-bar {
+    --topbar-h: 36px;
+    --topbar-font: 17px;
+    --topbar-icon: 14px;
+    --topbar-chip: 28px;
+    --topbar-btn-h: 26px;
+
+    // La barre passe à deux lignes : sa hauteur devient celle du contenu et
+    // --topbar-h ne pilote plus que la première. C'est --topbar-height,
+    // mesurée en direct par TopBar.jsx, qui sert au tiroir latéral.
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: 0;
+    gap: 10px;
+    padding: 4px 8px 2px;
+  }
+
+  .turn-counter__sep {
+    margin: 0 6px;
+  }
+
+  // Profils des joueurs : leur propre ligne, alignée à gauche (défilement
+  // horizontal s'ils sont trop nombreux pour tenir).
+  // La rangée ayant sa propre ligne pleine largeur, les noms peuvent rester
+  // plus généreux qu'en tablette malgré l'écran plus étroit.
+  .players-info {
+    order: 10;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    gap: 14px;
+    -webkit-overflow-scrolling: touch;
+
+    // 15 / 14 / 13 / 12 pour 2 / 3 / 4 / 5 joueurs.
+    --name-ch: max(10, 17 - var(--player-count, 2));
+  }
+
+  .player-profile {
+    padding: 0 5px;
   }
 }

@@ -3,6 +3,26 @@
 // Police pixel-art appliquée à toute l'interface.
 $pixel-font: "VT323", "Courier New", monospace;
 
+// Palette sombre commune, en variables CSS pour être lisible depuis le JS et
+// depuis n'importe quelle feuille (Sass dédoublonne ce bloc : `@use 'tokens'`
+// ne l'émet qu'une fois). L'encre est légèrement bleutée plutôt que grise :
+// plus profonde à l'œil sans virer au noir pur, qui écraserait le pixel art.
+//
+// La barre du haut est la première zone convertie ; les autres panneaux
+// (boutique, panneaux latéraux...) utilisent encore leurs couleurs en dur et
+// seront migrés au fur et à mesure.
+:root {
+  --ink-900: #0d0f13; // fond des barres / chrome
+  --ink-800: #14171d; // fond des boîtes posées sur le chrome
+  --ink-600: #2a2f3a; // bordures et séparateurs
+  --ink-300: #7d8695; // texte secondaire (valeurs inactives)
+  --ink-050: #e6e9ef; // texte principal
+
+  --accent-gold: #e8b44a; // or, chrono
+  --accent-danger: #d4574e; // alerte, revenu négatif
+  --accent-life: #6fbf73; // revenu positif
+}
+
 // Opacité des panneaux flottants (boutique, panneau soldat/bâtiment/arbre,
 // panneau de combat) : laisse deviner le plateau derrière sans nuire à la
 // lisibilité.

@@ -24,8 +24,8 @@ const statTrend = (current, next) => {
 };
 
 // Une carte de bonus : portrait, statistiques, prix / entretien, défi, effet et action.
-const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownLevel, onBuy}) => {
-    const unlocked = isBonusUnlocked(soldier, bonus, settings);
+const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownLevel, world, onBuy}) => {
+    const unlocked = isBonusUnlocked(soldier, bonus, settings, world);
     const equipped = soldier.bonus === bonus.id;
     // Le soldat porte déjà un AUTRE bonus (un seul par soldat).
     const blocked = !!soldier.bonus && !equipped;
@@ -33,7 +33,7 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
     const price = bonusPriceOf(bonus, settings);
     const upkeep = bonusUpkeep(bonus.id, settings);
     const affordable = gold >= price;
-    const buyable = ownLevel && canBuy && canBuyBonus(soldier, bonus, gold, settings);
+    const buyable = ownLevel && canBuy && canBuyBonus(soldier, bonus, gold, settings, world);
 
     const classes = [
         'bonus-card',
@@ -57,7 +57,7 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
                 {!ownLevel && <img src="/lock.png" alt="Verrouillé" className="bonus-card__lock"/>}
                 {/* Bonus débloqué, réclamable et pas encore acquitté : notification. */}
                 {ownLevel && !equipped && !blocked &&
-                    isBonusNotified(soldier, bonus, settings, bonusesEnabled) && (
+                    isBonusNotified(soldier, bonus, settings, bonusesEnabled, world) && (
                         <img src="/notif.png" alt="Débloqué" className="bonus-card__notif"/>
                     )}
             </div>
@@ -98,7 +98,7 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
                 )}
                 <p className={`bonus-card__challenge ${unlocked ? 'bonus-card__challenge--done' : ''}`}>
                     <img src="/defi.png" alt="Défi" className="bonus-card__line-icon"/>
-                    <span className="bonus-card__line-text">{challengeText(soldier, bonus, settings)}</span>
+                    <span className="bonus-card__line-text">{challengeText(soldier, bonus, settings, world)}</span>
                 </p>
                 <p className="bonus-card__effect">
                     <img src="/sword.png" alt="Effet" className="bonus-card__line-icon"/>
@@ -127,7 +127,7 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
     );
 };
 
-const BonusPanel = ({soldier, selectionId, settings, bonusesEnabled, gold, canBuy, onBuy, onClose}) => {
+const BonusPanel = ({soldier, selectionId, settings, bonusesEnabled, gold, canBuy, world, onBuy, onClose}) => {
     const level = soldier.level || 1;
     // Niveau consulté : celui du soldat par défaut. On repart de son niveau à
     // chaque changement de soldat sélectionné.
@@ -166,6 +166,7 @@ const BonusPanel = ({soldier, selectionId, settings, bonusesEnabled, gold, canBu
                         gold={gold}
                         canBuy={canBuy}
                         ownLevel={ownLevel}
+                        world={world}
                         onBuy={onBuy}
                     />
                 ))}

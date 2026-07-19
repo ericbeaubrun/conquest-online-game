@@ -19,7 +19,9 @@ import UpkeepSpec from './UpkeepSpec.jsx';
 // Menu des caractéristiques du soldat sélectionné. Prend la place de la
 // boutique en bas de l'écran tant qu'un soldat est sélectionné. Son portrait
 // fait office de bouton : il ouvre la boutique de bonus (`BonusPanel`) au-dessus.
-const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBonus, selectionId, settings, bonusesEnabled = true, onClose}) => {
+// `world` est l'état de jeu : les défis d'état (arbres, maisons, bonus présents
+// sur le plateau) s'y lisent en direct, à chaque rendu.
+const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBonus, selectionId, settings, bonusesEnabled = true, world, onClose}) => {
     const level = soldier.level || 1;
     // Pas de boutique de bonus pour une unité invoquée (squelette, arbre-druide),
     // ni quand les bonus sont désactivés en configuration : le portrait n'ouvre
@@ -28,7 +30,7 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
     const summoned = isSummonedUnit(soldier);
     const noBonusShop = summoned || !bonusesEnabled;
     // Un bonus est débloqué (défi accompli) et pas encore réclamé : notification.
-    const notify = hasUnlockedBonus(soldier, settings, bonusesEnabled);
+    const notify = hasUnlockedBonus(soldier, settings, bonusesEnabled, world);
 
     // Boutique repliée par défaut, et refermée à chaque changement de soldat.
     const [bonusOpen, setBonusOpen] = useState(false);
@@ -57,6 +59,7 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                     bonusesEnabled={bonusesEnabled}
                     gold={gold}
                     canBuy={canBuy}
+                    world={world}
                     onBuy={onBuyBonus}
                     onClose={() => setBonusOpen(false)}
                 />

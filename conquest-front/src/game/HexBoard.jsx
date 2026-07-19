@@ -157,7 +157,7 @@ const HexBoard = ({
         onSelect(null);
         if (selectedItem) onDeselectItem?.();
     }, [onHoverTarget, onSelect, selectedItem, onDeselectItem]);
-    const {svgRef, viewBox, clientToSvg, isGesturing, handlers, zoomBy, resetView} = useBoardCamera({
+    const {svgRef, contentRef, viewBox, clientToSvg, isGesturing, handlers, zoomBy, resetView} = useBoardCamera({
         base,
         onTap: (clientX, clientY) => handleTap(clientX, clientY),
         onRightClick: deselect,
@@ -254,23 +254,29 @@ const HexBoard = ({
                 role="group"
                 aria-label="Plateau de jeu hexagonal"
             >
+                {/* Tout le contenu vit sous ce `<g>` : c'est lui que la caméra
+                    translate/scale pendant un geste, pour éviter de toucher au
+                    `viewBox` (qui re-rastérise tout le plateau). */}
+                <g ref={contentRef} className="hex-board__content">
                 <Tiles cells={cells}/>
                 <Territory cells={cells} ownership={ownership} colors={colors}/>
+                {/* Ces deux couches montent elles-mêmes leurs groupes (remplissage
+                    statique + contours pulsants par cadence) — voir `PulseLayers`. */}
                 {selectedItem && <Highlight cells={placeableCells}/>}
-                {selectedItem && placeableIds.has(hoveredCellId) && (
-                    <PlacementPreview
-                        cell={cellMap.get(hoveredCellId)}
-                        type={selectedItem}
-                        soldierLevel={selectedLevel}
-                        size={itemSize}
-                    />
-                )}
                 {activeSoldier && (
                     <MoveHighlight
                         moves={reachable.moves}
                         cellMap={cellMap}
                         game={game}
                         mover={mover}
+                    />
+                )}
+                {selectedItem && placeableIds.has(hoveredCellId) && (
+                    <PlacementPreview
+                        cell={cellMap.get(hoveredCellId)}
+                        type={selectedItem}
+                        soldierLevel={selectedLevel}
+                        size={itemSize}
                     />
                 )}
                 <Bases
@@ -290,6 +296,7 @@ const HexBoard = ({
                 />
                 <BonusNotifications
                     placements={placements}
+                    ownership={ownership}
                     cellMap={cellMap}
                     size={itemSize}
                     settings={settings}
@@ -314,13 +321,23 @@ const HexBoard = ({
                         mover={mover}
                     />
                 )}
+                {/* Case sélectionnée : une lueur STATIQUE, puis le contour en
+                    « fourmis en marche » par-dessus. La lueur garde son
+                    `drop-shadow` d'origine — un filtre ne coûte cher que s'il
+                    doit être recalculé à chaque image, ce qui était le cas
+                    lorsqu'il était porté par le contour animé. Isolé sur un
+                    tracé immobile, il est rastérisé une fois puis réutilisé,
+                    et SEUL le contour pointillé est repeint. */}
                 {selectedCell && (
-                    <polygon
-                        points={selectedCell.points}
+                    <g
                         className={`hex__selected${selection.kind === 'soldier' ? '' : ' hex__selected--neutral'}`}
                         pointerEvents="none"
-                    />
+                    >
+                        <polygon points={selectedCell.points} className="hex__selected-glow"/>
+                        <polygon points={selectedCell.points} className="hex__selected-ring"/>
+                    </g>
                 )}
+                </g>
             </svg>
 
             <div className="hex-board__controls">

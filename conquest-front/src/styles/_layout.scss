@@ -60,6 +60,24 @@
       background-color: #666;
     }
   }
+
+  // Numéro de tour, en tête du tiroir : il a quitté la barre du haut, où il
+  // occupait une place permanente pour une donnée consultée ponctuellement.
+  // Premier élément et plus gros que le reste, il sert d'en-tête au menu.
+  &__turn {
+    flex: 0 0 auto;
+    font-size: 26px;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    color: #b9b9b9;
+    border-bottom: 2px solid #000;
+    padding-bottom: 12px;
+    user-select: none;
+  }
+
+  &__turn-value {
+    color: #fff;
+  }
 }
 
 .menu-section {

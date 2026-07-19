@@ -7,6 +7,41 @@ import {TERRAIN_COLORS} from '@conquest/shared-engine/data/terrain.js';
 import {CHOP_SRC, FIGHT_SRC, MERGE_SRC, MOVE_CLASS, OPEN_CHEST_SRC} from './constants.js';
 import {fightKind, unitAt} from './targeting.js';
 
+// --- Surbrillances pulsantes : pourquoi deux tracés par case ---
+//
+// Une case en surbrillance battait autrefois via `stroke-opacity`, animé sur
+// CHAQUE hexagone. C'est une propriété de peinture : le navigateur repeignait
+// tous les hexagones 60 fois par seconde, ce qui étranglait le mobile.
+//
+// On anime désormais l'`opacity` d'un GROUPE, que le GPU compose sans jamais
+// repeindre son contenu. Mais l'opacité de groupe s'applique aussi au
+// remplissage, alors que seul le contour doit battre — d'où la séparation en
+// deux couches : les remplissages dans un groupe statique, les contours dans un
+// groupe animé. Le CSS (`.hex-board__fill` / `.hex-board__pulse`) se charge
+// d'éteindre le contour des uns et le remplissage des autres.
+//
+// Les rythmes distincts d'origine sont préservés en répartissant les contours
+// sur un groupe par cadence.
+const RHYTHMS = ['fast', 'mid', 'slow', 'calm'];
+
+// Cadence de battement selon le type de case, comme avant le regroupement :
+// combat 0,8 s (le plus pressant), fusion 0,9 s, le reste 1 s.
+const moveRhythm = (kind) => (kind === 'combat' ? 'fast' : kind === 'merge' ? 'mid' : 'slow');
+
+// Assemble les groupes : un statique pour les remplissages, un par cadence pour
+// les contours. Les groupes vides ne sont pas rendus — un groupe animé, même
+// vide, coûte une couche de composition inutile.
+const PulseLayers = ({fills, strokes}) => (
+    <>
+        {fills.length > 0 && <g className="hex-board__fill">{fills}</g>}
+        {RHYTHMS.filter((r) => strokes[r]?.length).map((r) => (
+            <g key={r} className={`hex-board__pulse hex-board__pulse--${r}`}>
+                {strokes[r]}
+            </g>
+        ))}
+    </>
+);
+
 export const Tiles = memo(function Tiles({cells}) {
     return cells.map((cell) => (
         <g key={cell.id} className={`hex${cell.blocked ? ' hex--blocked' : ''}`}>
@@ -44,9 +79,8 @@ export const Territory = memo(function Territory({cells, ownership, colors}) {
 
 // Cases où le joueur actif peut poser l'item sélectionné en boutique.
 export const Highlight = memo(function Highlight({cells}) {
-    return cells.map((cell) => (
-        <polygon key={cell.id} points={cell.points} className="hex__placeable"/>
-    ));
+    const poly = (cell) => <polygon key={cell.id} points={cell.points} className="hex__placeable"/>;
+    return <PulseLayers fills={cells.map(poly)} strokes={{slow: cells.map(poly)}}/>;
 });
 
 // Assombrit toutes les cases SAUF celles où le soldat sélectionné a une action
@@ -66,14 +100,19 @@ export const Dimmer = memo(function Dimmer({cells, activeIds}) {
 // prévue (victoire / défaite / égalité / double élimination), même code couleur
 // que l'icône posée dessus (voir `FIGHT_SRC`).
 export const MoveHighlight = memo(function MoveHighlight({moves, cellMap, game, mover}) {
-    return [...moves.entries()].map(([id, info]) => {
+    const fills = [];
+    const strokes = {};
+    for (const [id, info] of moves) {
         const cell = cellMap.get(id);
-        if (!cell) return null;
+        if (!cell) continue;
         const className = info.kind === 'combat'
             ? `hex__attackable hex__attackable--${fightKind(mover, unitAt(game, id))}`
             : MOVE_CLASS[info.kind];
-        return <polygon key={id} points={cell.points} className={className}/>;
-    });
+        fills.push(<polygon key={id} points={cell.points} className={className}/>);
+        const r = moveRhythm(info.kind);
+        (strokes[r] ||= []).push(<polygon key={id} points={cell.points} className={className}/>);
+    }
+    return <PulseLayers fills={fills} strokes={strokes}/>;
 });
 
 // Icônes superposées quand un soldat est sélectionné : « + » sur les cases
@@ -139,12 +178,14 @@ export const ActionIndicators = memo(function ActionIndicators({
                                                                    movedSoldiers,
                                                                    activePlayerId,
                                                                }) {
-    return [...placements.entries()].map(([id, placed]) => {
-        if (placed.type !== 'soldier' || placed.playerId !== activePlayerId) return null;
-        if (movedSoldiers.has(placed.uid)) return null;
+    const fills = [];
+    const strokes = [];
+    for (const [id, placed] of placements) {
+        if (placed.type !== 'soldier' || placed.playerId !== activePlayerId) continue;
+        if (movedSoldiers.has(placed.uid)) continue;
         const cell = cellMap.get(id);
-        if (!cell) return null;
-        return (
+        if (!cell) continue;
+        const poly = (
             <polygon
                 key={'act' + id}
                 points={cell.points}
@@ -152,5 +193,10 @@ export const ActionIndicators = memo(function ActionIndicators({
                 pointerEvents="none"
             />
         );
-    });
+        fills.push(poly);
+        strokes.push(poly);
+    }
+    // Cadence propre (1,2 s) : plus lente que la portée, pour ne pas concurrencer
+    // le regard quand les deux sont à l'écran.
+    return <PulseLayers fills={fills} strokes={{calm: strokes}}/>;
 });

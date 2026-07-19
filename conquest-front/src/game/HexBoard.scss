@@ -11,7 +11,8 @@ $stroke_width_4: 5;
   overflow: hidden;
   // Bordure épaisse à la couleur du joueur actif (posée via `style` inline) :
   // signale d'un coup d'œil à qui est le tour, tout autour du plateau.
-  border: 8px solid transparent;
+  //A tester, mais on retire pour l'instant
+  //border: 8px solid transparent;
 
   &__svg {
     width: 100%;
@@ -24,6 +25,54 @@ $stroke_width_4: 5;
 
     &:active {
       cursor: grabbing;
+    }
+  }
+
+  // Groupe racine du contenu : porte le transform de pan/zoom pendant un geste
+  // (voir `useBoardCamera`). Les deux propriétés ci-dessous ne sont PAS
+  // cosmétiques — elles fixent le repère du transform sur le viewBox, avec pour
+  // origine (0,0) en unités utilisateur, ce que suppose le calcul de la caméra.
+  &__content {
+    transform-box: view-box;
+    transform-origin: 0 0;
+  }
+
+  // Remplissages des surbrillances : immobiles, donc hors de toute couche
+  // animée. Leur contour est tracé par la couche pulsante ci-dessous.
+  &__fill > polygon {
+    stroke: none;
+  }
+
+  // Contours pulsants (portée, cases posables, soldats encore jouables).
+  // L'animation est portée par le GROUPE, une seule fois, et joue sur
+  // `opacity` : le GPU compose la couche sans jamais la repeindre. Auparavant
+  // chaque hexagone animait son `stroke-opacity` — une propriété de PEINTURE,
+  // donc N hexagones repeints 60 fois par seconde.
+  //
+  // Un groupe par cadence : c'est ce qui permet de garder les rythmes distincts
+  // d'origine tout en n'ayant qu'une animation par groupe.
+  &__pulse > polygon {
+    fill: none;
+  }
+
+  &__pulse {
+    will-change: opacity;
+    animation: hex-pulse-layer 1s ease-in-out infinite;
+
+    &--fast {
+      animation-duration: 0.8s; // combat
+    }
+
+    &--mid {
+      animation-duration: 0.9s; // fusion
+    }
+
+    &--slow {
+      animation-duration: 1s; // déplacement, conquête, abattage, pose
+    }
+
+    &--calm {
+      animation-duration: 1.2s; // soldat encore jouable
     }
   }
 
@@ -49,7 +98,9 @@ $stroke_width_4: 5;
       display: flex;
       align-items: center;
       justify-content: center;
-      backdrop-filter: blur(2px);
+      // Pas de `backdrop-filter` ici : posé au-dessus d'un SVG qui s'anime, le
+      // flou d'arrière-plan est réévalué à chaque image, pour un effet quasi
+      // invisible derrière un fond déjà opaque à 75 %.
 
       &:hover {
         background: rgba(30, 30, 30, 0.9);
@@ -87,7 +138,6 @@ $stroke_width_4: 5;
     stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
-    animation: hex-pulse 1s ease-in-out infinite;
   }
 
   // Portée de déplacement d'un soldat (case de notre territoire).
@@ -98,7 +148,6 @@ $stroke_width_4: 5;
     stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
-    animation: hex-pulse 1s ease-in-out infinite;
   }
 
   // Case conquérable par le soldat (hors territoire) : même blanc que le
@@ -110,10 +159,12 @@ $stroke_width_4: 5;
     stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
-    animation: hex-pulse 1s ease-in-out infinite;
   }
 
-  // « + » central des cases conquérables.
+  // « + » central des cases conquérables. Seul rescapé de l'animation par
+  // élément : il vit dans la couche des indicateurs (icônes d'action), qu'on ne
+  // fait PAS pulser en bloc — sans quoi les icônes clignoteraient aussi. Ils
+  // sont peu nombreux et minuscules, le coût de peinture reste négligeable.
   &__conquer-plus {
     stroke: #ffffff;
     stroke-linecap: round;
@@ -129,7 +180,6 @@ $stroke_width_4: 5;
     stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
-    animation: hex-pulse 0.9s ease-in-out infinite;
   }
 
   // Case attaquable : couleur tenue par issue prévue du combat (voir
@@ -141,7 +191,6 @@ $stroke_width_4: 5;
     stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
-    animation: hex-pulse 0.8s ease-in-out infinite;
 
     &--win {
       fill: #4dd25b;
@@ -173,7 +222,6 @@ $stroke_width_4: 5;
     stroke-width: $stroke_width_2;
     stroke-linejoin: round;
     pointer-events: none;
-    animation: hex-pulse 1s ease-in-out infinite;
   }
 
   // Voile posé sur toute case où le soldat sélectionné n'a AUCUNE action
@@ -193,31 +241,47 @@ $stroke_width_4: 5;
     stroke-width: $stroke_width_4;
     stroke-linejoin: round;
     pointer-events: none;
-    animation: hex-pulse 1.2s ease-in-out infinite;
   }
 
-  // Case du soldat sélectionné : contour vert en « fourmis en marche »
-  // (pointillés animés qui défilent), dessiné AU-DESSUS des sprites (voir
-  // ordre de rendu) et renforcé d'une lueur pour rester bien visible au
-  // premier plan.
-  &__selected {
+  // Case du soldat sélectionné : contour en « fourmis en marche » (pointillés
+  // animés qui défilent), dessiné AU-DESSUS des sprites (voir ordre de rendu)
+  // et renforcé d'un halo pour rester bien visible au premier plan.
+  //
+  // La lueur est isolée sur un tracé IMMOBILE : le `drop-shadow` n'est alors
+  // rastérisé qu'une fois, puis réutilisé. Portée par le contour animé — comme
+  // auparavant — elle obligeait le navigateur à recalculer le filtre à chaque
+  // image du défilement, l'effet le plus coûteux du plateau sur mobile.
+  // L'animation reste donc sur le SEUL contour pointillé, jamais sur le groupe
+  // (`stroke-dashoffset` étant héritée, l'animer sur le groupe salirait aussi
+  // la lueur et réveillerait le filtre à chaque image).
+  &__selected-glow {
     fill: none;
-    stroke: #7cf76a;
-    stroke: #fff;
+    stroke: #ffffff;
+    stroke-width: 5;
+    stroke-linejoin: round;
+    opacity: 0.5;
+    filter: drop-shadow(0 0 6px rgb(255 255 255 / 0.9));
+  }
+
+  &__selected-ring {
+    fill: none;
+    stroke: #ffffff;
     stroke-width: 5;
     stroke-linejoin: round;
     stroke-dasharray: 4 5;
-    pointer-events: none;
-    filter: drop-shadow(0 0 6px rgba(124, 247, 106, 0.9));
-    filter: drop-shadow(0 0 6px rgb(255 255 255 / 0.9));
     animation: hex-selected-march 0.6s linear infinite;
   }
 
   // Case sélectionnée sans action disponible (ennemi, bâtiment, arbre, case
-  // vide, ou soldat allié déjà joué) : même effet, en blanc neutre.
+  // vide, ou soldat allié déjà joué) : censée se distinguer du cas « soldat
+  // jouable », elle est en réalité rendue À L'IDENTIQUE, et l'était déjà avant.
+  // L'état de base voulait un contour vert (`#7cf76a`), mais une seconde
+  // déclaration `stroke: #fff` l'écrasait juste en dessous — le vert n'a donc
+  // jamais été visible, et ce modificateur ne changeait rien. Conservé tel quel
+  // (rendu inchangé) : rétablir la distinction est une décision d'affichage,
+  // pas d'optimisation.
   &__selected--neutral {
     stroke: #ffffff;
-    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9));
   }
 }
 
@@ -286,6 +350,22 @@ $stroke_width_4: 5;
   }
 }
 
+// Pulsation d'une COUCHE entière : `opacity` est compositée par le GPU, donc
+// la couche n'est rastérisée qu'une fois. Les bornes reprennent celles de
+// `hex-pulse` pour que le contour garde exactement le même battement ; le
+// remplissage, lui, respire désormais avec lui (il était fixe avant) — un
+// écart volontaire, quasi invisible aux opacités en jeu (0,14 à 0,3).
+@keyframes hex-pulse-layer {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+// Pulsation d'un élément isolé (le « + » de conquête, voir plus haut).
 @keyframes hex-pulse {
   0%,
   100% {
@@ -299,5 +379,17 @@ $stroke_width_4: 5;
 @keyframes hex-selected-march {
   to {
     stroke-dashoffset: -18;
+  }
+}
+
+// Préférence « moins d'animations ». On ne coupe QUE le vrai mouvement : le
+// défilement des pointillés de la case sélectionnée, seul effet qui déplace
+// quelque chose à l'écran. Les battements d'opacité sont conservés — une
+// variation d'opacité ne déplace rien et ne présente pas de risque vestibulaire,
+// alors qu'elle porte ici une information de jeu (quelles cases sont jouables,
+// quels soldats n'ont pas encore agi). Les couper rendait le plateau inerte.
+@media (prefers-reduced-motion: reduce) {
+  .hex__selected-ring {
+    animation: none;
   }
 }

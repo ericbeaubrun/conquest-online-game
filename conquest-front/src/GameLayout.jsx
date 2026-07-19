@@ -158,6 +158,8 @@ const GameLayout = ({session, onExit}) => {
             )}
             <SideMenu
                 open={menuOpen}
+                turn={state.turn}
+                maxTurns={state.settings?.maxTurns}
                 // Ouvrir un graphique referme le tiroir : l'overlay prend l'écran.
                 onOpenStats={(chartId) => {
                     setStatsChart(chartId);
@@ -238,6 +240,8 @@ const GameLayout = ({session, onExit}) => {
                         onBuyBonus={(bonusId) => dispatch(buyBonus(selection.id, bonusId))}
                         settings={settings}
                         bonusesEnabled={bonusesEnabled}
+                        // Défis d'état : lus en direct sur le plateau courant.
+                        world={state}
                         onClose={() => setSelection(null)}
                     />
                 ) : buildingView ? (

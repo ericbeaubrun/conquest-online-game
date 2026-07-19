@@ -15,7 +15,25 @@ import {
     SOLDIER_LEVEL_STATS,
 } from '../engine/rules.js';
 import { ITEM_COST } from './items.js';
-import { isSkeleton, isSummonedUnit, unitUpkeep, unitLabel } from './units.js';
+import { isSkeleton, isSummonedUnit, unitUpkeep, unitLabel, unitKindById } from './units.js';
+
+// Un couple de statistiques au format « ATK/PV » — la convention d'affichage du
+// jeu (le Prêtre est un 1/32, le Vampire un 8/1).
+//
+// Les textes d'effet des bonus CALCULENT ces valeurs au lieu de les recopier :
+// elles avaient divergé du moteur (un squelette annoncé 5/10 en valait 1/1, un
+// dragon annoncé 100/100 en valait 16/16, un guerrier annoncé 50/50 en valait
+// 4/6), parce que rien ne reliait la phrase aux chiffres. C'est désormais lié.
+const statsText = (s) => (s ? `${s.atk}/${s.hp}` : '?/?');
+
+// Statistiques d'une espèce invoquée, lues au catalogue `units.js`.
+const unitStatsText = (kindId) => statsText(unitKindById(kindId));
+
+// Profils que certains bonus IMPOSENT à leur porteur quand on les équipe (ils
+// remplacent les statistiques de niveau — voir `reduceBuyBonus`). Nommés ici
+// pour que `stats:` et le texte d'effet ne puissent pas se contredire.
+const WARRIOR_STATS = {atk: 4, hp: 6};
+const WARLOCK_STATS = {atk: 1, hp: 16};
 
 // Affinités affichables. Les trois premières s'achètent et se trouvent ; le
 // BOUCLIER, lui, ne s'obtient qu'en équipant le bonus « Paladin » — il ne figure
@@ -44,17 +62,20 @@ ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
     ENEMIES_KILLED_L2: 'enemiesKilledL2', // soldats ennemis de niveau ≥ 2 tués
     COMBATS_SURVIVED: 'combatsSurvived', // combats terminés en vie
     SKELETONS_KILLED: 'skeletonsKilled', // squelettes tués au combat
-    TOWERS_BOUGHT: 'towersBought', // tours (attaque/défense) bâties par le joueur
     CHESTS_OPENED: 'chestsOpened', // coffres ouverts par le soldat
-    DRUID_TREES_KEPT: 'druidTreesKept', // arbres sur son territoire (à la dernière fin de tour)
     PALADIN_IDLE_TURNS: 'paladinIdleTurns', // tours consécutifs terminés sans agir
-    NO_TREES_ON_TERRITORY: 'noTreesOnTerritory', // aucun arbre sur son territoire (à la dernière fin de tour)
-    HAS_AFFINITY: 'hasAffinity', // le soldat porte une affinité (feu/glace/foudre) — lu directement sur `soldier.affinity`, pas de compteur
-    HOUSES_OWNED: 'housesOwned', // maisons possédées par le joueur (à la dernière fin de tour)
-    NO_CONQUEROR_ON_BOARD: 'noConquerorOnBoard', // aucun soldat « Conquérant » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
-    NO_KING_ON_BOARD: 'noKingOnBoard', // aucun soldat « Roi » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
-    NO_WARLOCK_ON_BOARD: 'noWarlockOnBoard', // aucun soldat « Démoniste » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
-    NO_SORCERER_ON_BOARD: 'noSorcererOnBoard', // aucun soldat « Sorcier » sur le plateau, tous joueurs confondus (à la dernière fin de tour)
+    // --- Défis d'ÉTAT : recalculés EN DIRECT, jamais stockés dans `progress`
+    // (voir `STATE_CHALLENGES` plus bas). Ils s'ouvrent et se referment aussitôt
+    // que la situation du plateau change, sans attendre la fin du tour.
+    DRUID_TREES_KEPT: 'druidTreesKept', // arbres sur son territoire
+    NO_TREES_ON_TERRITORY: 'noTreesOnTerritory', // aucun arbre sur son territoire
+    HAS_AFFINITY: 'hasAffinity', // le soldat porte une affinité (lu sur `soldier.affinity`)
+    HOUSES_OWNED: 'housesOwned', // maisons possédées par le joueur
+    TOWER_KINDS_OWNED: 'towerKindsOwned', // types de tours possédés (attaque et/ou défense) : 0, 1 ou 2
+    NO_CONQUEROR_ON_BOARD: 'noConquerorOnBoard', // aucun soldat « Conquérant » sur le plateau, tous joueurs confondus
+    NO_KING_ON_BOARD: 'noKingOnBoard', // aucun soldat « Roi » sur le plateau, tous joueurs confondus
+    NO_WARLOCK_ON_BOARD: 'noWarlockOnBoard', // aucun soldat « Démoniste » sur le plateau, tous joueurs confondus
+    NO_SORCERER_ON_BOARD: 'noSorcererOnBoard', // aucun soldat « Sorcier » sur le plateau, tous joueurs confondus
 };
 
 // Les sous-types d'unités (squelette, arbre-druide, dragon, créatures du
@@ -83,9 +104,9 @@ export const ALCHEMIST_HP_COST = 1; // PV que l'alchimiste se retire en échange
 export const PRIEST_HP_GIFT = 1; // PV rendus à l'allié ciblé
 export const PRIEST_HP_COST = 1; // PV que le prêtre se retire en échange
 
-// Bonus « Magicien » : à chaque fin de tour de son propriétaire, il donne 1
-// affinité (aléatoire) à UN allié adjacent sans affinité, et rapporte cette
-// prime d'or à chaque don.
+// Bonus « Magicien » : à chaque fin de tour de son propriétaire, il transmet SA
+// PROPRE affinité à UN allié adjacent sans affinité, et rapporte cette prime
+// d'or à chaque don.
 export const MAGICIAN_GOLD_REWARD = 10;
 
 // Bonus « Guerrier » : chaque ennemi qu'il tue rapporte cette prime d'or.
@@ -218,7 +239,7 @@ export const BONUS_OFFERS = [
             goal: 1,
             describe: (c, g) => `Tuer ${c}/${g} ennemi de niveau 2 ou plus.`,
         },
-        effect: 'À sa mort, invoque un squelette allié (5/10) sur sa case.',
+        effect: `À sa mort, invoque un squelette allié (${unitStatsText('skeleton')}) sur sa case.`,
     },
     {
         id: 'viking',
@@ -229,10 +250,12 @@ export const BONUS_OFFERS = [
         price: 40,
         upkeep: 10,
         challenge: {
-            metric: CHALLENGE_METRICS.TOWERS_BOUGHT,
-            goal: 1,
+            metric: CHALLENGE_METRICS.TOWER_KINDS_OWNED,
+            goal: 2,
             describe: (c, g) =>
-                c >= g ? 'Tour bâtie.' : `Bâtir ${c}/${g} tour (attaque ou défense).`,
+                c >= g
+                    ? 'Tour d’attaque et tour de défense possédées.'
+                    : `Posséder une tour d’attaque et une tour de défense (${c}/${g}).`,
         },
         effect: 'Ne subit aucun dégât des tours.',
     },
@@ -241,14 +264,14 @@ export const BONUS_OFFERS = [
         label: 'Guerrier',
         src: '/characters/lvl2/GoldWarrior.png',
         requiredLevel: 2,
-        stats: {atk: 4, hp: 6},
+        stats: WARRIOR_STATS,
         price: 50,
         challenge: {
             metric: CHALLENGE_METRICS.COMBATS_SURVIVED,
             goal: 3,
             describe: (c, g) => `Survivre à ${c}/${g} combats sans mourir.`,
         },
-        effect: 'Passe à 50/50 et gagne 20 or par ennemi tué.',
+        effect: `Passe à ${statsText(WARRIOR_STATS)} et gagne ${WARRIOR_KILL_REWARD} or par ennemi tué.`,
     },
 
     // ---- Niveau 3 ----
@@ -298,7 +321,7 @@ export const BONUS_OFFERS = [
             goal: 1,
             describe: (c, g) => (c >= g ? 'Affinité acquise.' : 'Porter une affinité.'),
         },
-        effect: 'Donne 1 affinité à un allié adjacent, et gagne 10 or à chaque don.',
+        effect: 'Transmet son affinité à un allié adjacent, et gagne 10 or à chaque don.',
     },
     {
         id: 'alchemist',
@@ -380,7 +403,7 @@ export const BONUS_OFFERS = [
             describe: (c, g) =>
                 c >= g ? `${g} arbres sur son territoire.` : `Avoir ${c}/${g} arbres sur son territoire.`,
         },
-        effect: 'Transforme l’arbre ciblé en une unité alliée (arbre-druide, 15/30).',
+        effect: `Transforme l’arbre ciblé en une unité alliée (arbre-druide, ${unitStatsText('druidTree')}).`,
     },
 
     // ---- Niveau 5 ----
@@ -396,14 +419,14 @@ export const BONUS_OFFERS = [
             goal: 1,
             describe: (c, g) => (c >= g ? 'Aucun sorcier sur le terrain.' : 'Qu’aucun sorcier ne soit sur le terrain.'),
         },
-        effect: 'Envoûte les rois, démonistes et conquérants ennemis (1/1, sans effet) ; sans cible, invoque un dragon (100/100).',
+        effect: `Envoûte les rois, démonistes et conquérants ennemis (${unitStatsText('pig')}, sans effet) ; sans cible, invoque un dragon (${unitStatsText('dragon')}).`,
     },
     {
         id: 'warlock',
         label: 'Démoniste',
         src: '/characters/lvl5/demonist.png',
         requiredLevel: 5,
-        stats: {atk: 1, hp: 16},
+        stats: WARLOCK_STATS,
         price: 100,
         upkeep: 40,
         challenge: {
@@ -411,7 +434,7 @@ export const BONUS_OFFERS = [
             goal: 1,
             describe: (c, g) => (c >= g ? 'Aucun démoniste sur le terrain.' : 'Qu’aucun démoniste ne soit sur le terrain.'),
         },
-        effect: 'Passe à 10/100 et invoque un squelette allié (10/1) chaque tour où il n’a pas agi.',
+        effect: `Passe à ${statsText(WARLOCK_STATS)} et, chaque tour où il n’a pas agi, invoque un squelette allié (${unitStatsText('skeleton2')}) une fois sur deux.`,
     },
     {
         id: 'king',
@@ -468,11 +491,11 @@ export const bonusOffersForLevel = (level) =>
 // Identifiants des bonus DÉBLOQUÉS (défi accompli) et réclamables par CE soldat,
 // à son niveau : bonus activés en configuration, soldat sans bonus et non
 // squelette. Sert à la fois aux notifications et à leur acquittement.
-export const unlockedBonusIds = (soldier, settings, enabled = true) => {
+export const unlockedBonusIds = (soldier, settings, enabled = true, world) => {
     if (!enabled || isSummonedUnit(soldier) || soldier?.bonus) return [];
     return bonusOffersForLevel(soldier?.level || 1)
         .filter((b) => settings?.bonusEnabled?.[b.id] !== false)
-        .filter((b) => isBonusUnlocked(soldier, b, settings))
+        .filter((b) => isBonusUnlocked(soldier, b, settings, world))
         .map((b) => b.id);
 };
 
@@ -480,16 +503,16 @@ export const unlockedBonusIds = (soldier, settings, enabled = true) => {
 // débloqué et réclamable n'a pas encore été « vu » (acquitté en fin de tour via
 // `bonusSeen`). Une fois le tour passé, ces bonus rejoignent `bonusSeen` et la
 // notification disparaît définitivement (voir reduceEndTurn).
-export const hasUnlockedBonus = (soldier, settings, enabled = true) => {
+export const hasUnlockedBonus = (soldier, settings, enabled = true, world) => {
     const seen = soldier?.bonusSeen;
-    return unlockedBonusIds(soldier, settings, enabled).some(
+    return unlockedBonusIds(soldier, settings, enabled, world).some(
         (id) => !seen || !seen.includes(id)
     );
 };
 
 // Ce bonus précis est-il débloqué mais pas encore acquitté pour ce soldat ?
-export const isBonusNotified = (soldier, bonus, settings, enabled = true) =>
-    unlockedBonusIds(soldier, settings, enabled).includes(bonus.id) &&
+export const isBonusNotified = (soldier, bonus, settings, enabled = true, world) =>
+    unlockedBonusIds(soldier, settings, enabled, world).includes(bonus.id) &&
     !(soldier?.bonusSeen?.includes(bonus.id));
 
 // Plage des niveaux de bonus existants (pour naviguer d'un niveau à l'autre).
@@ -500,30 +523,132 @@ export const MAX_BONUS_LEVEL = Math.max(...BONUS_OFFERS.map((b) => b.requiredLev
 // simple chaîne (défi pas encore branché à la logique de jeu).
 const isTrackedChallenge = (challenge) => challenge != null && typeof challenge === 'object';
 
+// --- Défis d'ÉTAT (évalués en direct) ------------------------------------
+//
+// Deux familles de défis coexistent :
+//   - les défis d'ACTION (arbres abattus, cases conquises, combats survécus…)
+//     sont de l'HISTORIQUE : le reducer incrémente `soldier.progress[metric]`
+//     au moment de l'action, et le compteur ne redescend jamais.
+//   - les défis d'ÉTAT (ci-dessous) ne sont PAS stockés : ils décrivent une
+//     situation du plateau (« 5 arbres sur mon territoire », « aucun roi en
+//     jeu ») et sont RECALCULÉS à chaque lecture, à partir du `world` passé en
+//     argument. Ils s'ouvrent et se referment donc en direct, en plein tour.
+//
+// Ce choix vient de ce qu'un défi n'est qu'un PORTAIL À L'ACHAT : une fois le
+// bonus acheté, il est écrit sur le soldat et lui reste acquis quoi qu'il
+// advienne (voir `reduceBuyBonus`). Échantillonner ce portail en fin de tour
+// alors qu'il se franchit en plein tour laissait acheter contre une condition
+// périmée d'un tour entier.
+//
+// `world` est l'état de jeu (ou tout objet portant `placements` + `ownership`).
+// Sans lui, ces défis sont considérés non remplis plutôt que débloqués : mieux
+// vaut un bonus injustement verrouillé qu'un achat qui divergerait entre le
+// client et le serveur.
+
+// Nombre de placements d'un type donné appartenant au joueur (via `ownership`).
+const countOwned = (world, playerId, type) => {
+    let n = 0;
+    for (const [id, p] of world.placements) {
+        if (p.type === type && world.ownership.get(id) === playerId) n += 1;
+    }
+    return n;
+};
+
+// Un soldat portant ce bonus est-il présent sur le plateau, TOUS JOUEURS
+// CONFONDUS ? Sert aux défis « qu'aucun X ne soit sur le terrain ».
+const bonusOnBoard = (world, bonusId) => {
+    for (const p of world.placements.values()) {
+        if (p.type === 'soldier' && p.bonus === bonusId) return true;
+    }
+    return false;
+};
+
+// Le joueur possède-t-il au moins un squelette ?
+const ownsSkeleton = (world, playerId) => {
+    for (const p of world.placements.values()) {
+        if (p.type === 'soldier' && p.playerId === playerId && isSkeleton(p)) return true;
+    }
+    return false;
+};
+
+// Défis d'état lisibles sur le SOLDAT SEUL, sans consulter le plateau : ils
+// n'ont pas besoin de `world` et restent donc évaluables partout.
+const SOLDIER_CHALLENGES = {
+    [CHALLENGE_METRICS.HAS_AFFINITY]: (soldier) => (soldier?.affinity ? 1 : 0),
+};
+
+// Évaluateurs des défis d'état qui INSPECTENT LE PLATEAU : (soldier, world,
+// goal) -> valeur courante. Une métrique absente des deux tables est un défi
+// d'action, lu dans `progress`.
+const STATE_CHALLENGES = {
+    [CHALLENGE_METRICS.DRUID_TREES_KEPT]: (soldier, world) =>
+        countOwned(world, soldier.playerId, 'tree'),
+    [CHALLENGE_METRICS.NO_TREES_ON_TERRITORY]: (soldier, world) =>
+        countOwned(world, soldier.playerId, 'tree') === 0 ? 1 : 0,
+    [CHALLENGE_METRICS.HOUSES_OWNED]: (soldier, world) =>
+        countOwned(world, soldier.playerId, 'house'),
+
+    // Défi « Viking » : posséder UNE tour d'attaque ET UNE tour de défense. On
+    // compte les TYPES détenus (0, 1 ou 2), pas les tours : dix tours d'attaque
+    // valent toujours 1/2. Les tours portent leur propriétaire sur elles
+    // (`playerId`), sans passer par `ownership` — voir `reducePlaceItem`.
+    [CHALLENGE_METRICS.TOWER_KINDS_OWNED]: (soldier, world) => {
+        let attack = false;
+        let defense = false;
+        for (const p of world.placements.values()) {
+            if (p.playerId !== soldier.playerId) continue;
+            if (p.type === 'attackTower') attack = true;
+            else if (p.type === 'defenseTower') defense = true;
+            if (attack && defense) break;
+        }
+        return (attack ? 1 : 0) + (defense ? 1 : 0);
+    },
+
+    [CHALLENGE_METRICS.NO_SORCERER_ON_BOARD]: (_s, world) => (bonusOnBoard(world, 'sorcerer') ? 0 : 1),
+    [CHALLENGE_METRICS.NO_WARLOCK_ON_BOARD]: (_s, world) => (bonusOnBoard(world, 'warlock') ? 0 : 1),
+    [CHALLENGE_METRICS.NO_KING_ON_BOARD]: (_s, world) => (bonusOnBoard(world, 'king') ? 0 : 1),
+    [CHALLENGE_METRICS.NO_CONQUEROR_ON_BOARD]: (_s, world) => (bonusOnBoard(world, 'conqueror') ? 0 : 1),
+
+    // Défi « Chevalier noir » : HYBRIDE — « tuer OU posséder un squelette ». Les
+    // kills restent de l'historique (crédités par `reduceAttack` dans
+    // `progress`), la possession est une lecture d'état. Le défi est l'union des
+    // deux : un kill passé reste acquis même sans squelette en jeu.
+    [CHALLENGE_METRICS.SKELETONS_KILLED]: (soldier, world, goal) => {
+        const killed = soldier?.progress?.[CHALLENGE_METRICS.SKELETONS_KILLED] ?? 0;
+        return ownsSkeleton(world, soldier.playerId) ? goal : killed;
+    },
+};
+
 // Avancement d'un soldat sur le défi d'un bonus, ou `null` si le défi n'est pas
 // encore suivi. Renvoie { current, goal, done } (courant plafonné à l'objectif).
-export const bonusProgress = (soldier, bonus) => {
+// `world` (l'état de jeu) n'est requis que par les défis d'ÉTAT ; sans lui, ces
+// derniers renvoient 0 (voir le commentaire de `STATE_CHALLENGES`).
+export const bonusProgress = (soldier, bonus, world) => {
     const { challenge } = bonus;
     if (!isTrackedChallenge(challenge)) return null;
-    // Défi « Magicien » : pas de compteur — l'affinité du soldat est lue
-    // directement (elle peut aussi bien disparaître qu'apparaître, via fusion).
-    if (challenge.metric === CHALLENGE_METRICS.HAS_AFFINITY) {
-        const current = soldier?.affinity ? 1 : 0;
-        return { current, goal: challenge.goal, done: current >= challenge.goal };
+    const { metric, goal } = challenge;
+    const fromSoldier = SOLDIER_CHALLENGES[metric];
+    const fromWorld = STATE_CHALLENGES[metric];
+    let raw;
+    if (fromSoldier) {
+        raw = fromSoldier(soldier, world, goal);
+    } else if (fromWorld) {
+        raw = world?.placements && world?.ownership ? fromWorld(soldier, world, goal) : 0;
+    } else {
+        raw = soldier?.progress?.[metric] ?? 0;
     }
-    const raw = soldier?.progress?.[challenge.metric] ?? 0;
-    const current = Math.min(raw, challenge.goal);
-    return { current, goal: challenge.goal, done: current >= challenge.goal };
+    const current = Math.min(raw, goal);
+    return { current, goal, done: current >= goal };
 };
 
 // Texte du défi à afficher pour ce soldat : avec l'avancement inséré (« 2/5 »)
 // pour les défis suivis, sinon la chaîne brute.
-export const challengeText = (soldier, bonus, settings) => {
+export const challengeText = (soldier, bonus, settings, world) => {
     if (!isBonusChallengeEnabled(bonus.id, settings)) return 'Défi désactivé — disponible d’emblée.';
     const { challenge } = bonus;
     if (challenge == null) return 'Aucun défi — disponible aussitôt.';
     if (!isTrackedChallenge(challenge)) return challenge;
-    const { current, goal } = bonusProgress(soldier, bonus);
+    const { current, goal } = bonusProgress(soldier, bonus, world);
     return challenge.describe(current, goal);
 };
 
@@ -536,10 +661,10 @@ export const isBonusChallengeEnabled = (bonusId, settings) =>
 // Un bonus est débloqué pour un soldat quand son défi (suivi) est terminé. Un
 // bonus SANS défi (`challenge` nul), ou dont le défi est DÉSACTIVÉ en
 // configuration, est débloqué d'emblée.
-export const isBonusUnlocked = (soldier, bonus, settings) =>
+export const isBonusUnlocked = (soldier, bonus, settings, world) =>
     !isBonusChallengeEnabled(bonus.id, settings) ||
     bonus.challenge == null ||
-    (bonusProgress(soldier, bonus)?.done ?? false);
+    (bonusProgress(soldier, bonus, world)?.done ?? false);
 
 export const BEHAVIORS = [
     { id: 'conquest', label: 'Conquête' },
@@ -609,8 +734,8 @@ export const soldierSprite = (soldier) =>
 // Un bonus est achetable par CE soldat quand : son défi est accompli, le soldat
 // n'a pas déjà un bonus, et le porte-monnaie couvre le prix (un soldat = un seul
 // bonus). `gold` est l'or du propriétaire du soldat.
-export const canBuyBonus = (soldier, bonus, gold, settings) =>
-    isBonusUnlocked(soldier, bonus, settings) && !soldier?.bonus && gold >= bonusPriceOf(bonus, settings);
+export const canBuyBonus = (soldier, bonus, gold, settings, world) =>
+    isBonusUnlocked(soldier, bonus, settings, world) && !soldier?.bonus && gold >= bonusPriceOf(bonus, settings);
 
 // Entretien (or/tour) propre à un bonus (0 par défaut). Configurable par partie
 // (`settings.bonusUpkeep`) ; retombe sur le barème du bonus sinon.

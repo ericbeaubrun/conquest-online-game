@@ -272,6 +272,7 @@ export const Buildings = memo(function Buildings({placements, cellMap, size, vis
 // équipé) : elle disparaît dès que son tour est passé.
 export const BonusNotifications = memo(function BonusNotifications({
                                                                        placements,
+                                                                       ownership,
                                                                        cellMap,
                                                                        size,
                                                                        settings,
@@ -279,9 +280,13 @@ export const BonusNotifications = memo(function BonusNotifications({
                                                                        activePlayerId,
                                                                    }) {
     const badge = size * 0.3;
+    // Les défis d'état (arbres/maisons du territoire, bonus présents en jeu)
+    // se lisent sur le plateau courant : la pastille apparaît et disparaît en
+    // direct, sans attendre la fin du tour.
+    const world = {placements, ownership};
     return [...placements.entries()].map(([id, placed]) => {
         if (placed.type !== 'soldier' || placed.playerId !== activePlayerId) return null;
-        if (!hasUnlockedBonus(placed, settings, bonusesEnabled)) return null;
+        if (!hasUnlockedBonus(placed, settings, bonusesEnabled, world)) return null;
         const cell = cellMap.get(id);
         if (!cell) return null;
         return (

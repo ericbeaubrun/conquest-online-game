@@ -23,54 +23,8 @@
     }
   }
 
-  .turn-counter {
-    font-size: 12px;
-    padding: 4px 8px;
-  }
-
-  .players-info {
-    gap: 10px;
-  }
-
-  .player-avatar {
-    width: 26px;
-    height: 26px;
-
-    &__bot {
-      font-size: 14px;
-    }
-  }
-
-  // Profils resserrés : noms plus courts avant troncature, badges réduits.
-  .player-profile {
-    max-width: 76px;
-    padding: 2px 4px;
-
-    &__name {
-      font-size: 12px;
-    }
-
-    &__badge--dead {
-      width: 20px;
-      height: 20px;
-    }
-  }
-
-  // Stats empilées verticalement pour tenir sans déborder sous le bouton.
-  .player-stats {
-    flex-direction: column;
-    font-size: 12px;
-    gap: 2px;
-  }
-
-  .end-turn-button {
-    padding: 8px 14px;
-
-    &__icon {
-      width: 24px;
-      height: 24px;
-    }
-  }
+  // NB : les adaptations mobile de la barre du haut vivent dans _topbar.scss,
+  // au plus près de l'échelle --topbar-* qu'elles redéfinissent.
 
   // ---- Notifications « toast » ----
   // Sur desktop la pile occupe le coin haut-droit sans gêner ; sur mobile, à
