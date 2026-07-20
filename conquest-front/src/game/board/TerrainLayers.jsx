@@ -42,12 +42,14 @@ const PulseLayers = ({fills, strokes}) => (
     </>
 );
 
-export const Tiles = memo(function Tiles({cells}) {
+// `terrainColors` : palette effective de la carte jouée (défauts + surcharges
+// définies par la carte). Voir `terrainColors()` dans terrain.js.
+export const Tiles = memo(function Tiles({cells, terrainColors = TERRAIN_COLORS}) {
     return cells.map((cell) => (
         <g key={cell.id} className={`hex${cell.blocked ? ' hex--blocked' : ''}`}>
             <polygon
                 points={cell.points}
-                fill={TERRAIN_COLORS[cell.type] || '#888'}
+                fill={terrainColors[cell.type] || '#888'}
                 className="hex__tile"
             />
         </g>
@@ -183,6 +185,9 @@ export const ActionIndicators = memo(function ActionIndicators({
     for (const [id, placed] of placements) {
         if (placed.type !== 'soldier' || placed.playerId !== activePlayerId) continue;
         if (movedSoldiers.has(placed.uid)) continue;
+        // Un soldat doté d'un comportement jouera tout seul en fin de tour : pas
+        // de pulsation « action possible » (il porte son icône dédiée à la place).
+        if (placed.behavior) continue;
         const cell = cellMap.get(id);
         if (!cell) continue;
         const poly = (

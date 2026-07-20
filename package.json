@@ -11,7 +11,8 @@
     "dev": "npm run dev -w conquest-front",
     "build": "npm run build -w conquest-front",
     "start": "npm start -w conquest-back",
-    "lint": "npm run lint -w conquest-front"
+    "lint": "npm run lint -w conquest-front",
+    "test": "node --test \"shared-engine/test/*.test.js\""
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "4.28.0"

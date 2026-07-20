@@ -181,12 +181,15 @@ export function ownedCount(state, playerId) {
 
 // Nombre de soldats d'un joueur n'ayant pas encore joué ce tour (absents de
 // `movedSoldiers`) : combien il lui reste à déplacer/agir avant la fin du tour.
+// Un soldat doté d'un COMPORTEMENT n'est pas compté : il jouera tout seul à la
+// fin du tour, le joueur n'a rien à faire pour lui.
 export function movableSoldierCount(state, playerId) {
     let n = 0;
     for (const placed of state.placements.values()) {
         if (
             placed.type === 'soldier' &&
             placed.playerId === playerId &&
+            !placed.behavior &&
             !state.movedSoldiers.has(placed.uid)
         ) {
             n += 1;

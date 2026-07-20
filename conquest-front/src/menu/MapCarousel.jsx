@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 import { getMapById } from '@conquest/shared-engine/data/maps.js';
 import { playersForMap } from '@conquest/shared-engine/data/players.js';
 import { hexId } from '@conquest/shared-engine/data/hex.js';
-import { TERRAIN_COLORS } from '@conquest/shared-engine/data/terrain.js';
+import { mapBackground, terrainColors } from '@conquest/shared-engine/data/terrain.js';
 import { buildGeometry } from '@conquest/shared-engine/render/geometry.js';
 
 // Cartes proposées en ligne (dans l'ordre du carousel).
@@ -18,9 +18,17 @@ export const ONLINE_MAP_IDS = ['duel', 'vallee', 'continent', 'archipel'];
 // signale si la position est occupée : { color, filled }. Non fourni → couleurs
 // par défaut de la carte, toutes « pleines ».
 const MapPreview = ({ mapId, spawnInfo }) => {
-    const { map, geo, players } = useMemo(() => {
+    // La palette de la carte s'applique aussi à l'aperçu : le joueur choisit sa
+    // carte avec les couleurs qu'il verra en jeu.
+    const { map, geo, players, colors, background } = useMemo(() => {
         const m = getMapById(mapId);
-        return { map: m, geo: buildGeometry(mapId), players: playersForMap(m) };
+        return {
+            map: m,
+            geo: buildGeometry(mapId),
+            players: playersForMap(m),
+            colors: terrainColors(m),
+            background: mapBackground(m),
+        };
     }, [mapId]);
 
     const { cells, cellMap, base } = geo;
@@ -31,13 +39,14 @@ const MapPreview = ({ mapId, spawnInfo }) => {
     return (
         <svg
             className="map-preview__svg"
+            style={{ background }}
             viewBox={`${base.x} ${base.y} ${base.w} ${base.h}`}
             preserveAspectRatio="xMidYMid meet"
             role="img"
             aria-label={`Aperçu de la carte ${map.name}`}
         >
             {cells.map((c) => (
-                <polygon key={c.id} points={c.points} fill={TERRAIN_COLORS[c.type] || '#888'} />
+                <polygon key={c.id} points={c.points} fill={colors[c.type] || '#888'} />
             ))}
             {map.spawns.map((s, i) => {
                 const cell = cellMap.get(hexId(s.q, s.r));

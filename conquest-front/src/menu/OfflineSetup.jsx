@@ -72,7 +72,7 @@ const PlayerRow = ({ index, player, usedColors, canRemove, onChange, onRemove })
     );
 };
 
-const OfflineSetup = ({ initialConfig, onBack, onLaunch }) => {
+const OfflineSetup = ({ initialConfig, onBack, onLaunch, onOpenLoad }) => {
     const [mapId, setMapId] = useState(initialConfig?.mapId ?? MAPS[0].id);
     const [players, setPlayers] = useState(
         initialConfig?.players ?? [makeDefaultPlayer(0, []), makeDefaultPlayer(1, [makeDefaultPlayer(0, [])])]
@@ -129,6 +129,18 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch }) => {
             </header>
 
             <div className="setup-body">
+                {/* Reprendre une partie sauvegardée : écran dédié (LoadGame),
+                    pour ne pas mêler chargement et création de partie. */}
+                <section className="load-game-action">
+                    <button
+                        type="button"
+                        className="menu-btn menu-btn--load"
+                        onClick={() => onOpenLoad?.()}
+                    >
+                        Charger une partie
+                    </button>
+                </section>
+
                 {/* --- Section CARTE --- */}
                 <section className="setup-section">
                     <h2 className="setup-section__title">Carte</h2>

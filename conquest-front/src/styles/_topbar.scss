@@ -152,13 +152,30 @@
   gap: clamp(10px, 2vw, 20px);
   min-width: 0;
   // Marge de respiration : sans elle, le liseré du joueur actif (box-shadow en
-  // débord de 2px) se fait couper net par l'`overflow-x` du conteneur.
-  padding: 3px;
+  // débord de 3px — anneau de fond + anneau coloré, cf. TopBar.jsx) se fait
+  // couper net par l'`overflow-x` ci-dessous.
+  padding: 4px;
   // Les profils ne se compriment plus (cf. .player-profile) : si la rangée ne
   // tient pas — beaucoup de joueurs, noms longs, écran étroit — elle défile
   // plutôt que d'écraser les profils jusqu'à l'illisible.
   overflow-x: auto;
-  @include pixel-scrollbar;
+  // Barre de défilement MASQUÉE (la rangée reste scrollable à la molette et au
+  // doigt). Ce n'est pas cosmétique : une barre classique RÉSERVE 10px en bas
+  // du conteneur, et la barre du haut ne fait que 54px utiles pour une rangée
+  // de 49px. Dès qu'assez de joueurs déclenchaient le défilement, ces 10px
+  // faisaient déborder la rangée et le liseré du joueur actif se retrouvait
+  // coupé — d'où un bug qui n'apparaissait qu'à partir de 3 ou 4 joueurs.
+  // L'affordance ne disparaît pas pour autant : les profils débordants sont
+  // visiblement tranchés au bord de la rangée.
+  //
+  // Rappel CSS au passage : `overflow-x: auto` fait passer `overflow-y` de
+  // `visible` à `auto` — ce conteneur rogne donc AUSSI verticalement, et rien
+  // ne doit dépasser de sa hauteur.
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 
   // Largeur max des noms, décroissante avec le nombre de joueurs (`--player-count`
   // est posé par TopBar.jsx). Le plancher `max(...)` évite qu'une partie à 6+
@@ -391,30 +408,56 @@
   // Poussé tout à droite : c'est le seul élément de la zone d'action depuis que
   // le compteur de soldats l'a rejoint.
   margin-left: auto;
-  height: var(--topbar-btn-h);
+  // Un cran plus haut que --topbar-btn-h : les icônes agrandies ont besoin de
+  // respiration verticale, sinon elles touchent presque le cadre.
+  height: calc(var(--topbar-btn-h) * 1.3);
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 6px;
+  // Aucun `gap` global : les trois éléments ne sont PAS également espacés. Le
+  // soldat et son compteur forment un bloc serré (une seule information), la
+  // flèche s'en détache. Les écarts sont donc posés un à un ci-dessous.
+  gap: 0;
   background-color: var(--accent-danger);
   color: #06101c;
   border: 2px solid #000;
-  padding: 0 12px;
+  padding: 0 10px;
   font-family: inherit;
   font-size: calc(var(--topbar-font) * 0.95);
   letter-spacing: 0.06em;
   line-height: 1;
   cursor: pointer;
+  // Volume pixel art, même idiome que les boutons de fin de partie
+  // (cf. _gameover.scss) : ombre portée DURE et non floue (un flou casserait
+  // le rendu pixel), plus un liseré clair en haut et sombre en bas à
+  // l'intérieur. Ces deux liserés sont en blanc/noir translucides pour se
+  // teinter tout seuls de la couleur du joueur actif, posée en `style` inline.
+  box-shadow:
+    2px 2px 0 #000,
+    inset 0 2px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28);
+  // Compense l'ombre portée : sans ça le bouton touche le bord droit de la barre.
+  margin-right: 2px;
 
-  &:hover {
-    filter: brightness(1.15);
+  &:hover:not(:disabled) {
+    filter: brightness(1.12);
   }
 
-  // Hors de son tour : bouton éteint, non cliquable.
+  // Enfoncement au clic : le bouton vient occuper la place de son ombre.
+  &:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow:
+      0 0 0 #000,
+      inset 0 2px 0 rgba(0, 0, 0, 0.28);
+  }
+
+  // Hors de son tour : bouton éteint, non cliquable. Le relief part avec —
+  // un bouton qui garde son volume donne envie d'être cliqué.
   &:disabled {
     opacity: 0.35;
     cursor: default;
     filter: none;
+    box-shadow: none;
   }
 
   &__icon {
@@ -422,13 +465,47 @@
     height: var(--topbar-icon);
   }
 
-  // Soldats restant à déplacer, entre les deux icônes. Le séparateur vertical
-  // évite de lire « soldat 3 » et « passer » comme un seul bloc : le compteur
-  // renseigne, l'icône de droite agit.
+  // Icône du soldat : agrandie pour rester lisible au premier coup d'œil, vu
+  // que c'est elle qui donne son sens au compteur juste à côté.
+  &__icon--soldier {
+    flex: 0 0 auto;
+    width: calc(var(--topbar-icon) * 1.55);
+    height: calc(var(--topbar-icon) * 1.55);
+    // Colle le compteur à son icône : les deux se lisent comme UNE information
+    // (« il me reste N soldats »), pas comme deux éléments juxtaposés.
+    margin-right: 1px;
+  }
+
+  // Flèche de fin de tour, dessinée en SVG : c'est elle qui porte l'action du
+  // bouton, donc le plus gros élément. `currentColor` reprend la couleur posée
+  // ici, pas de PNG à gérer en plus.
+  //
+  // Le facteur est PLAFONNÉ par la hauteur utile du bouton : à 1.75 elle fait
+  // 31.5px pour 37.6px utiles (hauteur 41.6 moins les 2×2px de cadre), soit
+  // ~3px de garde. Monter au-delà la fait toucher le cadre — c'est ce qui
+  // arrivait à 2.2, où elle était plus haute que l'intérieur du bouton.
+  &__arrow {
+    flex: 0 0 auto;
+    width: calc(var(--topbar-icon) * 1.75);
+    height: calc(var(--topbar-icon) * 1.75);
+    // Détache la flèche du bloc soldat+compteur, et l'éloigne du bord droit.
+    margin-left: 7px;
+    // Blanc cassé plutôt que blanc pur : moins dur contre le contour noir.
+    color: #e6e9ef;
+  }
+
+  // Soldats restant à déplacer. Le séparateur vertical évite de lire
+  // « soldat 3 » et « passer » comme un seul bloc : le compteur renseigne,
+  // la flèche à sa droite agit.
   &__count {
+    flex: 0 0 auto;
+    // Le chiffre est la donnée du bouton : il doit peser autant que les icônes
+    // qui l'encadrent, pas passer pour une annotation.
     font-size: calc(var(--topbar-font) * 1.05);
-    padding-right: 6px;
-    border-right: 2px solid rgba(0, 0, 0, 0.35);
+    // L'écart au séparateur équilibre le `margin-left` de la flèche : le trait
+    // se retrouve à égale distance du chiffre et de la flèche.
+    padding-right: 7px;
+    border-right: 2px solid rgba(0, 0, 0, 0.4);
   }
 }
 

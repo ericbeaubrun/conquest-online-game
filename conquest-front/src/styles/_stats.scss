@@ -1,6 +1,7 @@
 // Overlay des graphiques statistiques (ouvert depuis le menu latéral).
 // Même langage visuel pixel que les panneaux : fond sombre, bordures franches,
 // liseré « double bordure », coins carrés.
+@use 'tokens' as *;
 
 .stats-overlay {
   position: fixed;
@@ -26,53 +27,37 @@
   height: min(560px, 88vh);
   padding: 14px 16px 10px;
   box-sizing: border-box;
-  color: #fff;
-  background: #1c1c1c;
-  border: 3px solid #000;
-  box-shadow: 0 0 0 3px #4a4a4a; // liseré « double bordure » pixel
+  @include pixel-panel;
 
-  // Croix accrochée au coin haut-droit, même style que celles des panneaux.
+  // Croix logée dans le coin haut-droit, même style que celles des panneaux.
   &__close {
-    position: absolute;
-    top: -16px;
-    right: -16px;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    color: #fff;
-    font-size: 16px;
+    @include panel-close;
+    font-size: 14px;
     line-height: 1;
-    border: 2px solid #000;
-    background: #2c2c2c;
-    cursor: pointer;
     z-index: 2;
-    display: grid;
-    place-items: center;
-
-    &:hover {
-      background: #3a3a3a;
-    }
   }
 
   // Onglets : un bouton par graphique, l'actif en surbrillance verte (même
-  // accent que la carte sélectionnée du menu latéral).
+  // accent que la carte sélectionnée du menu latéral). La gouttière de droite
+  // réserve la place de la croix, sur la même ligne que le premier onglet.
   &__tabs {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+    padding-right: $panel-close-gutter;
   }
 
   &__tab {
     padding: 6px 10px;
     font-size: 14px;
     color: #fff;
-    background: #2a2a2a;
+    background: $panel-btn;
     border: 2px solid #000;
-    box-shadow: inset 0 0 0 1px #4a4a4a;
+    box-shadow: inset 0 0 0 1px $panel-edge;
     cursor: pointer;
 
     &:hover {
-      background: #3a3a3a;
+      background: $panel-btn-hover;
     }
 
     &--active {
@@ -90,13 +75,13 @@
       padding: 4px 8px;
       font-size: 13px;
       color: #d0d0d0;
-      background: #2a2a2a;
+      background: $panel-btn;
       border: 2px solid #000;
-      box-shadow: inset 0 0 0 1px #4a4a4a;
+      box-shadow: inset 0 0 0 1px $panel-edge;
       cursor: pointer;
 
       &:hover {
-        background: #3a3a3a;
+        background: $panel-btn-hover;
       }
     }
   }

@@ -1,10 +1,8 @@
-import { AtkStars, HpHearts } from './StatDisplays.jsx';
+import { AtkValue, HpValue } from './StatDisplays.jsx';
 import { soldierSprite } from '@conquest/shared-engine/data/soldier.js';
-import { SOLDIER_HP_MAX, SOLDIER_ATK_MAX } from '@conquest/shared-engine/engine/rules.js';
 import { DEV_CONFIG } from '../config/devConfig.js';
 
-// Carte compacte d'un soldat (portrait selon le niveau + note ATK en étoiles
-// et PV en cœurs, sans icône).
+// Carte compacte d'un soldat : portrait selon le niveau + pastilles ATK / PV.
 const Card = ({ soldier, color, label }) => (
     <div className="merge-card">
         <span className="merge-card__label">{label}</span>
@@ -27,8 +25,8 @@ const Card = ({ soldier, color, label }) => (
             )}
         </div>
         <div className="merge-card__stats">
-            <AtkStars atk={soldier.atk} max={SOLDIER_ATK_MAX} showValue hideStars />
-            <HpHearts hp={soldier.hp} max={SOLDIER_HP_MAX} showValue hideStars />
+            <AtkValue atk={soldier.atk} />
+            <HpValue hp={soldier.hp} />
         </div>
     </div>
 );

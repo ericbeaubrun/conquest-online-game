@@ -39,7 +39,18 @@
             </section>
 
             <section>
-                <h2>3 · Identité</h2>
+                <h2>3 · Couleurs</h2>
+                <div id="colors" class="colors"></div>
+                <label class="stack">Arrière-plan du plateau
+                    <input id="bgColor" type="color" value="#14171d">
+                </label>
+                <button id="resetColors" class="ghost">↺ Couleurs par défaut</button>
+                <p class="hint">Ces couleurs sont propres à la carte : elles sont exportées avec elle
+                    et utilisées en jeu comme dans l'aperçu du menu.</p>
+            </section>
+
+            <section>
+                <h2>4 · Identité</h2>
                 <label class="stack">Nom affiché
                     <input id="mapName" type="text" value="Ma carte" maxlength="40">
                 </label>
@@ -50,7 +61,7 @@
             </section>
 
             <section>
-                <h2>4 · Exporter</h2>
+                <h2>5 · Exporter</h2>
                 <button id="copy">📋 Copier le code</button>
                 <button id="download">💾 Télécharger (.txt)</button>
                 <p class="hint">Collez le code dans <code>shared-engine/data/customMaps.js</code>.</p>

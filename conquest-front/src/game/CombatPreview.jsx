@@ -1,5 +1,5 @@
 import {ITEM_SRC} from '@conquest/shared-engine/data/items.js';
-import {AtkStars, HpHearts} from './StatDisplays.jsx';
+import {AtkValue, HpValue} from './StatDisplays.jsx';
 import {soldierSprite} from '@conquest/shared-engine/data/soldier.js';
 import {combatResult, isTower} from '@conquest/shared-engine/engine/rules.js';
 import {DEV_CONFIG} from '../config/devConfig.js';
@@ -9,12 +9,6 @@ import {DEV_CONFIG} from '../config/devConfig.js';
 // comme dans le panneau du soldat.
 const UNIT_SRC = {base: '/base.png', ...ITEM_SRC};
 const unitSrc = (unit) => (unit.type === 'soldier' ? soldierSprite(unit) : UNIT_SRC[unit.type]);
-
-// Plafond affiché pour le pourcentage d'attaque / de vie dans l'aperçu de
-// combat : 100 % = 100 points pour toutes les unités (soldats ET structures),
-// même quand leur vrai maximum diffère (ex. base à 1000 PV) — le nombre
-// affiché est alors directement le nombre de points d'attaque / de vie.
-const PREVIEW_STAT_MAX = 100;
 
 // Carte d'une unité au combat : PV APRÈS échange (barre réduite), dégâts subis
 // (−X) et tête de mort si l'unité tombe à 0. Gère soldats comme tours.
@@ -32,12 +26,12 @@ const Card = ({before, after, color, label, dmg}) => {
                 )}
             </div>
             <div className="merge-card__stats">
-                {before.atk != null && <AtkStars atk={before.atk} max={PREVIEW_STAT_MAX} showValue uncapped hideStars/>}
+                {before.atk != null && <AtkValue atk={before.atk} uncapped/>}
                 <div className="merge-card__hp">
                     {DEV_CONFIG.showFightDamageBadge && dmg > 0 && (
                         <span className="merge-card__atk-note-value">−{dmg}</span>
                     )}
-                    <HpHearts hp={after.hp} beforeHp={before.hp} max={PREVIEW_STAT_MAX} wide showValue uncapped hideStars/>
+                    <HpValue hp={after.hp} beforeHp={before.hp} wide uncapped/>
                 </div>
             </div>
         </div>

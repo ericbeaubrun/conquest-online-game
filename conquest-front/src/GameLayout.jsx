@@ -14,7 +14,8 @@ import Toasts from "./game/Toasts.jsx";
 import {useTurnTimer} from "./game/useTurnTimer.js";
 import {useToasts} from "./game/useToasts.js";
 import {buildSelectionView} from "./game/selectionView.js";
-import {endTurn, placeItem, buyBonus, resetGame} from "@conquest/shared-engine/engine/actions.js";
+import {saveGame} from "./game/session/savedGames.js";
+import {endTurn, placeItem, buyBonus, resetGame, setBehavior} from "@conquest/shared-engine/engine/actions.js";
 import {isAffinityItem} from "@conquest/shared-engine/data/items.js";
 
 // Overlay des statistiques chargé en LAZY : Recharts (et les composants de
@@ -52,6 +53,15 @@ const GameLayout = ({session, onExit}) => {
     const [hoverTarget, setHoverTarget] = useState(null);
     // Graphique statistique ouvert (id du catalogue STAT_CHARTS), null = fermé.
     const [statsChart, setStatsChart] = useState(null);
+    // Section Paramètres du menu burger : force l'affichage des stats
+    // d'attaque/PV sur toutes les unités du plateau, et choisit leur forme
+    // (jauges plutôt que nombres). Anciennement des boutons sur le plateau
+    // lui-même, déplacés ici pour libérer ses commandes.
+    const [showAllStats, setShowAllStats] = useState(false);
+    const [statBars, setStatBars] = useState(false);
+    // Horodatage de la dernière sauvegarde réussie : sert d'accusé de réception
+    // éphémère dans le menu (« Sauvegardé ✓ »). Sauvegarde hors-ligne uniquement.
+    const [savedAt, setSavedAt] = useState(null);
 
     const {turnTimer, timeLeft} = useTurnTimer(state, dispatch);
     // Notifications « toast » dérivées du journal d'évènements de l'état (achats,
@@ -96,6 +106,15 @@ const GameLayout = ({session, onExit}) => {
         setSelection(null);
         setHoverTarget(null);
     }, [mapId, activePlayerId]);
+
+    // Sauvegarde HORS-LIGNE : fige l'état courant dans le localStorage. La partie
+    // continue (aucune interruption), on affiche seulement un accusé de réception.
+    // Sans objet en online, où l'état est déjà persisté côté serveur.
+    const handleSave = () => {
+        if (online) return;
+        const entry = saveGame(state);
+        setSavedAt(entry?.savedAt ?? Date.now());
+    };
 
     const handleEndTurn = () => {
         if (!canAct) return; // pas la main : on ne termine pas le tour d'autrui
@@ -166,6 +185,14 @@ const GameLayout = ({session, onExit}) => {
                     setMenuOpen(false);
                 }}
                 onExit={onExit}
+                // Sauvegarde réservée au hors-ligne : en online l'état est déjà
+                // persisté côté serveur, le bouton n'a pas lieu d'être.
+                onSave={online ? undefined : handleSave}
+                savedAt={savedAt}
+                showAllStats={showAllStats}
+                onToggleShowAllStats={() => setShowAllStats((v) => !v)}
+                statBars={statBars}
+                onToggleStatBars={() => setStatBars((v) => !v)}
             />
 
             {statsChart && (
@@ -197,6 +224,8 @@ const GameLayout = ({session, onExit}) => {
                     selection={selection}
                     onSelect={setSelection}
                     onHoverTarget={setHoverTarget}
+                    showAllStats={showAllStats}
+                    statBars={statBars}
                 />
                 {/* Un seul panneau occupe le bas de l'écran à la fois. Priorité :
                     aperçu de fusion / combat (survol d'une cible), puis l'arbre
@@ -224,9 +253,19 @@ const GameLayout = ({session, onExit}) => {
                         tree={treeView.tree}
                         owner={treeView.owner}
                         settings={settings}
+                        // Croix seulement quand l'arbre est sélectionné (pas en
+                        // aperçu au survol, où le panneau suit la souris).
+                        onClose={selection?.kind === 'tree' ? () => setSelection(null) : undefined}
                     />
                 ) : chestView ? (
-                    <ChestPanel loot={chestView.loot}/>
+                    <ChestPanel
+                        loot={chestView.loot}
+                        onClose={
+                            selection?.kind === 'chest' || selection?.kind === 'loot'
+                                ? () => setSelection(null)
+                                : undefined
+                        }
+                    />
                 ) : soldierView ? (
                     <SoldierPanel
                         soldier={soldierView}
@@ -238,6 +277,13 @@ const GameLayout = ({session, onExit}) => {
                         canBuy={soldierView.playerId === activePlayerId}
                         gold={gold[soldierView.playerId] ?? 0}
                         onBuyBonus={(bonusId) => dispatch(buyBonus(selection.id, bonusId))}
+                        // Comportement : modifiable seulement pour un soldat du
+                        // joueur actif, quand ce client a la main.
+                        onSetBehavior={
+                            canAct && selection?.id && soldierView.playerId === activePlayerId
+                                ? (behaviorId) => dispatch(setBehavior(selection.id, behaviorId))
+                                : undefined
+                        }
                         settings={settings}
                         bonusesEnabled={bonusesEnabled}
                         // Défis d'état : lus en direct sur le plateau courant.

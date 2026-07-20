@@ -3,7 +3,7 @@
 // dessinées que sur les cases listées dans `visibleStatIds` (case survolée,
 // soldat sélectionné et ses cibles — ou toutes les unités quand le bouton
 // « stats » du plateau est actif). Elles prennent DEUX formes au choix du
-// joueur (`statBars`, second bouton du plateau) : des nombres aux coins de
+// joueur (`statBars`, second bouton du plateau) : un bandeau chiffré sous
 // l'unité, ou des jauges pixel art.
 import {memo} from 'react';
 import {soldierSkin, soldierSprite, hasUnlockedBonus} from '@conquest/shared-engine/data/soldier.js';
@@ -13,70 +13,99 @@ import {
     AFFINITY_SRC,
     BASE_SCALE,
     BASE_SRC,
+    BEHAVIOR_SRC,
     NOTIF_SRC,
     PLACEMENT_SRC,
     placementSrc,
-    formatStatValue,
-    formatUnitStatValue,
+    formatStatCompact,
+    formatUnitStatCompact,
     placementImgSize,
     placementImgOffsetY,
 } from './constants.js';
 
-// Pastille de fond colorée (selon le type de stat) derrière un nombre
-// d'attaque/de vie, pour le garder lisible quel que soit le fond de la case.
-const StatBadge = ({x, y, fontSize, text, kind}) => {
-    // Boîte englobante approximative d'un chiffre (pas de jambage) : le padding
-    // est ajouté symétriquement de chaque côté pour que le fond reste centré
-    // sur le texte, dont la position (x, y) ne bouge pas.
-    const paddingX = fontSize * 0.12;
-    const paddingY = fontSize * 0.12;
-    const textWidth = text.length * fontSize * 0.4;
-    const capHeight = fontSize * 0.58;
-    const descent = fontSize * 0.02;
-    const width = textWidth + paddingX * 2;
-    const height = capHeight + descent + paddingY * 2;
+// Bandeau « attaque | points de vie » posé SOUS l'unité : un seul rectangle
+// coupé en deux moitiés de largeur égale, l'attaque à gauche (orangé) et les PV
+// à droite (rouge). Le fait de n'être qu'un objet, sous le sprite, lui évite de
+// recouvrir l'unité, et la masse colorée continue reste lisible dézoomée.
+//
+// Les deux cases ont une largeur FIXE (indépendante du texte) : les bandeaux
+// s'alignent donc d'une unité à l'autre sans avoir à rembourrer les nombres
+// d'un zéro (« 5 » reste « 5 » — voir `formatStatCompact`).
+//
+// `atk` à `null` (base, maison : elles n'attaquent pas) n'affiche qu'une seule
+// case, centrée sous l'unité.
+// Dimensions en fraction du rayon de la case (`size`, cf. `HEX_SIZE`). Un
+// hexagone flat-top mesure `2 × size` de large en son milieu, et encore
+// `1,28 × size` à la hauteur où court le bandeau : ce dernier peut donc être
+// large sans risquer de mordre sur les cases voisines. Il l'est délibérément —
+// c'est ce qui rend les chiffres lisibles une fois le plateau dézoomé.
+const BANNER_HEIGHT = 0.3;
+// Assez large pour qu'une valeur de trois caractères (« 1k2 », « FF ») tienne
+// sans déborder de sa case à la taille de police ci-dessous.
+const BANNER_CELL_WIDTH = 0.44;
+const BANNER_FONT_RATIO = 0.9;
+
+const StatBanner = ({cx, cy, size, atk, hp, yOffset = 0.42, formatValue = formatStatCompact}) => {
+    const cells = [
+        ...(atk != null ? [{kind: 'atk', text: formatValue(atk)}] : []),
+        {kind: 'hp', text: formatValue(hp)},
+    ];
+    const height = size * BANNER_HEIGHT;
+    const cellWidth = size * BANNER_CELL_WIDTH;
+    const width = cellWidth * cells.length;
+    const x = cx - width / 2;
+    const y = cy + size * yOffset - height / 2;
+    // Ombre portée DURE (pas de flou, décalée d'un « pixel » de case) : elle
+    // détache le bandeau des terrains clairs sans trahir le rendu pixel art.
+    const shadow = size * 0.04;
     return (
-        <>
+        <g className="stat-banner">
+            <rect x={x + shadow} y={y + shadow} width={width} height={height} className="stat-banner__shadow"/>
+            {/* Les remplissages ne portent PAS de contour : un contour par case
+                doublerait le trait sur la couture et rognerait l'intérieur —
+                d'où un cadre unique et un séparateur, tracés par-dessus. */}
+            {cells.map((cell, i) => (
+                <rect
+                    key={cell.kind}
+                    x={x + i * cellWidth}
+                    y={y}
+                    width={cellWidth}
+                    height={height}
+                    className={`stat-banner__cell stat-banner__cell--${cell.kind}`}
+                />
+            ))}
+            {cells.slice(1).map((cell, i) => (
+                <line
+                    key={cell.kind}
+                    x1={x + (i + 1) * cellWidth}
+                    y1={y}
+                    x2={x + (i + 1) * cellWidth}
+                    y2={y + height}
+                    vectorEffect="non-scaling-stroke"
+                    className="stat-banner__divider"
+                />
+            ))}
             <rect
-                x={x - width / 2}
-                y={y - capHeight - paddingY}
+                x={x}
+                y={y}
                 width={width}
                 height={height}
-                rx={0}
                 vectorEffect="non-scaling-stroke"
-                className={`soldier-stat-label__bg soldier-stat-label__bg--${kind}`}
+                className="stat-banner__frame"
             />
-            <text x={x} y={y} textAnchor="middle" className="soldier-stat-label" style={{fontSize}}>
-                <tspan className={`soldier-stat-label__${kind}`}>{text}</tspan>
-            </text>
-        </>
-    );
-};
-
-// Nombres d'attaque / points de vie en bas d'une unité : attaque en bas à
-// gauche, vie en bas à droite. `atk` à `null` n'affiche aucun nombre d'attaque
-// (ex. la base, qui n'attaque pas).
-const StatCornerLabels = ({cx, cy, size, atk, hp, yOffset = 0.56, xOffset = 0.18, formatValue = formatStatValue}) => {
-    const fontSize = size * 0.35;
-    return (
-        <>
-            {atk != null && (
-                <StatBadge
-                    x={cx - size * xOffset}
-                    y={cy + size * yOffset}
-                    fontSize={fontSize}
-                    text={formatValue(atk)}
-                    kind="atk"
-                />
-            )}
-            <StatBadge
-                x={cx + size * xOffset}
-                y={cy + size * yOffset}
-                fontSize={fontSize}
-                text={formatValue(hp)}
-                kind="hp"
-            />
-        </>
+            {cells.map((cell, i) => (
+                <text
+                    key={cell.kind}
+                    x={x + i * cellWidth + cellWidth / 2}
+                    y={y + height * 0.78}
+                    textAnchor="middle"
+                    style={{fontSize: height * BANNER_FONT_RATIO}}
+                    className={`stat-banner__value stat-banner__value--${cell.kind}`}
+                >
+                    {cell.text}
+                </text>
+            ))}
+        </g>
     );
 };
 
@@ -149,15 +178,15 @@ const StatBars = ({cx, cy, size, atk, hp, atkMax, hpMax}) => {
 };
 
 // Stats d'une unité, sous la forme choisie par le joueur : jauges (`statBars`)
-// ou nombres. Les deux formes affichent les MÊMES valeurs ; seules les jauges
-// ont besoin des plafonds (`atkMax` / `hpMax`) pour se dimensionner, et seuls
-// les nombres ont besoin d'un format et d'un placement (`numberProps`, pour les
-// unités sans attaque dont le PV se centre au lieu de se caser à droite).
+// ou bandeau chiffré. Les deux formes affichent les MÊMES valeurs ; seules les
+// jauges ont besoin des plafonds (`atkMax` / `hpMax`) pour se dimensionner, et
+// seul le bandeau a besoin d'un format et d'une hauteur (`numberProps`, pour
+// les unités hautes dont le bandeau remonte sous le sprite).
 const UnitStats = ({statBars, cx, cy, size, atk, hp, atkMax, hpMax, numberProps}) =>
     statBars ? (
         <StatBars cx={cx} cy={cy} size={size} atk={atk} hp={hp} atkMax={atkMax} hpMax={hpMax}/>
     ) : (
-        <StatCornerLabels cx={cx} cy={cy} size={size} atk={atk} hp={hp} {...numberProps}/>
+        <StatBanner cx={cx} cy={cy} size={size} atk={atk} hp={hp} {...numberProps}/>
     );
 
 // Bases, dessinées au-dessus des cases. Une base détruite (assiégée jusqu'à
@@ -186,8 +215,9 @@ export const Bases = memo(function Bases({baseCells, size, destroyedBases, baseH
                         atk={null}
                         hp={baseHp?.[cell.id] ?? BUILDING_STATS.base.hp}
                         hpMax={BUILDING_STATS.base.hpMax}
-                        // Base : pas d'attaque, un seul nombre (PV) centré.
-                        numberProps={{xOffset: 0, yOffset: 0.15}}
+                        // Base : pas d'attaque, une seule case (PV). Le sprite
+                        // débordant de la case, le bandeau remonte sur lui.
+                        numberProps={{yOffset: 0.14}}
                     />
                 )}
             </g>
@@ -254,13 +284,31 @@ export const Buildings = memo(function Buildings({placements, cellMap, size, vis
                         atkMax={maxAtk(placed)}
                         hpMax={maxHp(placed)}
                         numberProps={{
-                            formatValue: isSoldier || isTower ? formatUnitStatValue : formatStatValue,
-                            // Maison : pas d'attaque, un seul nombre (PV) centré
-                            // comme pour la base plutôt que casé dans le coin
-                            // bas-droit.
-                            ...(placed.type === 'house' ? {xOffset: 0, yOffset: 0.15} : null),
+                            formatValue: isSoldier || isTower ? formatUnitStatCompact : formatStatCompact,
+                            // Maison : pas d'attaque, une seule case (PV), et
+                            // un bandeau remonté comme pour la base.
+                            ...(placed.type === 'house' ? {yOffset: 0.14} : null),
                         }}
                     />
+                )}
+                {placed.type === 'chest' && (
+                    <text
+                        x={cell.cx}
+                        y={cell.cy - size * 0.1}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        pointerEvents="none"
+                        style={{
+                            fontSize: size * 0.55,
+                            fontWeight: 'bold',
+                            fill: '#ffca06',
+                            userSelect: 'none',
+                            outline: 'none',
+                        }}
+                        className="chest-mark"
+                    >
+                        ?
+                    </text>
                 )}
             </g>
         );
@@ -295,6 +343,36 @@ export const BonusNotifications = memo(function BonusNotifications({
                 href={NOTIF_SRC}
                 x={cell.cx - size * 0.3 - badge / 2}
                 y={cell.cy - size * 0.3 - badge / 2}
+                width={badge}
+                height={badge}
+                style={{imageRendering: 'pixelated'}}
+                pointerEvents="none"
+            />
+        );
+    });
+});
+
+// Icône « comportement » posée au-dessus de chaque soldat DU JOUEUR ACTIF en
+// pilote automatique : elle signale (à tous les joueurs, mais seulement durant
+// le tour du propriétaire) que ce soldat jouera tout seul à la fin du tour.
+export const BehaviorMarkers = memo(function BehaviorMarkers({
+                                                                 placements,
+                                                                 cellMap,
+                                                                 size,
+                                                                 activePlayerId,
+                                                             }) {
+    const badge = size * 0.42;
+    return [...placements.entries()].map(([id, placed]) => {
+        if (placed.type !== 'soldier' || !placed.behavior) return null;
+        if (placed.playerId !== activePlayerId) return null;
+        const cell = cellMap.get(id);
+        if (!cell) return null;
+        return (
+            <image
+                key={'behav' + id}
+                href={BEHAVIOR_SRC}
+                x={cell.cx - badge / 2}
+                y={cell.cy - size * 0.62 - badge / 2}
                 width={badge}
                 height={badge}
                 style={{imageRendering: 'pixelated'}}

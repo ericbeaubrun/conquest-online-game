@@ -35,6 +35,9 @@ export const CHOP_SRC = '/fightIndicatorGreen.png';
 // Ouverture d'un coffre : même indicateur vert (aucune riposte non plus).
 export const OPEN_CHEST_SRC = '/fightIndicatorGreen.png';
 export const NOTIF_SRC = '/notif.png';
+// Icône « comportement » : posée au-dessus d'un soldat en pilote automatique
+// pendant le tour de son propriétaire (visible de tous les joueurs).
+export const BEHAVIOR_SRC = '/characters/comportement.png';
 
 // Icône d'affinité, même correspondance que le panneau du soldat. Le bouclier
 // n'est pas un élément (il ne s'achète pas) mais s'affiche comme les autres :
@@ -75,7 +78,7 @@ export const placementImgSize = (placed, size) => {
     // Coffres et butins : de petits objets posés au sol, dessinés bien en deçà
     // d'une case pour ne pas se confondre avec les unités qui l'occupent. Le
     // coffre, plus volumineux, est un peu plus grand que le butin qu'il livre.
-    if (type === 'chest') return size * 0.55;
+    if (type === 'chest') return size * 0.85;
     if (type === 'loot') return size * 0.4;
     return size * unitScale(placed);
 };
@@ -84,26 +87,23 @@ export const placementImgSize = (placed, size) => {
 // pour presque tout : seul le coffre est descendu vers le bas de sa case, pour
 // qu'il ait l'air posé au sol plutôt que flottant en son milieu.
 export const placementImgOffsetY = (placed, size) =>
-    placed?.type === 'chest' ? size * 0.14 : 0;
+    placed?.type === 'chest' ? size * 0.18 : 0;
 
 // Format compact (3 caractères max) pour un nombre de points de vie élevé
 // (ex. la base) : 1000 -> « 1k », 1200 -> « 1k2 », 2000 -> « 2k »… seule la
-// tranche des centaines est gardée, les dizaines/unités sont tronquées. Les
-// valeurs à un chiffre sont préfixées d'un 0 (ex. « 05 ») pour garder une
-// largeur constante entre les badges.
-export const formatStatValue = (value) => {
-    if (value < 10) return `0${value}`;
+// tranche des centaines est gardée, les dizaines/unités sont tronquées.
+export const formatStatCompact = (value) => {
     if (value < 1000) return String(value);
     const thousands = Math.floor(value / 1000);
     const hundreds = Math.floor((value % 1000) / 100);
     return hundreds > 0 ? `${thousands}k${hundreds}` : `${thousands}k`;
 };
 
-// Même format que `formatStatValue`, mais pour les soldats (jamais les
-// structures : base, maison, tours) : au-delà de 99, on affiche « FF » plutôt
-// que de tronquer le nombre, les soldats n'atteignant pas des valeurs à
-// hauteur de base/bâtiment.
-export const formatUnitStatValue = (value) => {
-    if (value >= 100) return 'FF';
-    return formatStatValue(value);
-};
+// Format des SOLDATS (jamais les structures : base, maison, tours) : au-delà de
+// 99, on affiche « FF » plutôt que de tronquer le nombre, les soldats
+// n'atteignant pas des valeurs à hauteur de base/bâtiment.
+//
+// Aucun des deux formats ne rembourre les valeurs à un chiffre d'un zéro : tous
+// les affichages (bandeau du plateau, pastilles des panneaux et de la boutique)
+// ont désormais une largeur fixe, qui aligne les nombres sans les déformer.
+export const formatUnitStatCompact = (value) => (value >= 100 ? 'FF' : formatStatCompact(value));

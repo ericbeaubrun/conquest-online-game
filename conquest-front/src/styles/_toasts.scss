@@ -33,9 +33,9 @@
   line-height: 1.15;
   text-align: left;
   color: #fff;
-  background: #1c1c1c;
+  background: $panel-ink;
   border: 3px solid #000;
-  box-shadow: 0 0 0 3px #4a4a4a;
+  box-shadow: 0 0 0 3px $panel-edge;
   opacity: $panel-opacity;
   cursor: pointer;
   // Bord gauche coloré par le type d'évènement (défini par les variantes).
@@ -60,7 +60,7 @@
 
   // ---- Teintes par type (bord gauche) ----
   &--buy {
-    border-left-color: #ffd766; // or
+    border-left-color: $gold; // or
   }
 
   &--merge {

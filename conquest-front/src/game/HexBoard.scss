@@ -77,48 +77,64 @@ $stroke_width_4: 5;
   }
 
   // Boutons de zoom en surimpression (relevés pour ne pas gêner la boutique).
+  // Rendu pixel-art : coins carrés, double liseré noir + gris (le classique
+  // « bevel » 8-bit) au lieu d'une ombre floue, et un léger décalage vers le
+  // bas/droite au clic qui simule le bouton qu'on enfonce physiquement.
   &__controls {
     position: absolute;
     right: 12px;
     bottom: 104px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 
     button {
-      width: 40px;
-      height: 40px;
-      border: none;
-      border-radius: 8px;
-      background: rgba(30, 30, 30, 0.75);
-      color: #fff;
-      font-size: 20px;
+      width: 42px;
+      height: 42px;
+      border: 2px solid #000;
+      border-radius: 0;
+      background: var(--ink-800, #14171d);
+      color: var(--ink-050, #e6e9ef);
+      font-family: $pixel-font;
+      font-size: 22px;
       line-height: 1;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      // Légère transparence pour ne pas gêner la lecture du plateau derrière,
+      // sans retomber dans le flou d'origine (contours toujours nets).
+      opacity: 0.92;
+      // Liseré clair intérieur en haut/gauche, sombre en bas/droite : simule un
+      // biseau pixel-art sans flou (une seule teinte plate, jamais de dégradé).
+      box-shadow:
+        inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+        inset -2px -2px 0 rgba(0, 0, 0, 0.55),
+        2px 2px 0 #000;
       // Pas de `backdrop-filter` ici : posé au-dessus d'un SVG qui s'anime, le
       // flou d'arrière-plan est réévalué à chaque image, pour un effet quasi
-      // invisible derrière un fond déjà opaque à 75 %.
+      // invisible derrière un fond déjà opaque.
 
       &:hover {
-        background: rgba(30, 30, 30, 0.9);
+        background: #1e222b;
       }
 
       &:active {
-        transform: scale(0.94);
+        // Le bouton « s'enfonce » : décalé vers l'ombre portée qui, elle,
+        // disparaît — pas de `scale` qui flouterait les bords nets du pixel art.
+        transform: translate(2px, 2px);
+        box-shadow: inset -1px -1px 0 rgba(255, 255, 255, 0.12), inset 2px 2px 0 rgba(0, 0, 0, 0.55);
       }
     }
 
     // Bouton « afficher toutes les stats » : reste enfoncé/allumé tant que
     // l'affichage forcé est actif.
     &-btn--active {
-      background: rgba(255, 215, 102, 0.9);
+      background: var(--accent-gold, #e8b44a);
       color: #1c1c1c;
 
       &:hover {
-        background: rgba(255, 215, 102, 1);
+        background: #f0c264;
       }
     }
   }
@@ -285,33 +301,58 @@ $stroke_width_4: 5;
   }
 }
 
-// Étiquette « attaque/pv » chiffrée aux coins d'une unité (attaque en bas à
-// gauche, points de vie en bas à droite ; taille fixée en JS, proportionnelle à
-// la case). Forme par défaut, l'autre étant les jauges ci-dessous.
-.soldier-stat-label {
-  font-family: $pixel-font;
-  fill: #ffffff;
+// Bandeau « attaque | pv » chiffré sous une unité (attaque à gauche, points de
+// vie à droite ; géométrie fixée en JS, proportionnelle à la case). Forme par
+// défaut, l'autre étant les jauges ci-dessous. `crispEdges` supprime
+// l'anticrénelage, comme pour les jauges : les bords restent francs.
+.stat-banner {
   pointer-events: none;
   user-select: none;
 
-  &__atk,
-  &__hp {
-    fill: #ffffff;
-  }
-
-  &__bg {
-    pointer-events: none;
-    stroke-width: 2px;
+  &__cell {
+    stroke: none;
     shape-rendering: crispEdges;
 
+    // Attaque : le même orangé que la jauge d'attaque, pour que basculer d'une
+    // forme à l'autre ne demande pas de réapprendre le code couleur.
     &--atk {
-      fill: #0d0d0d;
-      stroke: #000000;
+      fill: #e08a2c;
     }
 
     &--hp {
       fill: #b81f1f;
-      stroke: #5c0d0d;
+    }
+  }
+
+  // Cadre et séparateur : `non-scaling-stroke` côté JS fige leur épaisseur en
+  // pixels ÉCRAN, donc le trait reste franc sans jamais grossir au zoom ni
+  // disparaître une fois dézoomé.
+  &__frame,
+  &__divider {
+    fill: none;
+    stroke: #000000;
+    stroke-width: 2px;
+    shape-rendering: crispEdges;
+  }
+
+  &__shadow {
+    fill: #000000;
+    fill-opacity: 0.4;
+    shape-rendering: crispEdges;
+  }
+
+  &__value {
+    font-family: $pixel-font;
+    shape-rendering: crispEdges;
+
+    // Chiffres sombres sur l'orangé, clairs sur le rouge : dans les deux cas le
+    // contraste tient une fois la case dézoomée.
+    &--atk {
+      fill: #3d2000;
+    }
+
+    &--hp {
+      fill: #ffffff;
     }
   }
 }

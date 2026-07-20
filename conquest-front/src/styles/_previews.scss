@@ -12,12 +12,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   max-width: calc(100% - 24px);
-  color: #fff;
-  background: #1c1c1c;
-  border: 3px solid #000;
-  box-shadow: 0 0 0 3px #4a4a4a;
+  @include pixel-panel;
   z-index: 14;
   pointer-events: none; // ne gêne pas le survol du plateau
 
@@ -46,34 +43,33 @@
 }
 
 // Teinte de la bordure et du fond selon l'issue du combat (même code couleur
-// que le texte de `__outcome` et les indicateurs du plateau). Le fond reste un
-// gris-anthracite proche du panneau standard (#1c1c1c), juste légèrement
-// teinté (~12 % de la couleur d'issue) — la bordure, elle, reprend la couleur
-// pleine pour rester bien identifiable.
+// que le texte de `__outcome` et les indicateurs du plateau). Le fond reste
+// l'encre du panneau standard ($panel-ink), juste légèrement teinté — la
+// bordure, elle, reprend la couleur pleine pour rester bien identifiable.
 .merge-preview--win {
   border-color: #5bd35b;
-  background: #202b20;
+  background: #131b13;
 }
 
 .merge-preview--lose {
   border-color: #ff6b6b;
-  background: #372525;
+  background: #221415;
 }
 
 .merge-preview--draw {
   border-color: #ffd766;
-  background: #37331f;
+  background: #211c10;
 }
 
 .merge-preview--double-ko {
   border-color: #ff9d4d;
-  background: #3a2c1f;
+  background: #221a10;
 }
 
 // Fusion : même principe, teinte bleu clair (couleur de `__outcome--fusion`).
 .merge-preview--fusion {
   border-color: #6bc8ff;
-  background: #1f2c37;
+  background: #101b23;
 }
 
 // Très légère transparence, comme les autres panneaux flottants (boutique,
@@ -156,8 +152,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 3px solid rgba(255, 255, 255, 0.6);
-    background: #2a2a2a;
+    border: 2px solid $panel-edge;
+    background: $panel-ink-raised;
     image-rendering: pixelated;
 
     img {
@@ -210,7 +206,7 @@
     white-space: nowrap;
     color: #fff;
     background: #000;
-    border: 1px solid #4a4a4a;
+    border: 1px solid $panel-edge;
   }
 
   // Tête de mort sur l'unité éliminée : centrée sur le portrait, légèrement

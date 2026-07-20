@@ -11,13 +11,12 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 18px;
+  gap: 12px;
+  // Gouttière à droite : la croix s'y loge sans recouvrir les spécifications
+  // (voir `panel-close`, ancrée dans le coin plutôt qu'en débordement).
+  padding: 10px $panel-close-gutter 10px 14px;
   max-width: calc(100% - 24px);
-  color: #fff;
-  background: #1c1c1c;
-  border: 3px solid #000;
-  box-shadow: 0 0 0 3px #4a4a4a; // liseré « double bordure » pixel
+  @include pixel-panel;
   z-index: 12;
   // Très légère transparence pour laisser deviner le plateau derrière.
   opacity: $panel-opacity;
@@ -27,28 +26,8 @@
   // AU-DESSUS de la boutique de bonus (`.bonus-panel`, z-index 13) qui se
   // déploie juste au-dessus et peut chevaucher son coin haut-droit.
   &__close {
-    position: absolute;
-    top: -16px;
-    right: -16px;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border: 2px solid #000;
-    background: #2c2c2c;
-    cursor: pointer;
+    @include panel-close;
     z-index: 20;
-    display: grid;
-    place-items: center;
-
-    &:hover {
-      background: #3a3a3a;
-    }
-
-    img {
-      width: 19px;
-      height: 19px;
-      image-rendering: pixelated;
-    }
   }
 
   // Colonne portrait : étoiles de niveau au-dessus du bouton portrait.
@@ -82,17 +61,17 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-    border: 3px solid rgba(255, 255, 255, 0.6);
-    background: #2a2a2a;
+    border: 2px solid $panel-edge;
+    background: $panel-ink-raised;
     image-rendering: pixelated;
     cursor: pointer;
     transition: background 0.12s ease;
 
     &:hover {
-      background: #343434;
+      background: $panel-ink-hover;
     }
     &--active {
-      background: #3a3a3a;
+      background: #24242a;
     }
 
     img {
@@ -115,7 +94,7 @@
     white-space: nowrap;
     color: #fff;
     background: #000;
-    border: 1px solid #4a4a4a;
+    border: 1px solid $panel-edge;
   }
 
   // Notification (bonus débloqué) en haut-gauche du portrait. Scindée sous
@@ -144,8 +123,8 @@
     width: 100%;
     margin-bottom: 6px;
     padding-bottom: 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-    font-size: 17px;
+    border-bottom: 1px solid $panel-edge;
+    font-size: 15px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -162,8 +141,8 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    font-size: 18px;
-    min-width: 160px;
+    font-size: 16px;
+    min-width: 150px;
   }
 }
 
@@ -179,44 +158,23 @@
   // Hauteur et marges fluides : s'adaptent à la taille de l'écran.
   min-height: clamp(150px, 30vh, 240px);
   max-height: min(55vh, 460px);
-  padding: clamp(8px, 2vw, 12px) clamp(10px, 3vw, 18px);
-  background: #1c1c1c;
-  border: 3px solid #000;
-  box-shadow: 0 0 0 3px #4a4a4a; // même liseré « double bordure » pixel
+  // Bandeau réservé en haut (comme la boutique) : la croix s'y loge sans
+  // recouvrir la première carte de bonus.
+  padding: $panel-close-gutter clamp(10px, 3vw, 16px) clamp(8px, 2vw, 12px);
+  @include pixel-panel;
   // Colonne : la liste défile en interne (voir `.bonus-list`), la nav reste
-  // ancrée en bas. Pas de `overflow: hidden` ici : la croix de fermeture
-  // déborde volontairement du cadre (coin haut-droit, comme le panneau soldat).
+  // ancrée en bas.
   display: flex;
   flex-direction: column;
-  overflow: visible;
+  overflow: hidden;
   z-index: 13;
 
-  // Croix accrochée au coin haut-droit, même style/emplacement relatif que
-  // celle du panneau soldat : referme la boutique de bonus. Doit rester
-  // au-dessus du contenu du panneau (liste, nav), qui se déploie derrière.
+  // Croix logée dans le bandeau du coin haut-droit, même style/emplacement
+  // relatif que celle du panneau soldat : referme la boutique de bonus. Doit
+  // rester au-dessus du contenu du panneau (liste, nav) qui défile dessous.
   &__close {
-    position: absolute;
-    top: -16px;
-    right: -16px;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border: 2px solid #000;
-    background: #2c2c2c;
-    cursor: pointer;
+    @include panel-close;
     z-index: 5;
-    display: grid;
-    place-items: center;
-
-    &:hover {
-      background: #3a3a3a;
-    }
-
-    img {
-      width: 19px;
-      height: 19px;
-      image-rendering: pixelated;
-    }
   }
 
   // Barre de navigation entre niveaux de bonus (consultation seule). Ancrée en
@@ -241,27 +199,13 @@
     letter-spacing: 0.05em;
   }
 
+  // Même style que les flèches de page de la boutique.
   &__nav-btn {
     flex: 0 0 auto;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    color: #fff;
-    background: #2a2a2a;
-    border: 2px solid #000;
-    box-shadow: inset 0 0 0 1px #4a4a4a;
-    cursor: pointer;
-
-    &:hover:not(:disabled) {
-      background: #3a3a3a;
-    }
-    &:disabled {
-      opacity: 0.35;
-      cursor: default;
-    }
+    width: 26px;
+    height: 26px;
+    font-size: 13px;
+    @include pixel-square-btn;
   }
 }
 
@@ -281,9 +225,8 @@
   width: 100%;
   box-sizing: border-box;
   padding: clamp(6px, 1.5vw, 8px);
-  background: rgba(255, 255, 255, 0.06);
-  border: 2px solid #000;
-  box-shadow: inset 0 0 0 1px #4a4a4a;
+  background: $panel-ink-raised;
+  border: 2px solid $panel-edge;
 
   &__portrait {
     position: relative;
@@ -293,8 +236,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 3px solid rgba(255, 255, 255, 0.6);
-    background: #2a2a2a;
+    border: 2px solid $panel-edge;
+    background: $panel-btn;
     image-rendering: pixelated;
 
     img {
@@ -321,7 +264,7 @@
     line-height: 1;
     color: #fff;
     background: #000;
-    border: 1px solid #4a4a4a;
+    border: 1px solid $panel-edge;
   }
 
   &__body {
@@ -355,7 +298,7 @@
 
   &__price {
     font-size: 15px;
-    color: #ffd766;
+    color: $gold;
     white-space: nowrap;
 
     &--free {
@@ -522,135 +465,11 @@
   }
 }
 
-.soldier-stat {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-
-  &__icon {
-    font-size: 16px;
-    line-height: 1;
-  }
-
-  // Icône image (coeur / épée) : rendu pixel net, alignée sur la piste.
-  &__img {
-    width: 18px;
-    height: 18px;
-    display: block;
-    image-rendering: pixelated;
-  }
-
-  // Piste : rainure sombre, bordure noire franche, coins carrés.
-  &__track {
-    position: relative;
-    flex: 1;
-    height: 14px;
-    background: #111;
-    border: 2px solid #000;
-    box-shadow: inset 0 0 0 1px #3a3a3a;
-    overflow: hidden;
-    image-rendering: pixelated;
-  }
-
-  // Segment des PV perdus lors d'un combat : positionné juste après le
-  // remplissage courant, jusqu'à l'ancien niveau de vie (voir `beforeValue`).
-  &__damage {
-    position: absolute;
-    top: 0;
-    height: 100%;
-    background-color: #ff4d4d;
-    opacity: 0.7;
-  }
-
-  // Remplissage segmenté en « blocs » via un dégradé répété, avancée par paliers.
-  &__fill {
-    height: 100%;
-    background-image: repeating-linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.28) 0,
-      rgba(0, 0, 0, 0.28) 2px,
-      transparent 2px,
-      transparent 7px
-    );
-    background-color: #5bd35b;
-    transition: width 0.15s steps(8);
-  }
-
-  &--hp &__fill {
-    background-color: #5bd35b;
-  }
-  &--atk &__fill {
-    background-color: #ff8a3d;
-  }
-
-  &__value {
-    min-width: 62px;
-    text-align: right;
-    font-size: 18px;
-    letter-spacing: 0.04em;
-  }
-}
-
-// Note d'attaque en étoiles (remplace la barre d'attaque dans le panneau du
-// soldat) : 5 étoiles pixel, alignées sur toute la largeur de la piste.
-.soldier-stars {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-
-  // Même taille que les épées (voir plus bas) pour que chaque cœur reste
-  // aligné avec l'épée correspondante entre les deux rangées.
-  &__item {
-    width: 26px;
-    height: 26px;
-    image-rendering: pixelated;
-  }
-
-  // Pourcentage affiché avant la rangée d'icônes (épées / cœurs). Largeur
-  // FIXE (et non min-width) et identique entre les deux rangées, pour que la
-  // rangée d'icônes démarre toujours à la même position malgré des textes de
-  // longueur différente (« 42% » vs « 42% → 20% »). Volontairement resserrée
-  // pour coller les icônes au texte ; un texte plus long (fusion/combat)
-  // déborde du cadre sans être coupé (pas d'overflow:hidden).
-  // Même police pixel que les nombres PV/ATK affichés sur le terrain ; la
-  // couleur est fixée par variante (attaque / vie) juste en dessous.
-  &__percent {
-    width: 40px;
-    flex: 0 0 auto;
-    text-align: left;
-    font-family: "Press Start 2P", monospace;
-    font-size: 11px;
-    line-height: 1;
-    letter-spacing: 0;
-    white-space: nowrap;
-    paint-order: stroke;
-    -webkit-text-stroke: 2px #000000;
-    text-shadow: 0 0 2px #000000;
-    position: relative;
-    top: 3px;
-  }
-
-  // Variante élargie (panneau de combat) : assez large pour « 100% → 100% »
-  // sans déborder sur les icônes. Les deux rangées (attaque et vie) passent
-  // par cette même variante pour rester alignées entre elles.
-  &__percent--wide {
-    width: 108px;
-    font-size: 10px;
-  }
-}
-
-.soldier-stat--atk .soldier-stars__percent {
-  color: #ffcc00;
-}
-
-.soldier-stat--hp .soldier-stars__percent {
-  color: #ff3b3b;
-}
-
-// Pastille de valeur brute (attaque / vie), même style que sur le plateau
-// (fond coloré, bordure franche, police pixel blanche) — occupe la même place
-// que `.soldier-stars__percent` (largeur fixe), taille réduite pour le panneau.
+// Pastille de valeur brute (attaque / vie). MÊME habillage que le bandeau du
+// plateau (voir `.stat-banner` dans `HexBoard.scss`) : orangé + chiffres
+// sombres pour l'attaque, rouge + chiffres blancs pour les PV, cadre noir de
+// 2px et ombre portée dure. Un joueur qui passe du plateau au panneau retrouve
+// exactement les deux mêmes objets.
 .soldier-stat-badge {
   width: 52px;
   flex: 0 0 auto;
@@ -658,37 +477,36 @@
   align-items: center;
   justify-content: center;
   font-family: $pixel-font;
-  font-size: 30px;
-  color: #ffffff;
-  border: 2px solid #000;
-  padding: 0 2px;
+  font-size: 26px;
+  line-height: 1;
+  border: 2px solid #000000;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.4);
+  padding: 4px 2px;
   box-sizing: border-box;
 
   &--atk {
-    background: #0d0d0d;
-    border-color: #000000;
+    background: #e08a2c;
+    color: #3d2000;
   }
 
   &--hp {
     background: #b81f1f;
-    border-color: #5c0d0d;
+    color: #ffffff;
   }
 
   // Variante élargie (aperçu de combat) : assez large pour « avant→après »
-  // sans déborder. Même taille de police que le panneau de fusion (30px) —
-  // la largeur s'adapte au texte plus long.
+  // sans déborder. La largeur s'adapte au texte plus long.
   &--wide {
     width: auto;
     min-width: 92px;
-    font-size: 30px;
   }
 
   // Variante compacte (boutique) : deux pastilles côte à côte tiennent dans
   // une carte de 104px de large.
   &--sm {
     width: 36px;
-    font-size: 19px;
-    border-width: 2px;
+    font-size: 17px;
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -716,5 +534,37 @@
   // Gain par tour (ex. maisons) : en jaune, comme la valeur par défaut.
   &__value--gain {
     color: #ffd766;
+  }
+
+  // Boutons de choix du comportement (pilote automatique du soldat).
+  &__behaviors {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+// Bouton d'un comportement : discret au repos, doré quand il est actif.
+.behavior-btn {
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 11px;
+  color: #d5d5d5;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid #555;
+  border-radius: 3px;
+  cursor: pointer;
+
+  &:hover {
+    border-color: #ffd766;
+    color: #ffd766;
+  }
+
+  &--active {
+    color: #1c1c1c;
+    background: #ffd766;
+    border-color: #ffd766;
+    font-weight: 700;
   }
 }

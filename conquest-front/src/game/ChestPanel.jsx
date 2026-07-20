@@ -35,10 +35,21 @@ const lootEffect = (loot) => {
 // S'affiche soit quand la case est sélectionnée, soit en APERÇU quand un soldat
 // sélectionné survole un coffre ouvrable / un butin ramassable (comme les
 // aperçus de combat, de fusion et d'abattage).
-const ChestPanel = ({ loot }) => {
+const ChestPanel = ({ loot, onClose }) => {
     const affinity = loot ? lootAffinity(loot) : null;
     return (
         <div className="soldier-panel">
+            {onClose && (
+                <button
+                    type="button"
+                    className="soldier-panel__close"
+                    onClick={onClose}
+                    aria-label="Fermer"
+                    title="Fermer"
+                >
+                    <img src="/croix.png" alt="" draggable={false} />
+                </button>
+            )}
             <div className="soldier-panel__portrait" style={{ borderColor: '#d9a441' }}>
                 <img
                     src={loot ? lootSrc(loot) : CHEST_SRC}

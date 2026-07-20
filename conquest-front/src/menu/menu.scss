@@ -398,6 +398,142 @@ $blue: #3f7fd8;
     }
 }
 
+// ---- Accès à l'écran « Charger une partie » (page de création hors-ligne) ----
+.load-game-action {
+    display: flex;
+}
+
+.menu-btn--load {
+    flex: 1 1 auto;
+    justify-content: center;
+    color: $gold;
+    border-color: $gold;
+}
+
+// ---- Emplacements de sauvegarde (écran « Charger une partie ») ----
+// Capacité fixe de 10 slots : les occupés ont la bordure pixel pleine des
+// autres panneaux, les libres un simple gabarit en pointillés.
+.save-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+
+    &__hint {
+        margin: 0 0 12px;
+        font-size: 16px;
+        color: $muted;
+    }
+}
+
+.save-slot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    min-height: 58px;
+
+    // Numéro d'emplacement, même gabarit que le numéro de joueur.
+    &__num {
+        flex: 0 0 auto;
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        border: 2px solid #000;
+    }
+
+    &--filled {
+        background: $panel;
+        @include pixel-border;
+
+        .save-slot__num {
+            color: #000;
+            background: $gold;
+        }
+    }
+
+    // Slot LIBRE : pointillés, sans fond ni relief — il se lit comme une place
+    // à prendre plutôt que comme une ligne cliquable.
+    &--empty {
+        background: transparent;
+        border: 2px dashed $line;
+        color: $muted;
+
+        .save-slot__num {
+            color: $muted;
+            background: transparent;
+            border-color: $line;
+        }
+    }
+
+    &__placeholder {
+        font-size: 18px;
+        color: $muted;
+    }
+
+    &__info {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    &__map {
+        font-size: 20px;
+        color: $ink;
+    }
+
+    &__meta {
+        font-size: 15px;
+        color: $muted;
+    }
+
+    &__date {
+        font-size: 15px;
+        color: $gold;
+    }
+
+    &__load {
+        flex: 0 0 auto;
+        font-family: $pixel-font;
+        font-size: 18px;
+        color: $green;
+        background: transparent;
+        border: 2px solid $line;
+        padding: 6px 14px;
+        cursor: pointer;
+        transition: background 0.12s ease;
+
+        &:hover {
+            background: rgba(91, 211, 91, 0.12);
+        }
+    }
+
+    &__delete {
+        flex: 0 0 auto;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: $pixel-font;
+        font-size: 22px;
+        line-height: 1;
+        color: $red;
+        background: transparent;
+        border: 2px solid $line;
+        cursor: pointer;
+        transition: background 0.12s ease;
+
+        &:hover {
+            background: rgba(240, 78, 78, 0.15);
+        }
+    }
+}
+
 // ---- Toggle segmenté ----
 .segmented {
     display: inline-flex;

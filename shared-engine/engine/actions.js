@@ -15,6 +15,7 @@ export const CHOP_TREE = 'CHOP_TREE';
 export const OPEN_CHEST = 'OPEN_CHEST';
 export const PLACE_ITEM = 'PLACE_ITEM';
 export const BUY_BONUS = 'BUY_BONUS';
+export const SET_BEHAVIOR = 'SET_BEHAVIOR';
 export const END_TURN = 'END_TURN';
 export const SET_MAP = 'SET_MAP';
 export const RESET_GAME = 'RESET_GAME';
@@ -30,6 +31,9 @@ export const openChest = (fromId, toId) => ({type: OPEN_CHEST, fromId, toId});
 // (défaut 1). Ignoré pour les autres items. Voir `soldierCostForLevel`.
 export const placeItem = (cellId, itemType, level = 1) => ({type: PLACE_ITEM, cellId, itemType, level});
 export const buyBonus = (cellId, bonusId) => ({type: BUY_BONUS, cellId, bonusId});
+// Assigne (ou retire, avec `null`) un comportement au soldat de la case : il
+// jouera automatiquement à la fin du tour. Ne consomme PAS l'action du soldat.
+export const setBehavior = (cellId, behavior) => ({type: SET_BEHAVIOR, cellId, behavior});
 export const endTurn = () => ({type: END_TURN});
 // `seed` (optionnel) fixe la graine de la nouvelle partie. En local elle est
 // omise (tirée au hasard) ; en mode « online » le serveur la renseignera pour

@@ -9,6 +9,10 @@
 // espace au milieu du dessin = un trou (permet n'importe quelle forme).
 // Symboles : . herbe  T forêt  ^ montagne  _ sable  ~ eau  et 1 2 3 4 pour
 // les points de départ des joueurs. La forme dessinée = la forme à l'écran.
+//
+// COULEURS : `palette: { grass, forest, mountain, sand, water, background }`
+// donne à la carte son ambiance propre. Toutes les clés sont facultatives —
+// celles qu'on omet gardent la couleur par défaut de terrain.js.
 
 import { defineAsciiMap } from './mapDSL.js';
 
@@ -28,9 +32,18 @@ export const CUSTOM_MAPS = [
 
     // Carte en croix pour 4 joueurs : les coins vides (espaces) creusent la
     // forme, un lac de montagnes garde le centre. Dessin = rendu.
+    // Ambiance volcanique : la palette propre à la carte suffit à la
+    // caractériser, sans toucher au moteur ni au rendu.
     defineAsciiMap({
         id: 'croix',
         name: 'La Croix',
+        palette: {
+            grass: '#8a7a4e',
+            forest: '#5c5230',
+            mountain: '#6b4136',
+            water: '#c1502e',
+            background: '#1a1110',
+        },
         art: `
                 . 1 .
                 . . .

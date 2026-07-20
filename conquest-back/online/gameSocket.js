@@ -50,7 +50,7 @@ import {
     startLobby,
     applyAction,
 } from './lobbyStore.js';
-import { pickBotAction } from './bot.js';
+import { runBotTurn } from './bot.js';
 
 // Seules les actions de JEU sont acceptées d'un client. La configuration de la
 // partie (carte, réinitialisation) reste une prérogative du serveur.
@@ -62,6 +62,7 @@ const CLIENT_ALLOWED_ACTIONS = new Set([
     'OPEN_CHEST',
     'PLACE_ITEM',
     'BUY_BONUS',
+    'SET_BEHAVIOR',
     'END_TURN',
 ]);
 
@@ -147,15 +148,48 @@ function enterLobby(socket, entry, identity = {}) {
     return playerId;
 }
 
+// Câblage d'un évènement 'lobby:*' portant sur un lobby EXISTANT. Factorise le
+// préambule que tous ces handlers partageaient mot pour mot : résolution du
+// lobby, gardes d'accès, et capture des erreurs en 'lobby:error'.
+//  - le code est lu dans le payload, à défaut sur le socket (salle courante), et
+//    normalisé (l'alphabet des codes est majuscule) ;
+//  - `hostOnly` : réservé à l'hôte ; `waitingOnly` : interdit une fois démarrée ;
+//  - le motif d'erreur reste `<évènement>-failed` (ex. 'join-failed'), tel que
+//    le client le libelle déjà.
+function onLobby(socket, event, handler, { hostOnly = false, waitingOnly = false } = {}) {
+    socket.on(event, async (payload = {}) => {
+        try {
+            const code = String(payload?.code || socket.data.code || '').toUpperCase();
+            const entry = await getLobby(code);
+            if (!entry) {
+                socket.emit('lobby:error', { reason: 'not-found' });
+                return;
+            }
+            if (hostOnly && socket.id !== entry.hostMemberId) {
+                socket.emit('lobby:error', { reason: 'not-host' });
+                return;
+            }
+            if (waitingOnly && entry.status !== 'waiting') {
+                socket.emit('lobby:error', { reason: 'already-started' });
+                return;
+            }
+            await handler(entry, payload);
+        } catch (e) {
+            const reason = `${event.split(':')[1]}-failed`;
+            socket.emit('lobby:error', { reason, message: String(e.message || e) });
+        }
+    });
+}
+
 // Un siège est-il tenu par un bot ?
 function isBotSeat(entry, playerId) {
     return entry.seats.find((s) => s.playerId === playerId)?.kind === 'bot';
 }
 
-// Fait jouer les BOTS tant que c'est à leur tour. Chaque tour de bot : on
-// applique ses meilleurs coups (via l'IA) puis on termine son tour ; on rediffuse
-// l'état à chaque tour pour que les humains voient l'action. Le garde-fou évite
-// toute boucle infinie (parties 100 % bots incluses).
+// Fait jouer les BOTS tant que c'est à leur tour. Chaque tour de bot : l'IA
+// déroule son tour complet (achats + conquêtes) puis on termine son tour ; on
+// rediffuse l'état à chaque tour pour que les humains voient l'action. Le
+// garde-fou évite toute boucle infinie (parties 100 % bots incluses).
 function advanceBots(io, entry) {
     let safety = 0;
     while (
@@ -165,19 +199,12 @@ function advanceBots(io, entry) {
         safety < 400
     ) {
         safety += 1;
-        let moves = 0;
-        while (moves < 200) {
-            moves += 1;
-            let action = null;
-            try {
-                action = pickBotAction(entry.state);
-            } catch {
-                action = null; // coup impossible à calculer : on termine le tour
-            }
-            if (!action) break;
-            if (!applyAction(entry, action)) break; // coup rejeté : on s'arrête
+        try {
+            runBotTurn(entry.state, (action) => applyAction(entry, action));
+        } catch {
+            // tour impossible à calculer : on passe directement à la fin de tour
         }
-        applyAction(entry, endTurn());
+        if (entry.state.status !== 'over') applyAction(entry, endTurn());
         io.to(entry.code).emit('game:state', serializeState(entry.state));
         if (entry.state.status === 'over') {
             broadcastLobby(io, entry);
@@ -216,187 +243,107 @@ export function attachGameServer(io) {
         });
 
         // --- Rejoindre une partie ---
-        socket.on('lobby:join', async ({ code, name, color, password } = {}) => {
-            try {
-                const entry = await getLobby((code || '').toUpperCase());
-                if (!entry) {
-                    socket.emit('lobby:error', { reason: 'not-found' });
+        onLobby(socket, 'lobby:join', (entry, { name, color, password }) => {
+            // Partie SAUVEGARDÉE : on vérifie le mot de passe puis on la reprend
+            // (elle redevient 'playing' et réapparaît dans « parties en cours »).
+            if (entry.status === 'saved') {
+                if (!checkSavePassword(entry, password)) {
+                    socket.emit('lobby:error', { reason: 'bad-password' });
                     return;
                 }
-                // Partie SAUVEGARDÉE : on vérifie le mot de passe puis on la reprend
-                // (elle redevient 'playing' et réapparaît dans « parties en cours »).
-                if (entry.status === 'saved') {
-                    if (!checkSavePassword(entry, password)) {
-                        socket.emit('lobby:error', { reason: 'bad-password' });
-                        return;
-                    }
-                    resumeLobby(entry);
-                }
-                const playerId = enterLobby(socket, entry, { name, color });
-                syncSocketSeats(io, entry);
-                broadcastLobby(io, entry);
-                // eslint-disable-next-line no-console
-                console.log(`[lobby] ${socket.id} rejoint '${entry.code}' comme ${playerId || 'spectateur'}`);
-            } catch (e) {
-                socket.emit('lobby:error', { reason: 'join-failed', message: String(e.message || e) });
+                resumeLobby(entry);
             }
+            const playerId = enterLobby(socket, entry, { name, color });
+            syncSocketSeats(io, entry);
+            broadcastLobby(io, entry);
+            // eslint-disable-next-line no-console
+            console.log(`[lobby] ${socket.id} rejoint '${entry.code}' comme ${playerId || 'spectateur'}`);
         });
 
         // --- Choisir sa place (couleur) en rejoignant une partie EN COURS ---
         // Le joueur a reçu `seatOptions` à la jointure ; il en sélectionne une.
-        socket.on('lobby:claimseat', async ({ code, playerId } = {}) => {
-            try {
-                const entry = await getLobby(code || socket.data.code);
-                if (!entry) {
-                    socket.emit('lobby:error', { reason: 'not-found' });
-                    return;
-                }
-                const claimed = claimSpecificSeat(entry, socket.id, playerId);
-                if (!claimed) {
-                    // Place prise entre-temps : on renvoie les options à jour pour que
-                    // le joueur en choisisse une autre.
-                    socket.emit('lobby:seat-taken', { seatOptions: joinableSeats(entry) });
-                    return;
-                }
-                socket.data.playerId = claimed;
-                socket.emit('lobby:seat-confirmed', { playerId: claimed });
-                syncSocketSeats(io, entry);
-                broadcastLobby(io, entry);
-                // eslint-disable-next-line no-console
-                console.log(`[lobby] ${socket.id} prend la place ${claimed} dans '${entry.code}'`);
-            } catch (e) {
-                socket.emit('lobby:error', { reason: 'claimseat-failed', message: String(e.message || e) });
+        onLobby(socket, 'lobby:claimseat', (entry, { playerId }) => {
+            const claimed = claimSpecificSeat(entry, socket.id, playerId);
+            if (!claimed) {
+                // Place prise entre-temps : on renvoie les options à jour pour que
+                // le joueur en choisisse une autre.
+                socket.emit('lobby:seat-taken', { seatOptions: joinableSeats(entry) });
+                return;
             }
+            socket.data.playerId = claimed;
+            socket.emit('lobby:seat-confirmed', { playerId: claimed });
+            syncSocketSeats(io, entry);
+            broadcastLobby(io, entry);
+            // eslint-disable-next-line no-console
+            console.log(`[lobby] ${socket.id} prend la place ${claimed} dans '${entry.code}'`);
         });
 
         // --- Configurer la partie en attente (hôte : carte + réglages) ---
-        socket.on('lobby:configure', async ({ code, mapId, settings, autosave, savePassword } = {}) => {
-            try {
-                const entry = await getLobby(code || socket.data.code);
-                if (!entry) {
-                    socket.emit('lobby:error', { reason: 'not-found' });
-                    return;
-                }
-                if (socket.id !== entry.hostMemberId) {
-                    socket.emit('lobby:error', { reason: 'not-host' });
-                    return;
-                }
-                if (entry.status !== 'waiting') {
-                    socket.emit('lobby:error', { reason: 'already-started' });
-                    return;
-                }
+        onLobby(
+            socket,
+            'lobby:configure',
+            (entry, { mapId, settings, autosave, savePassword }) => {
                 configureLobby(entry, { mapId, settings, autosave, savePassword });
                 syncSocketSeats(io, entry);
                 broadcastLobby(io, entry);
-            } catch (e) {
-                socket.emit('lobby:error', { reason: 'configure-failed', message: String(e.message || e) });
-            }
-        });
+            },
+            { hostOnly: true, waitingOnly: true }
+        );
 
         // --- Modifier sa propre identité (nom / couleur) ---
-        socket.on('lobby:identity', async ({ code, name, color } = {}) => {
-            try {
-                const entry = await getLobby(code || socket.data.code);
-                if (!entry) {
-                    socket.emit('lobby:error', { reason: 'not-found' });
-                    return;
-                }
-                if (setMemberIdentity(entry, socket.id, { name, color })) {
-                    broadcastLobby(io, entry);
-                }
-            } catch (e) {
-                socket.emit('lobby:error', { reason: 'identity-failed', message: String(e.message || e) });
-            }
+        onLobby(socket, 'lobby:identity', (entry, { name, color }) => {
+            if (setMemberIdentity(entry, socket.id, { name, color })) broadcastLobby(io, entry);
         });
 
         // --- Basculer une place libre entre « ouverte » et « bot » (hôte) ---
-        socket.on('lobby:seatkind', async ({ code, playerId, kind } = {}) => {
-            try {
-                const entry = await getLobby(code || socket.data.code);
-                if (!entry) {
-                    socket.emit('lobby:error', { reason: 'not-found' });
-                    return;
-                }
-                if (socket.id !== entry.hostMemberId) {
-                    socket.emit('lobby:error', { reason: 'not-host' });
-                    return;
-                }
+        onLobby(
+            socket,
+            'lobby:seatkind',
+            (entry, { playerId, kind }) => {
                 if (setSeatKind(entry, playerId, kind)) broadcastLobby(io, entry);
-            } catch (e) {
-                socket.emit('lobby:error', { reason: 'seatkind-failed', message: String(e.message || e) });
-            }
-        });
+            },
+            { hostOnly: true }
+        );
 
         // --- Choisir la couleur d'un bot (hôte) ---
-        socket.on('lobby:botcolor', async ({ code, playerId, color } = {}) => {
-            try {
-                const entry = await getLobby(code || socket.data.code);
-                if (!entry) {
-                    socket.emit('lobby:error', { reason: 'not-found' });
-                    return;
-                }
-                if (socket.id !== entry.hostMemberId) {
-                    socket.emit('lobby:error', { reason: 'not-host' });
-                    return;
-                }
+        onLobby(
+            socket,
+            'lobby:botcolor',
+            (entry, { playerId, color }) => {
                 if (setBotColor(entry, playerId, color)) broadcastLobby(io, entry);
-            } catch (e) {
-                socket.emit('lobby:error', { reason: 'botcolor-failed', message: String(e.message || e) });
-            }
-        });
+            },
+            { hostOnly: true }
+        );
 
         // --- Choisir la difficulté d'un bot (hôte) ---
-        socket.on('lobby:botdifficulty', async ({ code, playerId, difficulty } = {}) => {
-            try {
-                const entry = await getLobby(code || socket.data.code);
-                if (!entry) {
-                    socket.emit('lobby:error', { reason: 'not-found' });
-                    return;
-                }
-                if (socket.id !== entry.hostMemberId) {
-                    socket.emit('lobby:error', { reason: 'not-host' });
-                    return;
-                }
+        onLobby(
+            socket,
+            'lobby:botdifficulty',
+            (entry, { playerId, difficulty }) => {
                 if (setBotDifficulty(entry, playerId, difficulty)) broadcastLobby(io, entry);
-            } catch (e) {
-                socket.emit('lobby:error', { reason: 'botdifficulty-failed', message: String(e.message || e) });
-            }
-        });
+            },
+            { hostOnly: true }
+        );
 
         // --- Réordonner les positions (hôte) : échange l'occupant d'un siège
         // avec le siège voisin (haut/bas). Permet de choisir qui joue quel spawn. ---
-        socket.on('lobby:reorder', async ({ code, playerId, direction } = {}) => {
-            try {
-                const entry = await getLobby(code || socket.data.code);
-                if (!entry) {
-                    socket.emit('lobby:error', { reason: 'not-found' });
-                    return;
-                }
-                if (socket.id !== entry.hostMemberId) {
-                    socket.emit('lobby:error', { reason: 'not-host' });
-                    return;
-                }
+        onLobby(
+            socket,
+            'lobby:reorder',
+            (entry, { playerId, direction }) => {
                 if (reorderSeat(entry, playerId, direction)) {
                     syncSocketSeats(io, entry);
                     broadcastLobby(io, entry);
                 }
-            } catch (e) {
-                socket.emit('lobby:error', { reason: 'reorder-failed', message: String(e.message || e) });
-            }
-        });
+            },
+            { hostOnly: true }
+        );
 
         // --- Démarrer la partie (hôte) ---
-        socket.on('lobby:start', async ({ code } = {}) => {
-            try {
-                const entry = await getLobby(code || socket.data.code);
-                if (!entry) {
-                    socket.emit('lobby:error', { reason: 'not-found' });
-                    return;
-                }
-                if (socket.id !== entry.hostMemberId) {
-                    socket.emit('lobby:error', { reason: 'not-host' });
-                    return;
-                }
+        onLobby(
+            socket,
+            'lobby:start',
+            async (entry) => {
                 // Au moins 2 participants (humains et/ou bots). Le lobby n'a PAS
                 // besoin d'être plein : les places libres restent des spawns neutres.
                 if (filledCount(entry) < 2) {
@@ -410,10 +357,9 @@ export function attachGameServer(io) {
                 console.log(`[lobby] '${entry.code}' démarrée par ${socket.id}`);
                 // Si le premier tour revient à un bot (ex. partie 100 % bots).
                 advanceBots(io, entry);
-            } catch (e) {
-                socket.emit('lobby:error', { reason: 'start-failed', message: String(e.message || e) });
-            }
-        });
+            },
+            { hostOnly: true }
+        );
 
         // --- Jouer une action ---
         socket.on('game:action', async (action) => {

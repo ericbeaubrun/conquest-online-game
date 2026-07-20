@@ -102,7 +102,28 @@ button:hover { background: #363d47; }
 button.primary { background: var(--accent-2); border-color: var(--accent-2); }
 button.primary:hover { filter: brightness(1.1); }
 
+button.ghost { background: transparent; color: var(--muted); }
+button.ghost:hover { background: var(--panel-2); color: var(--text); }
+
 .hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; line-height: 1.4; }
+
+/* --- Couleurs de la carte --- */
+.colors { display: grid; gap: 6px; margin-bottom: 10px; }
+.color-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px;
+}
+/* Pastille cliquable : on masque le chrome natif de l'input color. */
+.color-row input[type=color],
+#bgColor {
+    width: 34px; height: 26px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    flex: none;
+}
 .warn { font-size: 12px; color: #e0a13a; margin: 8px 0 0; min-height: 1em; }
 code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 

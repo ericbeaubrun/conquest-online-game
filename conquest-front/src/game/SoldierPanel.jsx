@@ -3,6 +3,7 @@ import {
     affinityLabel,
     atkRankLabel,
     behaviorLabel,
+    BEHAVIORS,
     hasUnlockedBonus,
     isSkeleton,
     isSummonedUnit,
@@ -12,7 +13,7 @@ import {
 import {SOLDIER_ATK_MAX} from '@conquest/shared-engine/engine/rules.js';
 import {DEV_CONFIG} from '../config/devConfig.js';
 import {AFFINITY_SRC} from './board/constants.js';
-import {AtkStars, HpHearts} from './StatDisplays.jsx';
+import {AtkValue, HpValue} from './StatDisplays.jsx';
 import BonusPanel from './BonusPanel.jsx';
 import UpkeepSpec from './UpkeepSpec.jsx';
 
@@ -21,7 +22,7 @@ import UpkeepSpec from './UpkeepSpec.jsx';
 // fait office de bouton : il ouvre la boutique de bonus (`BonusPanel`) au-dessus.
 // `world` est l'état de jeu : les défis d'état (arbres, maisons, bonus présents
 // sur le plateau) s'y lisent en direct, à chaque rendu.
-const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBonus, selectionId, settings, bonusesEnabled = true, world, onClose}) => {
+const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBonus, onSetBehavior, selectionId, settings, bonusesEnabled = true, world, onClose}) => {
     const level = soldier.level || 1;
     // Pas de boutique de bonus pour une unité invoquée (squelette, arbre-druide),
     // ni quand les bonus sont désactivés en configuration : le portrait n'ouvre
@@ -106,8 +107,8 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                         </span>
                     </span>
                 )}
-                <AtkStars atk={soldier.atk} max={SOLDIER_ATK_MAX} showValue/>
-                <HpHearts hp={soldier.hp} showValue/>
+                <AtkValue atk={soldier.atk}/>
+                <HpValue hp={soldier.hp}/>
             </div>
 
             <div className="soldier-panel__specs">
@@ -128,7 +129,29 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                 </div>
                 <div className="soldier-spec">
                     <span className="soldier-spec__label">Comportement</span>
-                    <span className="soldier-spec__value">{behaviorLabel(soldier.behavior)}</span>
+                    {/* Soldat du joueur actif pendant son tour : boutons de
+                        sélection (re-cliquer le comportement actif le retire).
+                        Sinon, simple libellé informatif. */}
+                    {onSetBehavior ? (
+                        <span className="soldier-spec__behaviors">
+                            {BEHAVIORS.map((b) => {
+                                const active = soldier.behavior === b.id;
+                                return (
+                                    <button
+                                        key={b.id}
+                                        type="button"
+                                        className={`behavior-btn ${active ? 'behavior-btn--active' : ''}`}
+                                        title={active ? `${b.label} (cliquer pour retirer)` : b.label}
+                                        onClick={() => onSetBehavior(active ? null : b.id)}
+                                    >
+                                        {b.label}
+                                    </button>
+                                );
+                            })}
+                        </span>
+                    ) : (
+                        <span className="soldier-spec__value">{behaviorLabel(soldier.behavior)}</span>
+                    )}
                 </div>
                 <UpkeepSpec unit={soldier} owner={owner} settings={settings}/>
             </div>

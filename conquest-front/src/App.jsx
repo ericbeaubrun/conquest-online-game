@@ -3,6 +3,7 @@ import './App.scss'
 import './menu/menu.scss'
 import HomePage from './menu/HomePage.jsx'
 import OfflineSetup from './menu/OfflineSetup.jsx'
+import LoadGame from './menu/LoadGame.jsx'
 import OfflineGame from './OfflineGame.jsx'
 import OnlineFlow from './OnlineFlow.jsx'
 
@@ -10,9 +11,11 @@ import OnlineFlow from './OnlineFlow.jsx'
 // entre : l'accueil, la configuration d'une partie hors-ligne, la partie locale,
 // et le flux en ligne (lobby + partie). La connexion viendra plus tard.
 function App() {
-    const [screen, setScreen] = useState('home') // 'home' | 'offline' | 'game' | 'online'
+    const [screen, setScreen] = useState('home') // 'home' | 'offline' | 'load' | 'game' | 'online'
     // Dernière configuration hors-ligne : conservée pour la relancer/ré-éditer.
     const [config, setConfig] = useState(null)
+    // État sérialisé d'une sauvegarde à recharger (prime sur `config` quand présent).
+    const [savedState, setSavedState] = useState(null)
 
     if (screen === 'offline') {
         return (
@@ -21,6 +24,22 @@ function App() {
                 onBack={() => setScreen('home')}
                 onLaunch={(next) => {
                     setConfig(next)
+                    setSavedState(null) // nouvelle partie : on repart d'un état neuf
+                    setScreen('game')
+                }}
+                // Charger une partie : écran dédié, distinct de la création.
+                onOpenLoad={() => setScreen('load')}
+            />
+        )
+    }
+
+    if (screen === 'load') {
+        return (
+            <LoadGame
+                onBack={() => setScreen('offline')}
+                // Rechargement d'une sauvegarde : on injecte son état figé.
+                onLoadSave={(state) => {
+                    setSavedState(state)
                     setScreen('game')
                 }}
             />
@@ -28,7 +47,13 @@ function App() {
     }
 
     if (screen === 'game') {
-        return <OfflineGame config={config} onExit={() => setScreen('home')} />
+        return (
+            <OfflineGame
+                config={config}
+                savedState={savedState}
+                onExit={() => setScreen('home')}
+            />
+        )
     }
 
     if (screen === 'online') {

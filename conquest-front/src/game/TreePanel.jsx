@@ -18,13 +18,24 @@ import UpkeepSpec from './UpkeepSpec.jsx';
 //
 // S'affiche soit quand l'arbre est sélectionné, soit en APERÇU quand un soldat
 // sélectionné survole un arbre abattable (comme les aperçus de combat/fusion).
-const TreePanel = ({ tree, owner, settings }) => {
+const TreePanel = ({ tree, owner, settings, onClose }) => {
     const affinity = treeAffinity(tree);
     // Entretien : prélevé seulement si l'arbre est sur le territoire d'un joueur
     // (un arbre neutre ne coûte rien à personne).
     const upkeep = owner ? (settings?.treeUpkeep ?? 0) : 0;
     return (
         <div className="soldier-panel">
+            {onClose && (
+                <button
+                    type="button"
+                    className="soldier-panel__close"
+                    onClick={onClose}
+                    aria-label="Fermer"
+                    title="Fermer"
+                >
+                    <img src="/croix.png" alt="" draggable={false} />
+                </button>
+            )}
             <div
                 className="soldier-panel__portrait"
                 style={{ borderColor: owner?.color || '#4caf50' }}

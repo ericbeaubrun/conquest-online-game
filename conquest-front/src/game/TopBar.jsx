@@ -130,7 +130,21 @@ const TopBar = ({
                             // Liseré à la couleur du joueur actif, autour de son
                             // cadre noir : seul signal du tour en cours. Ombre
                             // NON floue — un flou casserait le rendu pixel.
-                            style={isActive ? {boxShadow: `0 0 0 2px ${player.color}`} : undefined}
+                            //
+                            // Deux couches : un anneau de 1px à la couleur DU FOND
+                            // de la barre s'intercale entre le cadre noir et le
+                            // liseré coloré, pour que celui-ci ne soit pas collé au
+                            // cadre. C'est le « liseré double bordure » pixel déjà
+                            // employé dans _panels.scss, et le décollement rend la
+                            // couleur du joueur bien plus lisible.
+                            //
+                            // 3px de débord total, à tenir dans le padding de
+                            // .players-info (4px) : ce conteneur rogne, et la place
+                            // verticale dans la barre est comptée. Épaissir l'un
+                            // sans l'autre fait réapparaître le liseré coupé.
+                            style={isActive
+                                ? {boxShadow: `0 0 0 1px var(--ink-900), 0 0 0 3px ${player.color}`}
+                                : undefined}
                         >
                             {/* Couronne « c'est vous » : à côté du carré plutôt que
                                 posée dessus, où elle masquerait le « IA » des bots. */}
@@ -197,9 +211,34 @@ const TopBar = ({
                 onClick={onEndTurn}
                 disabled={!canAct}
             >
-                <img src="/characters/lvl1/SoldierLVL1.png" alt="Soldats restants" className="end-turn-button__icon"/>
+                <img src="/characters/lvl1/SoldierLVL1.png" alt="Soldats restants" className="end-turn-button__icon end-turn-button__icon--soldier"/>
                 <span className="end-turn-button__count">{movableSoldiers}</span>
-                <img src="/skip.png" alt="Passer son tour" className="end-turn-button__icon"/>
+                {/* Flèche de fin de tour dessinée en SVG (plutôt que skip.png) : plus
+                    grande que l'indicateur de mouvements restants, c'est elle qui
+                    porte l'action, le compteur ne fait qu'informer.
+                    Tracé pixel art : grille de 16, sommets sur des entiers et
+                    UNIQUEMENT des segments H/V — la pointe est un escalier de 1
+                    case, pas une diagonale lissée. `crispEdges` coupe
+                    l'antialiasing, sans quoi les marches redeviennent floues et
+                    tout le bénéfice du tracé en grille est perdu.
+                    Contour noir sous le remplissage (`paint-order`) : le fond du
+                    bouton est la couleur — arbitraire — du joueur actif, et une
+                    flèche blanche seule disparaîtrait sur les teintes claires. */}
+                <svg
+                    className="end-turn-button__arrow"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                    shapeRendering="crispEdges"
+                >
+                    <path
+                        d="M2 6 H8 V2 H9 V3 H10 V4 H11 V5 H12 V6 H13 V7 H14 V9 H13 V10 H12 V11 H11 V12 H10 V13 H9 V14 H8 V10 H2 Z"
+                        fill="currentColor"
+                        stroke="#000"
+                        strokeWidth="2"
+                        strokeLinejoin="miter"
+                        paintOrder="stroke"
+                    />
+                </svg>
             </button>
         </div>
     );

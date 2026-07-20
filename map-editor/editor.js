@@ -9,15 +9,18 @@
 const HEX_SIZE = 40; // rayon centre -> sommet (unités du viewBox SVG)
 const SQRT3 = Math.sqrt(3);
 
-// type interne -> { symbole ASCII, couleur, libellé }.
-// Les symboles correspondent à la LEGEND de mapDSL.js.
+// type interne -> { symbole ASCII, couleur par défaut, libellé }.
+// Les symboles correspondent à la LEGEND de mapDSL.js, les couleurs aux
+// défauts de TERRAIN_COLORS (terrain.js).
 const TERRAINS = {
-    grass: { char: '.', color: 'var(--grass)', label: 'Herbe' },
-    forest: { char: 'T', color: 'var(--forest)', label: 'Forêt' },
-    mountain: { char: '^', color: 'var(--mountain)', label: 'Montagne' },
-    sand: { char: '_', color: 'var(--sand)', label: 'Sable' },
-    water: { char: '~', color: 'var(--water)', label: 'Eau' },
+    grass: { char: '.', color: '#7cae5b', label: 'Herbe' },
+    forest: { char: 'T', color: '#4d8c3f', label: 'Forêt' },
+    mountain: { char: '^', color: '#94897c', label: 'Montagne' },
+    sand: { char: '_', color: '#d9c48c', label: 'Sable' },
+    water: { char: '~', color: '#5b93c7', label: 'Eau' },
 };
+// Fond du plateau par défaut (DEFAULT_BACKGROUND de terrain.js).
+const DEFAULT_BACKGROUND = '#14171d';
 // Les points de départ : type 'spawn1'..'spawn4', symbole = le chiffre.
 const SPAWNS = [1, 2, 3, 4];
 
@@ -27,6 +30,15 @@ let rows = 7;
 let grid = []; // grid[row][col] = 'grass' | ... | 'hole' | 'spawn1'..
 let brush = 'grass'; // pinceau courant
 let painting = false;
+// Palette de la carte en cours d'édition : couleur par terrain + arrière-plan.
+// Exportée avec la carte, elle est ensuite appliquée en jeu (voir terrain.js).
+let palette = defaultPalette();
+
+function defaultPalette() {
+    const p = { background: DEFAULT_BACKGROUND };
+    for (const [key, t] of Object.entries(TERRAINS)) p[key] = t.color;
+    return p;
+}
 
 // --- Géométrie (flat-top, cf. hex.js du jeu) ------------------------------
 // (col,row) -> axial q/r « odd-q » (identique à offsetToAxial de mapDSL.js).
@@ -90,7 +102,7 @@ function render() {
         const val = grid[row][col];
         const isHole = val === 'hole';
         const spawn = val.startsWith('spawn') ? val.slice(5) : null;
-        const fill = isHole ? 'transparent' : (spawn ? 'var(--grass)' : TERRAINS[val].color);
+        const fill = isHole ? 'transparent' : (spawn ? palette.grass : palette[val]);
         svg += `<polygon class="hex${isHole ? ' hole' : ''}" points="${hexPoints(x, y)}"`
             + ` fill="${fill}" data-col="${col}" data-row="${row}"></polygon>`;
         if (spawn) {
@@ -99,6 +111,9 @@ function render() {
     }
     svg += `</svg>`;
     document.getElementById('board').innerHTML = svg;
+    // Le fond de la zone de dessin reprend l'arrière-plan de la carte : le
+    // designer juge ses couleurs dans les conditions du jeu.
+    document.querySelector('.board-wrap').style.background = palette.background;
 
     updateOutput();
 }
@@ -152,8 +167,8 @@ function paintCell(el, useBrush) {
 function buildPalette() {
     const pal = document.getElementById('palette');
     const entries = [
-        ...Object.entries(TERRAINS).map(([k, t]) => ({ key: k, color: t.color, label: t.label, txt: '' })),
-        ...SPAWNS.map((n) => ({ key: `spawn${n}`, color: 'var(--grass)', label: `Départ ${n}`, txt: n })),
+        ...Object.keys(TERRAINS).map((k) => ({ key: k, color: palette[k], label: TERRAINS[k].label, txt: '' })),
+        ...SPAWNS.map((n) => ({ key: `spawn${n}`, color: palette.grass, label: `Départ ${n}`, txt: n })),
         { key: 'hole', color: '', label: 'Trou (vide)', hole: true, txt: '' },
     ];
     pal.innerHTML = entries.map((e) => `
@@ -167,6 +182,47 @@ function buildPalette() {
             pal.querySelectorAll('.brush').forEach((b) => b.classList.toggle('active', b === el));
         });
     });
+}
+
+// --- Couleurs de la carte -------------------------------------------------
+// Un sélecteur de couleur par type de terrain. Chaque changement re-dessine le
+// plateau ET la palette de pinceaux, pour un retour visuel immédiat.
+function buildColorControls() {
+    const box = document.getElementById('colors');
+    box.innerHTML = Object.entries(TERRAINS).map(([key, t]) => `
+        <label class="color-row">
+            <input type="color" data-terrain="${key}" value="${palette[key]}">
+            <span>${t.label}</span>
+        </label>`).join('');
+    box.querySelectorAll('input[type=color]').forEach((el) => {
+        el.addEventListener('input', () => {
+            palette[el.dataset.terrain] = el.value;
+            buildPalette();
+            render();
+        });
+    });
+
+    const bg = document.getElementById('bgColor');
+    bg.value = palette.background;
+    bg.addEventListener('input', () => {
+        palette.background = bg.value;
+        render();
+    });
+
+    document.getElementById('resetColors').addEventListener('click', () => {
+        palette = defaultPalette();
+        syncColorInputs();
+        buildPalette();
+        render();
+    });
+}
+
+// Recale les champs sur la palette courante (après une réinitialisation).
+function syncColorInputs() {
+    document.querySelectorAll('#colors input[type=color]').forEach((el) => {
+        el.value = palette[el.dataset.terrain];
+    });
+    document.getElementById('bgColor').value = palette.background;
 }
 
 // --- Export ---------------------------------------------------------------
@@ -192,11 +248,22 @@ function countCells() {
     return n;
 }
 
+// Bloc `palette: {...}` limité aux couleurs RÉELLEMENT modifiées : une carte
+// aux couleurs standard n'exporte aucune palette, et les clés omises retombent
+// sur les défauts du moteur.
+function buildPaletteBlock() {
+    const base = defaultPalette();
+    const changed = Object.keys(base).filter((k) => palette[k].toLowerCase() !== base[k].toLowerCase());
+    if (changed.length === 0) return '';
+    const lines = changed.map((k) => `            ${k}: '${palette[k]}',`).join('\n');
+    return `        palette: {\n${lines}\n        },\n`;
+}
+
 function buildSnippet() {
     const id = (document.getElementById('mapId').value || 'ma-carte').trim();
     const name = (document.getElementById('mapName').value || 'Ma carte').trim();
     const art = toAscii().split('\n').map((l) => '            ' + l).join('\n');
-    return `    defineAsciiMap({\n        id: '${id}',\n        name: '${name}',\n        art: \`\n${art}\n        \`,\n    }),`;
+    return `    defineAsciiMap({\n        id: '${id}',\n        name: '${name}',\n${buildPaletteBlock()}        art: \`\n${art}\n        \`,\n    }),`;
 }
 
 function updateOutput() {
@@ -241,5 +308,6 @@ document.getElementById('download').addEventListener('click', downloadCode);
 ['mapId', 'mapName'].forEach((id) =>
     document.getElementById(id).addEventListener('input', updateOutput));
 
+buildColorControls();
 buildPalette();
 makeGrid();

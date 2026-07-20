@@ -1,6 +1,5 @@
 import { ITEM_SRC } from '@conquest/shared-engine/data/items.js';
-import { AtkStars, HpHearts } from './StatDisplays.jsx';
-import { maxHp, maxAtk } from '@conquest/shared-engine/engine/rules.js';
+import { AtkValue, HpValue } from './StatDisplays.jsx';
 import UpkeepSpec from './UpkeepSpec.jsx';
 
 // Libellé et image par type de bâtiment. La base n'est pas un item de boutique :
@@ -34,10 +33,8 @@ const BuildingPanel = ({ building, color, owner, settings, onClose }) => (
         </div>
 
         <div className="soldier-panel__stats">
-            {building.atk != null && (
-                <AtkStars atk={building.atk} max={maxAtk(building)} showValue uncapped/>
-            )}
-            <HpHearts hp={building.hp} max={maxHp(building)} showValue uncapped/>
+            {building.atk != null && <AtkValue atk={building.atk} uncapped/>}
+            <HpValue hp={building.hp} uncapped/>
         </div>
 
         <div className="soldier-panel__specs">

@@ -28,11 +28,88 @@ $pixel-font: "VT323", "Courier New", monospace;
 // lisibilité.
 $panel-opacity: 0.9;
 
+// ---- Palette « panneau pixel » ----
+// Héritée de la boutique, qui sert de référence de style : tous les panneaux
+// in-game (soldat, bonus, combat, stats, fin de partie…) la partagent.
+$panel-ink: #0d0d0f; // fond des panneaux
+$panel-ink-raised: #141417; // fond des cartes posées sur un panneau
+$panel-ink-hover: #1f1f24; // survol des cartes
+$panel-edge: #2a2a2e; // liseré « double bordure » et bordures de cartes
+$panel-btn: #1a1a1d; // fond des petits boutons carrés
+$panel-btn-hover: #2a2a2e;
+$gold: #d9ae4a; // or : prix, montants, accents
+
+// Chrome commun des panneaux : fond encre, bordure noire franche, liseré
+// « double bordure » pixel. Jamais d'ombre floue (elle casse le rendu pixel).
+@mixin pixel-panel {
+  color: #fff;
+  background: $panel-ink;
+  border: 3px solid #000;
+  box-shadow: 0 0 0 3px $panel-edge;
+}
+
+// Petit bouton carré (flèches de navigation, pas de niveau…), même style que
+// les flèches de page de la boutique.
+@mixin pixel-square-btn {
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 2px solid #000;
+  background: $panel-btn;
+  color: $gold;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: $panel-btn-hover;
+  }
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+}
+
+// Croix de fermeture commune : ancrée DANS le coin haut-droit du panneau, comme
+// celle de la boutique. Elle ne déborde jamais du cadre — en débordement elle
+// sortait de l'écran sur les panneaux collés au bord, et se retrouvait posée sur
+// le plateau. Chaque panneau réserve en contrepartie la place correspondante
+// (gouttière à droite ou bandeau en haut) pour qu'elle ne recouvre aucun contenu.
+$panel-close-size: 22px;
+$panel-close-inset: 4px;
+
+@mixin panel-close($size: $panel-close-size, $inset: $panel-close-inset) {
+  position: absolute;
+  top: $inset;
+  right: $inset;
+  width: $size;
+  height: $size;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 2px solid #000;
+  background: $panel-btn;
+  color: #fff;
+  cursor: pointer;
+
+  &:hover {
+    background: $panel-btn-hover;
+  }
+
+  img {
+    width: 14px;
+    height: 14px;
+    image-rendering: pixelated;
+  }
+}
+
+// Place à réserver pour la croix (gouttière ou bandeau) : sa taille, ses deux
+// retraits, plus un peu d'air avant le contenu.
+$panel-close-gutter: $panel-close-size + $panel-close-inset * 2 + 4px;
+
 // Scrollbar sombre, carrée (pas d'arrondi) : remplace le style clair par défaut
 // du navigateur sur les zones défilables (boutique, panneau des bonus...).
 @mixin pixel-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #3a3a3a #1c1c1c;
+  scrollbar-color: #2a2a2e #141417;
 
   &::-webkit-scrollbar {
     width: 10px;
@@ -40,22 +117,22 @@ $panel-opacity: 0.9;
   }
 
   &::-webkit-scrollbar-track {
-    background: #1c1c1c;
+    background: #141417;
     border: 1px solid #000;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #3a3a3a;
+    background: #2a2a2e;
     border: 1px solid #000;
-    box-shadow: inset 0 0 0 1px #4a4a4a;
+    box-shadow: inset 0 0 0 1px #3a3a40;
     border-radius: 0;
 
     &:hover {
-      background: #4a4a4a;
+      background: #3a3a40;
     }
   }
 
   &::-webkit-scrollbar-corner {
-    background: #1c1c1c;
+    background: #141417;
   }
 }

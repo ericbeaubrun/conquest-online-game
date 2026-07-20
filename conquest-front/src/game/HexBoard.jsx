@@ -14,6 +14,8 @@ import {getLogicalBoard} from '@conquest/shared-engine/engine/board.js';
 import {isAffinityItem} from '@conquest/shared-engine/data/items.js';
 import {canReceiveAffinity} from '@conquest/shared-engine/data/soldier.js';
 import {buildGeometry} from '@conquest/shared-engine/render/geometry.js';
+import {getMapById} from '@conquest/shared-engine/data/maps.js';
+import {mapBackground, terrainColors} from '@conquest/shared-engine/data/terrain.js';
 import {computeReachable} from '@conquest/shared-engine/engine/selectors.js';
 import {
     moveSoldier,
@@ -34,7 +36,7 @@ import {
     Territory,
     Tiles,
 } from './board/TerrainLayers.jsx';
-import {Bases, BonusNotifications, Buildings, PlacementPreview} from './board/UnitLayers.jsx';
+import {Bases, BehaviorMarkers, BonusNotifications, Buildings, PlacementPreview} from './board/UnitLayers.jsx';
 import './HexBoard.scss';
 
 const NO_MOVES = {moves: new Map(), allies: []};
@@ -54,6 +56,8 @@ const HexBoard = ({
                       selection,
                       onSelect,
                       onHoverTarget,
+                      showAllStats = false,
+                      statBars = false,
                   }) => {
     const {
         mapId,
@@ -72,6 +76,13 @@ const HexBoard = ({
     // Modèle logique (règles) et géométrie (rendu), mémoïsés par carte.
     const board = useMemo(() => getLogicalBoard(mapId), [mapId]);
     const {cells, cellMap, base, baseCells} = useMemo(() => buildGeometry(mapId), [mapId]);
+
+    // Palette d'ambiance de la carte : couleurs de terrain et fond du plateau,
+    // paramétrables carte par carte (défauts communs si non définis).
+    const {tileColors, background} = useMemo(() => {
+        const map = getMapById(mapId);
+        return {tileColors: terrainColors(map), background: mapBackground(map)};
+    }, [mapId]);
 
     // Couleur par joueur (stable par carte) pour la couche territoire.
     const colors = useMemo(
@@ -125,14 +136,10 @@ const HexBoard = ({
     // Case actuellement survolée (pour n'afficher les stats chiffrées que sur
     // l'unité pointée). `null` hors du plateau.
     const [hoveredCellId, setHoveredCellId] = useState(null);
-    // Bouton « afficher toutes les stats » : force l'affichage des stats
-    // d'attaque/PV sur toutes les unités posées, sans avoir à survoler.
-    const [showAllStats, setShowAllStats] = useState(false);
-    // Second bouton : forme sous laquelle ces stats sont dessinées — jauges
-    // (barre de PV horizontale sous l'unité, barre d'attaque verticale sur son
-    // flanc gauche) ou nombres aux coins de l'unité. N'influe QUE sur le rendu :
-    // les cases concernées restent les mêmes (`visibleStatIds`).
-    const [statBars, setStatBars] = useState(false);
+    // `showAllStats` (afficher les stats atk/PV sur toutes les unités, sans
+    // avoir à survoler) et `statBars` (les dessiner en jauges plutôt qu'en
+    // nombres) sont maintenant réglés depuis la section Paramètres du menu
+    // burger — reçus en props plutôt qu'en état local.
 
     // Cases dont les jauges (attaque / points de vie) s'affichent : la case
     // survolée, et — quand un soldat est sélectionné — le soldat lui-même ainsi
@@ -240,7 +247,7 @@ const HexBoard = ({
     const dimIds = activeSoldier ? activeCellIds : selectedItem ? placeableIds : null;
 
     return (
-        <div className="hex-board" style={{borderColor: colors[activePlayerId]}}>
+        <div className="hex-board" style={{borderColor: colors[activePlayerId], background}}>
             <svg
                 ref={svgRef}
                 className="hex-board__svg"
@@ -258,7 +265,7 @@ const HexBoard = ({
                     translate/scale pendant un geste, pour éviter de toucher au
                     `viewBox` (qui re-rastérise tout le plateau). */}
                 <g ref={contentRef} className="hex-board__content">
-                <Tiles cells={cells}/>
+                <Tiles cells={cells} terrainColors={tileColors}/>
                 <Territory cells={cells} ownership={ownership} colors={colors}/>
                 {/* Ces deux couches montent elles-mêmes leurs groupes (remplissage
                     statique + contours pulsants par cadence) — voir `PulseLayers`. */}
@@ -301,6 +308,12 @@ const HexBoard = ({
                     size={itemSize}
                     settings={settings}
                     bonusesEnabled={bonusesEnabled}
+                    activePlayerId={activePlayerId}
+                />
+                <BehaviorMarkers
+                    placements={placements}
+                    cellMap={cellMap}
+                    size={itemSize}
                     activePlayerId={activePlayerId}
                 />
                 {dimIds && <Dimmer cells={cells} activeIds={dimIds}/>}
@@ -349,24 +362,6 @@ const HexBoard = ({
                 </button>
                 <button onClick={resetView} aria-label="Recentrer" title="Voir toute la carte">
                     ⤢
-                </button>
-                <button
-                    className={showAllStats ? 'hex-board__controls-btn--active' : ''}
-                    onClick={() => setShowAllStats((v) => !v)}
-                    aria-pressed={showAllStats}
-                    aria-label="Afficher les stats de toutes les unités"
-                    title="Afficher les stats de toutes les unités"
-                >
-                    ⚔
-                </button>
-                <button
-                    className={statBars ? 'hex-board__controls-btn--active' : ''}
-                    onClick={() => setStatBars((v) => !v)}
-                    aria-pressed={statBars}
-                    aria-label="Afficher les stats en jauges plutôt qu'en nombres"
-                    title={statBars ? 'Stats en nombres' : 'Stats en jauges'}
-                >
-                    ▤
                 </button>
             </div>
         </div>

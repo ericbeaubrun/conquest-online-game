@@ -121,13 +121,17 @@ export function parseAsciiMap(art, legend = LEGEND) {
 
 // Fabrique une carte complète prête pour le registre MAPS à partir d'un dessin.
 // `description` est déduite automatiquement si non fournie.
-export function defineAsciiMap({ id, name, description, art, legend }) {
+// `palette` (facultatif) donne à la carte ses propres couleurs de terrain et
+// son fond : { grass, forest, mountain, sand, water, background }. Les clés
+// omises gardent la couleur par défaut (voir terrain.js).
+export function defineAsciiMap({ id, name, description, art, legend, palette }) {
     const { cells, spawns } = parseAsciiMap(art, legend);
     return {
         id,
         name,
         description: description ?? `${spawns.length} joueurs · ${cells.length} cases`,
         spawns,
+        palette,
         cells,
     };
 }

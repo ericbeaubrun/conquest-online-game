@@ -8,7 +8,7 @@ import {
     soldierCostForLevel,
     MAX_SOLDIER_PURCHASE_LEVEL,
 } from '@conquest/shared-engine/data/soldier.js';
-import { formatStatValue } from './board/constants.js';
+import { formatStatCompact } from './board/constants.js';
 
 // Boutique compacte, logée dans un TIROIR en bas de l'écran. Repliée par défaut
 // (seul l'onglet « ▲ Boutique » dépasse) ; l'onglet la tire vers le haut. Elle
@@ -222,7 +222,7 @@ const Shop = ({
                                                 className="soldier-stat-badge soldier-stat-badge--atk soldier-stat-badge--sm"
                                                 title="Attaque"
                                             >
-                                                {formatStatValue(sp.atk)}
+                                                {formatStatCompact(sp.atk)}
                                             </span>
                                         )}
                                         {sp.hp != null && (
@@ -230,7 +230,7 @@ const Shop = ({
                                                 className="soldier-stat-badge soldier-stat-badge--hp soldier-stat-badge--sm"
                                                 title="Points de vie"
                                             >
-                                                {formatStatValue(sp.hp)}
+                                                {formatStatCompact(sp.hp)}
                                             </span>
                                         )}
                                     </div>

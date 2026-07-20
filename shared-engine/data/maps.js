@@ -90,8 +90,10 @@ function clearWaterAroundSpawns(cells, spawns) {
 }
 
 // Assemble une carte : applique le nettoyage de l'eau autour des spawns.
-function buildMap({ id, name, description, cells, spawns }) {
-    return { id, name, description, spawns, cells: clearWaterAroundSpawns(cells, spawns) };
+// `palette` (facultatif) surcharge les couleurs de terrain et le fond de la
+// carte — voir `terrainColors` / `mapBackground` dans terrain.js.
+function buildMap({ id, name, description, cells, spawns, palette }) {
+    return { id, name, description, spawns, palette, cells: clearWaterAroundSpawns(cells, spawns) };
 }
 
 // --- Registre ---

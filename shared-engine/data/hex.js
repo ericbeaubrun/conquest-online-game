@@ -74,6 +74,14 @@ export function getNeighbors(q, r) {
     return HEX_DIRECTIONS.map((d) => ({ q: q + d.q, r: r + d.r }));
 }
 
+// Distance hexagonale (en nombre de cases) entre deux cases axiales, à vol
+// d'oiseau — elle ignore les obstacles.
+export function hexDistance(a, b) {
+    const dq = a.q - b.q;
+    const dr = a.r - b.r;
+    return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+}
+
 // Boîte englobante de toutes les cases (pour dimensionner le viewBox SVG).
 export function computeBounds(cells, size = HEX_SIZE) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;

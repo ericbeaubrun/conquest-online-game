@@ -666,12 +666,16 @@ export const isBonusUnlocked = (soldier, bonus, settings, world) =>
     bonus.challenge == null ||
     (bonusProgress(soldier, bonus, world)?.done ?? false);
 
+// Comportements assignables à un soldat : il joue alors AUTOMATIQUEMENT à la
+// fin du tour (voir `engine/behaviors.js`), n'est plus compté dans les actions
+// restantes, et perd son comportement dès qu'il joue manuellement ou que le
+// comportement ne trouve plus aucun coup (bloqué). Volontairement simplistes :
+// un gain de temps pour le joueur, pas une IA qui optimise à sa place.
 export const BEHAVIORS = [
-    { id: 'conquest', label: 'Conquête' },
-    { id: 'attack', label: 'Attaque' },
-    { id: 'defense', label: 'Défense' },
-    { id: 'tree', label: 'Arbre' },
-    { id: 'reinforcement', label: 'Renfort' },
+    { id: 'conquest', label: 'Conquête' }, // conquiert une case voisine non possédée
+    { id: 'attack', label: 'Attaque' }, // attaque dès qu'une cible est à portée
+    { id: 'tree', label: 'Bûcheron' }, // abat l'arbre à portée
+    { id: 'follow', label: 'Escorte' }, // se rapproche de l'allié le plus proche
 ];
 
 // Apparence (skin) d'un soldat selon son niveau : chaque niveau a son propre

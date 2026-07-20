@@ -1,4 +1,5 @@
 // Adaptations mobile (petits écrans).
+@use 'tokens' as *;
 
 // ---- Adaptations mobile ----
 @media (max-width: 600px) {
@@ -45,7 +46,7 @@
     font-size: 13px;
     border-width: 2px;
     border-left-width: 5px;
-    box-shadow: 0 0 0 2px #4a4a4a;
+    box-shadow: 0 0 0 2px $panel-edge;
 
     &__dot {
       width: 9px;
@@ -73,7 +74,9 @@
   .soldier-panel {
     flex-wrap: wrap;
     gap: 8px 12px;
-    padding: 10px 12px;
+    // La gouttière droite de la croix est conservée (voir _panels.scss) : seules
+    // les autres marges sont resserrées.
+    padding: 10px $panel-close-gutter 10px 12px;
     // Largeur définie (et non « au contenu ») : sans elle, le conteneur
     // absolu se réduit à sa plus large colonne et empile tout verticalement.
     // Pleine largeur => portrait + stats tiennent sur une ligne, specs dessous.
@@ -115,20 +118,10 @@
     }
   }
 
-  // Étoiles / épées et pastilles de valeur réduites (panneau + aperçus).
-  .soldier-stars__item {
-    width: 20px;
-    height: 20px;
-  }
-
-  .soldier-stat__value {
-    min-width: 44px;
-    font-size: 15px;
-  }
-
+  // Pastilles de valeur réduites (panneau + aperçus).
   .soldier-stat-badge {
     width: 40px;
-    font-size: 20px;
+    font-size: 18px;
 
     // Pastille « avant→après » : se réduit à son contenu pour tenir côte à côte.
     &--wide {
@@ -181,6 +174,79 @@
 
     &__label {
       font-size: 12px;
+    }
+  }
+
+  // ---- Boutique ----
+  // Sur petit écran le tiroir ouvert mangeait une grosse part de l'écran. On ne
+  // touche PAS aux tailles de contenu (sprite 52px, pastilles, prix) : seuls les
+  // paddings, gouttières et hauteurs de calage sont resserrés, et les flèches de
+  // page rétrécies pour rendre la largeur aux cartes.
+  .shop-drawer {
+    &__handle {
+      padding: 3px 12px;
+      gap: 8px;
+    }
+
+    // Bandeau de la croix : réduit d'autant que la croix elle-même.
+    &--open &__body {
+      padding-top: 20px;
+    }
+
+    &__close {
+      top: 3px;
+      right: 3px;
+      width: 18px;
+      height: 18px;
+
+      img {
+        width: 11px;
+        height: 11px;
+      }
+    }
+
+    &__hint {
+      top: 3px;
+      left: 3px;
+      right: 24px;
+      height: 20px;
+      padding: 0 6px;
+      font-size: 12px;
+    }
+  }
+
+  .shop-page {
+    gap: 2px;
+
+    &__arrow {
+      width: 20px;
+      height: 20px;
+      margin: 0 1px;
+      font-size: 11px;
+    }
+  }
+
+  .shop {
+    gap: 4px;
+    padding: 3px 4px 6px;
+  }
+
+  .shop-card {
+    width: 82px;
+    gap: 2px;
+    padding: 4px 3px;
+
+    &__level {
+      min-height: 20px;
+    }
+    &__perturn {
+      min-height: 14px;
+    }
+    &__price {
+      padding: 1px 3px;
+    }
+    &__affinity-note {
+      padding: 1px 0;
     }
   }
 

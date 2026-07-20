@@ -15,7 +15,7 @@
   align-items: center;
   // Bornée à la largeur de l'écran (mobile) et plafonnée sur grand écran : la
   // rangée d'items est un unique bloc scrollable, pas une barre pleine largeur.
-  max-width: min(calc(100% - 16px), 760px);
+  max-width: min(calc(100% - 16px), 600px);
   z-index: 12;
   // Très légère transparence pour laisser deviner le plateau derrière.
   opacity: $panel-opacity;
@@ -36,32 +36,32 @@
     gap: 10px;
     padding: 4px 16px;
     border: 3px solid #000;
-    background: #1c1c1c;
+    background: #0d0d0f;
     color: #fff;
     font-family: inherit;
-    font-size: 17px;
+    font-size: 16px;
     letter-spacing: 0.04em;
     cursor: pointer;
-    box-shadow: 0 0 0 3px #4a4a4a;
+    box-shadow: 0 0 0 3px #2a2a2e;
     position: relative;
     z-index: 1; // l'onglet passe au-dessus du liseré du corps
 
     &:hover {
-      background: #262626;
+      background: #17171a;
     }
   }
   &__arrow {
     font-size: 12px;
-    color: #ffd766;
+    color: #d9ae4a;
   }
   &__label {
-    color: #e8e8e8;
+    color: #cfcfcf;
   }
   &__gold {
     display: flex;
     align-items: center;
     gap: 3px;
-    color: #ffd766;
+    color: #d9ae4a;
   }
 
   // Corps replié : hauteur nulle, invisible. Il se déploie vers le HAUT (le
@@ -74,50 +74,65 @@
     max-height: 0;
     overflow: hidden;
     opacity: 0;
-    background: #1c1c1c;
+    background: #0d0d0f;
     transition: max-height 0.22s ease, opacity 0.18s ease;
   }
 
-  // Croix rouge accrochée au coin haut-droit du tiroir (déborde légèrement au-
-  // dessus et à droite du corps) : referme la boutique, y compris en pose
-  // directe (elle désélectionne alors aussi la case, voir `onClose`).
+  // Croix rouge ancrée DANS le coin haut-droit du corps (elle débordait avant du
+  // tiroir et sortait de l'écran sur petit écran) : referme la boutique, y
+  // compris en pose directe (elle désélectionne alors aussi la case, `onClose`).
   &__close {
     position: absolute;
-    top: -16px;
-    right: -16px;
-    width: 30px;
-    height: 30px;
+    top: 4px;
+    right: 5px;
+    width: 22px;
+    height: 22px;
     padding: 0;
     border: 2px solid #000;
-    background: #2c2c2c;
+    background: #1a1a1d;
     cursor: pointer;
     z-index: 3;
     display: grid;
     place-items: center;
 
     &:hover {
-      background: #3a3a3a;
+      background: #2a2a2e;
     }
 
     img {
-      width: 19px;
-      height: 19px;
+      width: 14px;
+      height: 14px;
       image-rendering: pixelated;
     }
   }
   &--open &__body {
-    max-height: 360px;
+    max-height: 380px;
     opacity: 1;
+    // Bandeau réservé en haut : la croix s'y loge sans recouvrir les cartes.
+    padding-top: 24px;
     border: 3px solid #000;
     border-bottom: none;
-    box-shadow: 0 0 0 3px #4a4a4a;
+    box-shadow: 0 0 0 3px #2a2a2e;
   }
 
+  // L'indice de pose directe se loge DANS le bandeau de la croix (au lieu
+  // d'ajouter sa propre ligne) : la boutique garde la même hauteur, ouverte
+  // en pose directe ou non.
   &__hint {
-    padding: 6px 10px 0;
-    text-align: center;
-    color: #ffd766;
-    font-size: 15px;
+    position: absolute;
+    top: 3px; // épaisseur de la bordure du corps
+    left: 3px;
+    right: 32px; // laisse la place à la croix
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: #d9ae4a;
+    font-size: 13px;
   }
 }
 
@@ -136,15 +151,15 @@
     display: grid;
     place-items: center;
     padding: 0;
-    margin: 0 4px;
+    margin: 0 2px;
     border: 2px solid #000;
-    background: #2c2c2c;
-    color: #ffd766;
+    background: #1a1a1d;
+    color: #d9ae4a;
     font-size: 13px;
     cursor: pointer;
 
     &:hover:not(:disabled) {
-      background: #3a3a3a;
+      background: #2a2a2e;
     }
 
     // Début / fin de course : la flèche correspondante est éteinte.
@@ -158,8 +173,8 @@
 .shop {
   display: flex;
   align-items: stretch; // cartes de hauteur égale : prix/par-tour s'alignent
-  gap: 8px;
-  padding: 10px;
+  gap: 6px;
+  padding: 4px 6px 8px; // le bandeau de la croix tient déjà lieu de marge haute
   max-width: 100%;
   min-width: 0; // indispensable pour que `overflow-x` prenne le pas sur le contenu
   flex: 1 1 auto;
@@ -172,20 +187,20 @@
 // prix étant poussé en bas pour rester à la même hauteur partout.
 .shop-card {
   flex: 0 0 auto;
-  width: 104px;
+  width: 88px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 8px 6px;
-  border: 2px solid #3a3a3a;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  gap: 3px;
+  padding: 5px 4px;
+  border: 2px solid #2a2a2e;
+  background: #141417;
+  color: #e0e0e0;
   cursor: pointer;
   transition: background 0.12s ease, transform 0.1s ease;
 
   &:hover:not(.shop-card--locked) {
-    background: rgba(255, 255, 255, 0.12);
+    background: #1f1f24;
   }
   &:active:not(.shop-card--locked) {
     transform: scale(0.97);
@@ -196,7 +211,7 @@
   }
 
   &--active {
-    background: rgba(255, 255, 255, 0.16);
+    background: #24242a;
     // Couleur de bordure (joueur actif) appliquée en style inline.
   }
   &--poor {
@@ -237,7 +252,9 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    height: 24px;
+    // `min-height` et non `height` : les pastilles ATK/PV se dimensionnent à
+    // leur texte, la rangée ne doit pas les rogner si elles dépassent.
+    min-height: 22px;
 
     &--spacer {
       // Rien à afficher : sert juste de cale verticale.
@@ -256,13 +273,13 @@
     place-items: center;
     padding: 0;
     border: 2px solid #000;
-    background: #2c2c2c;
-    color: #ffd766;
+    background: #1a1a1d;
+    color: #d9ae4a;
     font-size: 12px;
     cursor: pointer;
 
     &:hover:not(:disabled) {
-      background: #3a3a3a;
+      background: #2a2a2e;
     }
     &:disabled {
       opacity: 0.35;
@@ -274,13 +291,13 @@
     align-items: center;
     justify-content: center;
     gap: 3px;
-    font-size: 18px;
-    color: #ffd766;
+    font-size: 17px;
+    color: #d9ae4a;
 
     // PV (maison, tours) : rouge, même teinte que le pourcentage de vie du
     // panneau du soldat.
     &--hp {
-      color: #ff3b3b;
+      color: #d33b3b;
     }
   }
   &__level-star {
@@ -302,7 +319,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 16px;
+    min-height: 15px;
   }
 
   // Une affinité n'a ni PV/attaque ni entretien/revenu : cet espace, vide sur
@@ -328,11 +345,11 @@
     align-items: center;
     justify-content: center;
     gap: 3px;
-    padding: 4px;
+    padding: 2px 4px;
     border: 2px solid #000;
-    background: #ffd766;
-    color: #1c1c1c;
-    font-size: 16px;
+    background: #c9a13f;
+    color: #0d0d0f;
+    font-size: 15px;
   }
 }
 
@@ -340,8 +357,8 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  font-size: 14px;
-  color: #e8e8e8;
+  font-size: 13px;
+  color: #cfcfcf;
 
   &__icon {
     width: 13px;
@@ -349,10 +366,10 @@
     image-rendering: pixelated;
   }
   &--upkeep {
-    color: #ff9a9a;
+    color: #d97a7a;
   }
   &--income {
-    color: #7ee08a;
+    color: #6bbf78;
   }
 }
 
