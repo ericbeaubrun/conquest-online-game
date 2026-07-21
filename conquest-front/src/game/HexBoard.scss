@@ -259,33 +259,57 @@ $stroke_width_4: 5;
     pointer-events: none;
   }
 
-  // Case du soldat sélectionné : contour en « fourmis en marche » (pointillés
-  // animés qui défilent), dessiné AU-DESSUS des sprites (voir ordre de rendu)
-  // et renforcé d'un halo pour rester bien visible au premier plan.
+  // Case du soldat sélectionné : contour fixe + ondes « sonar » + chevron
+  // flottant, dessinés AU-DESSUS des sprites (voir ordre de rendu).
   //
-  // La lueur est isolée sur un tracé IMMOBILE : le `drop-shadow` n'est alors
-  // rastérisé qu'une fois, puis réutilisé. Portée par le contour animé — comme
-  // auparavant — elle obligeait le navigateur à recalculer le filtre à chaque
-  // image du défilement, l'effet le plus coûteux du plateau sur mobile.
-  // L'animation reste donc sur le SEUL contour pointillé, jamais sur le groupe
-  // (`stroke-dashoffset` étant héritée, l'animer sur le groupe salirait aussi
-  // la lueur et réveillerait le filtre à chaque image).
-  &__selected-glow {
-    fill: none;
+  // Aucun `drop-shadow` ici, contrairement à l'ancien contour en « fourmis en
+  // marche » : un filtre doit être recalculé dès que le tracé qui le porte
+  // bouge, et les trois éléments ci-dessous bougent tous. La lisibilité est
+  // assurée autrement — un contour épais, un mouvement radial, et un repère
+  // qui dépasse de la case — pour un coût de rendu strictement inférieur :
+  // `transform` et `opacity` sont composées par le GPU, sans repeinture.
+  &__selected-ring {
+    fill: #ffffff;
+    fill-opacity: 0.12;
     stroke: #ffffff;
     stroke-width: 5;
     stroke-linejoin: round;
-    opacity: 0.5;
-    filter: drop-shadow(0 0 6px rgb(255 255 255 / 0.9));
   }
 
-  &__selected-ring {
+  // Ondes concentriques : le MÊME hexagone que la case, agrandi et effacé en
+  // s'éloignant. `transform-box: fill-box` est indispensable — sans lui
+  // l'origine du `scale` serait le coin du viewBox, et l'onde partirait en
+  // diagonale au lieu de s'écarter du centre de la case (même piège que le
+  // transform de caméra sur `hex-board__content`).
+  &__selected-wave {
     fill: none;
     stroke: #ffffff;
-    stroke-width: 5;
+    stroke-width: 6;
     stroke-linejoin: round;
-    stroke-dasharray: 4 5;
-    animation: hex-selected-march 0.6s linear infinite;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    will-change: transform, opacity;
+    animation: hex-selected-sonar 1.4s ease-out infinite;
+
+    // Seconde onde, à contretemps de la première : le battement paraît continu
+    // avec deux tracés seulement.
+    &--late {
+      animation-delay: 0.7s;
+    }
+  }
+
+  // Chevron doré au-dessus de la case : la seule marque qui déborde du plateau,
+  // donc le repère qui survit au dézoom. Cerné de noir pour tenir sur tous les
+  // terrains, comme les jauges et bandeaux de stats.
+  &__selected-cursor {
+    fill: var(--accent-gold, #e8b44a);
+    stroke: #000000;
+    stroke-width: 2;
+    stroke-linejoin: round;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    will-change: transform;
+    animation: hex-selected-bob 0.9s ease-in-out infinite;
   }
 
   // Case sélectionnée sans action disponible (ennemi, bâtiment, arbre, case
@@ -417,20 +441,47 @@ $stroke_width_4: 5;
   }
 }
 
-@keyframes hex-selected-march {
-  to {
-    stroke-dashoffset: -18;
+// Onde sonar : part légèrement en deçà de la case et s'efface en s'écartant.
+// Elle ne dépasse jamais 1,5× la case, pour rester rattachée à sa propre case
+// et ne pas empiéter sur les six voisines.
+@keyframes hex-selected-sonar {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
   }
 }
 
-// Préférence « moins d'animations ». On ne coupe QUE le vrai mouvement : le
-// défilement des pointillés de la case sélectionnée, seul effet qui déplace
-// quelque chose à l'écran. Les battements d'opacité sont conservés — une
+// Va-et-vient vertical du chevron. L'amplitude est en unités du viewBox (les
+// mêmes que les cases), donc le rebond garde sa proportion à tous les zooms.
+@keyframes hex-selected-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+// Préférence « moins d'animations ». On ne coupe QUE le vrai mouvement : les
+// ondes et le rebond du chevron de la case sélectionnée, seuls effets qui
+// déplacent quelque chose à l'écran. Les ondes sont alors masquées plutôt que
+// figées : arrêtées en cours de course, elles laisseraient un anneau fantôme
+// décentré autour de la case. Le contour et le chevron, eux, portent à eux
+// seuls toute l'information. Les battements d'opacité sont conservés — une
 // variation d'opacité ne déplace rien et ne présente pas de risque vestibulaire,
 // alors qu'elle porte ici une information de jeu (quelles cases sont jouables,
 // quels soldats n'ont pas encore agi). Les couper rendait le plateau inerte.
 @media (prefers-reduced-motion: reduce) {
-  .hex__selected-ring {
+  .hex__selected-wave {
+    display: none;
+  }
+
+  .hex__selected-cursor {
     animation: none;
   }
 }

@@ -10,18 +10,12 @@ import {
     MAX_BONUS_LEVEL,
     MIN_BONUS_LEVEL,
 } from '@conquest/shared-engine/data/soldier.js';
+import {AtkValue, HpValue} from './StatDisplays.jsx';
 
 // Boutique de bonus d'un soldat : panneau flottant au-dessus du panneau du
 // soldat, ouvert par son portrait. On peut parcourir les niveaux voisins pour
 // lire leurs défis, mais un soldat n'achète que les bonus de SON niveau — les
 // autres niveaux sont en consultation seule (cadenas).
-
-// Une statistique du bonus monte-t-elle, descend-elle ou ne bouge-t-elle pas
-// par rapport à celle du soldat qui le consulte ? Sert à colorer la valeur.
-const statTrend = (current, next) => {
-    if (current == null || next === current) return 'same';
-    return next > current ? 'up' : 'down';
-};
 
 // Une carte de bonus : portrait, statistiques, prix / entretien, défi, effet et action.
 const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownLevel, world, onBuy}) => {
@@ -32,7 +26,6 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
     // Prix et entretien effectifs (configurables par partie).
     const price = bonusPriceOf(bonus, settings);
     const upkeep = bonusUpkeep(bonus.id, settings);
-    const affordable = gold >= price;
     const buyable = ownLevel && canBuy && canBuyBonus(soldier, bonus, gold, settings, world);
 
     const classes = [
@@ -45,33 +38,60 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
 
     return (
         <div className={classes}>
-            <div className="bonus-card__portrait">
-                {bonus.src ? (
-                    <img src={bonus.src} alt={bonus.label}/>
-                ) : (
-                    // Asset pas encore dispo : réserve la place avec un « ? ».
-                    <span className="bonus-card__placeholder" aria-hidden="true">?</span>
-                )}
-                <span className="bonus-card__level">LVL {bonus.requiredLevel}</span>
-                {/* Aperçu d'un autre niveau : cadenas de consultation. */}
-                {!ownLevel && <img src="/lock.png" alt="Verrouillé" className="bonus-card__lock"/>}
-                {/* Bonus débloqué, réclamable et pas encore acquitté : notification. */}
-                {ownLevel && !equipped && !blocked &&
-                    isBonusNotified(soldier, bonus, settings, bonusesEnabled, world) && (
-                        <img src="/notif.png" alt="Débloqué" className="bonus-card__notif"/>
+            <div className="bonus-card__portrait-col">
+                <div className="bonus-card__portrait">
+                    {ownLevel && bonus.src ? (
+                        <img src={bonus.src} alt={bonus.label}/>
+                    ) : (
+                        // Aperçu d'un autre niveau, ou asset pas encore dispo : on
+                        // garde le mystère du bonus avec un simple « ? ».
+                        <span className="bonus-card__placeholder" aria-hidden="true">?</span>
                     )}
+                    {/* Bonus débloqué, réclamable et pas encore acquitté : notification. */}
+                    {ownLevel && !equipped && !blocked &&
+                        isBonusNotified(soldier, bonus, settings, bonusesEnabled, world) && (
+                            <img src="/notif.png" alt="Débloqué" className="bonus-card__notif"/>
+                        )}
+                </div>
+                {/* Bandeau atk/PV sous le portrait, même objet que sur le plateau
+                    et le panneau soldat (en plus petit) — même lecture partout. */}
+                {bonus.stats && (
+                    <div className="bonus-card__stat-badges">
+                        <AtkValue atk={bonus.stats.atk}/>
+                        <HpValue hp={bonus.stats.hp}/>
+                    </div>
+                )}
             </div>
             <div className="bonus-card__body">
                 <div className="bonus-card__header">
                     <span className="bonus-card__name">{bonus.label}</span>
                     <span className="bonus-card__cost">
-                        <span className={`bonus-card__price ${price === 0 ? 'bonus-card__price--free' : ''}`}>
-                            {price === 0 ? 'Gratuit' : (
-                                <>
-                                    <img src="/coin.png" alt="or" className="coin-icon"/> {price}
-                                </>
-                            )}
-                        </span>
+                        {/* Action à la place du prix : le bouton porte lui-même le coût
+                            (évite d'afficher deux fois le même montant). */}
+                        {ownLevel && equipped ? (
+                            <span className="bonus-card__equipped">✔ Équipé</span>
+                        ) : ownLevel && unlocked && !blocked ? (
+                            <button
+                                type="button"
+                                className="bonus-card__buy"
+                                disabled={!buyable}
+                                onClick={() => buyable && onBuy?.(bonus.id)}
+                            >
+                                {price === 0 ? 'Choisir' : (
+                                    <>
+                                        Acheter · <img src="/coin.png" alt="or" className="coin-icon"/> {price}
+                                    </>
+                                )}
+                            </button>
+                        ) : (
+                            <span className={`bonus-card__price ${price === 0 ? 'bonus-card__price--free' : ''}`}>
+                                {price === 0 ? 'Gratuit' : (
+                                    <>
+                                        <img src="/coin.png" alt="or" className="coin-icon"/> {price}
+                                    </>
+                                )}
+                            </span>
+                        )}
                         {upkeep ? (
                             <span className="bonus-card__upkeep" title="Entretien par tour">
                                 −{upkeep}/tour
@@ -79,23 +99,6 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
                         ) : null}
                     </span>
                 </div>
-                {/* Profil de statistiques du bonus : ce que le soldat DEVIENT en
-                    l'équipant. Affiché avant le défi et l'effet, car c'est la
-                    première chose à comparer d'un bonus à l'autre. Les valeurs
-                    qui changent par rapport au soldat actuel sont mises en
-                    évidence (gain ou perte). */}
-                {bonus.stats && (
-                    <p className="bonus-card__stats">
-                        <img src="/coeurPlein.png" alt="PV" className="bonus-card__line-icon"/>
-                        <span className={`bonus-card__stat bonus-card__stat--${statTrend(soldier.hp, bonus.stats.hp)}`}>
-                            {bonus.stats.hp} PV
-                        </span>
-                        <img src="/epeePlein.png" alt="Attaque" className="bonus-card__line-icon"/>
-                        <span className={`bonus-card__stat bonus-card__stat--${statTrend(soldier.atk, bonus.stats.atk)}`}>
-                            {bonus.stats.atk} ATK
-                        </span>
-                    </p>
-                )}
                 <p className={`bonus-card__challenge ${unlocked ? 'bonus-card__challenge--done' : ''}`}>
                     <img src="/defi.png" alt="Défi" className="bonus-card__line-icon"/>
                     <span className="bonus-card__line-text">{challengeText(soldier, bonus, settings, world)}</span>
@@ -104,24 +107,6 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
                     <img src="/sword.png" alt="Effet" className="bonus-card__line-icon"/>
                     <span className="bonus-card__line-text">{bonus.effect}</span>
                 </p>
-
-                {/* Action : équipé, achetable, ou rien (autre niveau / défi en cours). */}
-                {!ownLevel ? null : equipped ? (
-                    <span className="bonus-card__equipped">✔ Équipé</span>
-                ) : unlocked && !blocked ? (
-                    <button
-                        type="button"
-                        className="bonus-card__buy"
-                        disabled={!buyable}
-                        onClick={() => buyable && onBuy?.(bonus.id)}
-                    >
-                        {price === 0 ? 'Choisir' : affordable ? (
-                            <>
-                                Acheter · <img src="/coin.png" alt="or" className="coin-icon"/> {price}
-                            </>
-                        ) : 'Or insuffisant'}
-                    </button>
-                ) : null}
             </div>
         </div>
     );

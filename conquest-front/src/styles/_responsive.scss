@@ -111,6 +111,13 @@
       font-size: 15px;
     }
 
+    // Fiche d'empire : les deux colonnes ne tiennent plus, on repasse à une
+    // seule liste (le panneau est déjà pleine largeur ici).
+    &__specs--wide {
+      display: flex;
+      min-width: 0;
+    }
+
     &__atk-rank {
       font-size: 13px;
       margin-bottom: 4px;
@@ -232,18 +239,16 @@
   }
 
   .shop-card {
-    width: 82px;
-    gap: 2px;
+    width: 78px;
+    gap: 3px;
     padding: 4px 3px;
 
-    &__level {
-      min-height: 20px;
+    &__icon {
+      width: 50px;
+      height: 50px;
     }
     &__perturn {
-      min-height: 14px;
-    }
-    &__price {
-      padding: 1px 3px;
+      font-size: 11px;
     }
     &__affinity-note {
       padding: 1px 0;

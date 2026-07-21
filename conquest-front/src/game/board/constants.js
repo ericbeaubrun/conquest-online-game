@@ -42,6 +42,10 @@ export const BEHAVIOR_SRC = '/characters/comportement.png';
 // Icône d'affinité, même correspondance que le panneau du soldat. Le bouclier
 // n'est pas un élément (il ne s'achète pas) mais s'affiche comme les autres :
 // c'est bien une affinité portée par le soldat.
+// Croix posée sur les unités ennemies avec lesquelles le soldat sélectionné ne
+// peut PAS se battre à cause de son affinité (voir `canFight`).
+export const NO_FIGHT_SRC = '/croix.png';
+
 export const AFFINITY_SRC = {
     fire: '/fire.png',
     ice: '/ice.png',

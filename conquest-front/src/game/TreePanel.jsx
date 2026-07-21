@@ -73,7 +73,7 @@ const TreePanel = ({ tree, owner, settings, onClose }) => {
                     <span className="soldier-spec__label">Rareté</span>
                     <span className="soldier-spec__value">{treeRarity(tree).label}</span>
                 </div>
-                {upkeep !== 0 && <UpkeepSpec cost={upkeep} owner={owner} settings={settings} />}
+                {upkeep !== 0 && <UpkeepSpec cost={upkeep} settings={settings} />}
             </div>
         </div>
     );

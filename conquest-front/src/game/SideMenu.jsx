@@ -64,8 +64,8 @@ const SideMenu = ({
         <div className="menu-section">
             <span className="menu-section__title">Partie</span>
             {/* Sauvegarde hors-ligne : `onSave` n'est fourni qu'en local (en
-                online l'état est déjà persisté côté serveur). Fonctionnalités à
-                venir : onRestart / onBackToMenu, d'où le repli no-op. */}
+                online l'état est déjà persisté côté serveur), tout comme
+                `onRestart`. Fonctionnalité à venir : onBackToMenu. */}
             <button
                 onClick={() => onSave?.()}
                 disabled={!onSave}
@@ -73,7 +73,13 @@ const SideMenu = ({
             >
                 {justSaved ? 'Sauvegardé ✓' : 'Sauvegarder'}
             </button>
-            <button onClick={() => onRestart?.()} title="Bientôt disponible">Recommencer</button>
+            <button
+                onClick={() => onRestart?.()}
+                disabled={!onRestart}
+                title={onRestart ? 'Rejouer la même partie depuis le début' : 'Indisponible en ligne'}
+            >
+                Recommencer
+            </button>
             <button onClick={() => onBackToMenu?.()} title="Bientôt disponible">Retourner au menu</button>
             <button className="side-menu__exit" onClick={() => onExit?.()}>Quitter</button>
         </div>

@@ -5,8 +5,8 @@ import {
     behaviorLabel,
     BEHAVIORS,
     bonusOffersForLevel,
-    canBuyBonus,
     hasUnlockedBonus,
+    isBonusUnlocked,
     isSkeleton,
     isSummonedUnit,
     raceLabel,
@@ -24,18 +24,19 @@ import UpkeepSpec from './UpkeepSpec.jsx';
 // fait office de bouton : il ouvre la boutique de bonus (`BonusPanel`) au-dessus.
 // `world` est l'état de jeu : les défis d'état (arbres, maisons, bonus présents
 // sur le plateau) s'y lisent en direct, à chaque rendu.
-// Nombre de bonus immédiatement achetables pour ce soldat (défi accompli, or
-// suffisant, aucun autre bonus déjà équipé) : sert de pastille sur le bouton
-// « Bonus » pour signaler qu'il y a quelque chose à y faire.
-const buyableBonusCount = (soldier, settings, gold, canBuy, world) => {
-    if (!canBuy) return 0;
+// Nombre de bonus DÉBLOQUÉS pour ce soldat (défi accompli, aucun autre bonus
+// déjà équipé) : sert de pastille « UPGRADE » sur le portrait pour signaler
+// qu'il y a quelque chose à y faire. L'or n'entre PAS en compte — un bonus
+// débloqué mais trop cher reste un objectif à afficher.
+const unlockedBonusCount = (soldier, settings, canBuy, world) => {
+    if (!canBuy || soldier.bonus) return 0;
     return bonusOffersForLevel(soldier.level || 1)
         .filter((b) => settings?.bonusEnabled?.[b.id] !== false)
-        .filter((b) => canBuyBonus(soldier, b, gold, settings, world))
+        .filter((b) => isBonusUnlocked(soldier, b, settings, world))
         .length;
 };
 
-const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBonus, onSetBehavior, selectionId, settings, bonusesEnabled = true, world, onClose}) => {
+const SoldierPanel = ({soldier, color, canBuy = false, gold = 0, onBuyBonus, onSetBehavior, selectionId, settings, bonusesEnabled = true, world, onClose}) => {
     const level = soldier.level || 1;
     // Pas de boutique de bonus pour une unité invoquée (squelette, arbre-druide),
     // ni quand les bonus sont désactivés en configuration : le portrait n'ouvre
@@ -46,7 +47,7 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
     // Un bonus est débloqué (défi accompli) et pas encore réclamé : notification.
     const notify = hasUnlockedBonus(soldier, settings, bonusesEnabled, world);
 
-    const buyable = noBonusShop ? 0 : buyableBonusCount(soldier, settings, gold, canBuy, world);
+    const upgradable = noBonusShop ? 0 : unlockedBonusCount(soldier, settings, canBuy, world);
 
     // Boutique repliée par défaut, et refermée à chaque changement de soldat.
     const [bonusOpen, setBonusOpen] = useState(false);
@@ -104,6 +105,14 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                         {notify && (
                             <img src="/notif.png" alt="Bonus débloqué" className="soldier-panel__notif"/>
                         )}
+                        {/* Invite à ouvrir la boutique de bonus, en bas du portrait,
+                            avec le nombre de bonus débloqués. N'apparaît que si au
+                            moins un bonus l'est. */}
+                        {upgradable > 0 && (
+                            <span className="soldier-panel__upgrade-badge">
+                                UPGRADE <span className="soldier-panel__upgrade-count">{upgradable}</span>
+                            </span>
+                        )}
                     </button>
                     <div className="soldier-panel__stats">
                         <AtkValue atk={soldier.atk}/>
@@ -134,23 +143,6 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                             </span>
                         )}
                     </div>
-
-                    {/* Ouverture de la boutique de bonus (le portrait le fait
-                        aussi) : le compteur annonce les bonus achetables tout
-                        de suite, sans avoir à ouvrir le panneau. */}
-                    {!noBonusShop && (
-                        <button
-                            type="button"
-                            className={`soldier-panel__bonus-btn ${bonusOpen ? 'soldier-panel__bonus-btn--active' : ''}`}
-                            onClick={() => setBonusOpen((v) => !v)}
-                            aria-expanded={bonusOpen}
-                        >
-                            Bonus
-                            {buyable > 0 && (
-                                <span className="soldier-panel__bonus-count">{buyable}</span>
-                            )}
-                        </button>
-                    )}
 
                     <div className="soldier-panel__specs">
                             <div className="soldier-spec">
@@ -190,7 +182,7 @@ const SoldierPanel = ({soldier, color, owner, canBuy = false, gold = 0, onBuyBon
                                     <span className="soldier-spec__value">{behaviorLabel(soldier.behavior)}</span>
                                 )}
                             </div>
-                            <UpkeepSpec unit={soldier} owner={owner} settings={settings} label="Entretien"/>
+                            <UpkeepSpec unit={soldier} settings={settings} label="Entretien"/>
                     </div>
                 </div>
             </div>

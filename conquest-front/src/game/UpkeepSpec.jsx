@@ -6,20 +6,13 @@ import {upkeepFor} from '@conquest/shared-engine/data/soldier.js';
 //   - coût  (entretien positif) : en rouge, « −N [pièce] / tour pour <joueur> » ;
 //   - gain  (entretien négatif, ex. maison) : en jaune, « +N [pièce] / tour pour <joueur> » ;
 //   - nul   : « Aucun ».
-// `owner` est le joueur propriétaire ({ name, color }) ou null (case neutre).
 // `cost` force le montant au lieu de le lire au barème des unités : les arbres
 // sont taxés par le TERRITOIRE (`treeUpkeep`, voir `treeUpkeepTotal`) et non par
 // `upkeepFor`, qui ne connaît que les unités possédées.
 // `label` : libellé optionnel à gauche de la valeur (aligné sur les autres
 // lignes de caractéristiques), utile quand la ligne serait sinon orpheline.
-const UpkeepSpec = ({unit, owner, settings, cost: costProp, label}) => {
+const UpkeepSpec = ({unit, settings, cost: costProp, label}) => {
     const cost = costProp ?? upkeepFor(unit, settings);
-    const forWhom = owner ? (
-        <>
-            {' '}
-            pour <span style={{color: owner.color}}>{owner.name}</span>
-        </>
-    ) : null;
     return (
         <div className="soldier-spec">
             {label && <span className="soldier-spec__label">{label}</span>}
@@ -28,7 +21,6 @@ const UpkeepSpec = ({unit, owner, settings, cost: costProp, label}) => {
                     className={`soldier-spec__value ${cost > 0 ? 'soldier-spec__value--cost' : 'soldier-spec__value--gain'}`}>
                     {cost > 0 ? '−' : '+'}
                     {Math.abs(cost)} <img src="/coin.png" alt="or" className="coin-icon"/> / tour
-                    {forWhom}
                 </span>
             ) : (
                 <span className="soldier-spec__value">Aucun</span>

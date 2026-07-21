@@ -116,6 +116,23 @@ const GameLayout = ({session, onExit}) => {
         setSavedAt(entry?.savedAt ?? Date.now());
     };
 
+    // Recommencer : rejoue la même configuration (mêmes joueurs, mêmes réglages)
+    // depuis le tour 1. Réservé au hors-ligne — en online, relancer une partie
+    // relève du lobby, pas d'un client isolé. On demande confirmation car
+    // l'action détruit la partie en cours, puis on remet l'interface à zéro.
+    const handleRestart = () => {
+        if (online) return;
+        if (!window.confirm("Recommencer la partie ? La progression en cours sera perdue.")) return;
+        dispatch(resetGame());
+        setMenuOpen(false);
+        setSelection(null);
+        setHoverTarget(null);
+        setSelectedItem(null);
+        setShopOpen(false);
+        setStatsChart(null);
+        setSavedAt(null);
+    };
+
     const handleEndTurn = () => {
         if (!canAct) return; // pas la main : on ne termine pas le tour d'autrui
         dispatch(endTurn());
@@ -188,6 +205,7 @@ const GameLayout = ({session, onExit}) => {
                 // Sauvegarde réservée au hors-ligne : en online l'état est déjà
                 // persisté côté serveur, le bouton n'a pas lieu d'être.
                 onSave={online ? undefined : handleSave}
+                onRestart={online ? undefined : handleRestart}
                 savedAt={savedAt}
                 showAllStats={showAllStats}
                 onToggleShowAllStats={() => setShowAllStats((v) => !v)}
@@ -295,6 +313,10 @@ const GameLayout = ({session, onExit}) => {
                         building={buildingView}
                         color={colorOf(buildingView.playerId)}
                         owner={players.find((p) => p.id === buildingView.playerId) || null}
+                        // La base affiche la fiche de son propriétaire : elle lit
+                        // territoire, armée et économie en direct sur l'état.
+                        world={state}
+                        localPlayerId={localPlayerId}
                         settings={settings}
                         onClose={() => setSelection(null)}
                     />

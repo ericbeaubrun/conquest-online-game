@@ -106,7 +106,7 @@
     }
   }
   &--open &__body {
-    max-height: 380px;
+    max-height: 260px;
     opacity: 1;
     // Bandeau réservé en haut : la croix s'y loge sans recouvrir les cartes.
     padding-top: 24px;
@@ -182,16 +182,16 @@
   @include pixel-scrollbar;
 }
 
-// Carte d'item : TOUT le container est cliquable pour acheter. Colonne à lignes
-// alignées entre cartes (icône, sélecteur/espaceur, stats, par-tour, prix), le
-// prix étant poussé en bas pour rester à la même hauteur partout.
+// Carte d'item : TOUT le container est cliquable pour acheter (cible large,
+// tactile). Deux blocs seulement — la vignette (sprite + repères superposés) et
+// le prix, poussé en bas pour rester aligné d'une carte à l'autre.
 .shop-card {
   flex: 0 0 auto;
-  width: 88px;
+  width: 84px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   padding: 5px 4px;
   border: 2px solid #2a2a2e;
   background: #141417;
@@ -221,10 +221,15 @@
     cursor: not-allowed;
   }
 
-  // Pose directe (case vide déjà sélectionnée) : même contour « fourmis en
-  // marche » (pointillés blancs animés) que la sélection de case sur le
-  // plateau, pour signaler que la carte pose directement l'item.
-  &--placemode {
+  // Pose directe (case vide déjà sélectionnée) : simple liseré doré, discret,
+  // sur les cartes réellement posables. Les pointillés animés sont réservés à
+  // la carte SÉLECTIONNÉE (`--active`) : sur toutes les cartes à la fois, ils
+  // faisaient clignoter la rangée entière sans rien désigner.
+  &--placeable:not(.shop-card--active) {
+    border-color: #6b5a24;
+  }
+
+  &--active {
     border-color: transparent;
     background-image:
       linear-gradient(90deg, #fff 50%, transparent 50%),
@@ -238,99 +243,77 @@
     animation: shop-card-march 0.6s linear infinite;
   }
 
+  // Vignette : le sprite, et par-dessus lui les deux repères (entretien au
+  // coin, bandeau atk/PV aux pieds). La hauteur réserve le débord du bandeau.
+  &__thumb {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding-bottom: 9px; // moitié basse du bandeau, qui déborde du sprite
+  }
+
   &__icon {
-    width: 52px;
-    height: 52px;
+    width: 56px;
+    height: 56px;
     object-fit: contain;
     image-rendering: pixelated;
   }
 
-  // Sélecteur de niveau (soldat) ou stats (maison, tours), tout en haut de la
-  // carte : ◀ Nx ⭐ ▶ pour le soldat, Nx 🗡 Nx ❤ pour les bâtiments.
-  &__level {
+  // Bandeau atk/PV collé aux pieds du sprite : MÊME objet que sur le plateau
+  // (`.stat-banner` dans `HexBoard.scss`) — orangé/rouge, cadre noir, cases
+  // jointives — pour que la lecture soit immédiate d'un support à l'autre.
+  &__banner {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 6px;
-    // `min-height` et non `height` : les pastilles ATK/PV se dimensionnent à
-    // leur texte, la rangée ne doit pas les rogner si elles dépassent.
-    min-height: 22px;
 
-    &--spacer {
-      // Rien à afficher : sert juste de cale verticale.
-    }
-
-    // Stats bâtiment (maison, tours) : les deux pastilles ATK/PV collées
-    // l'une à l'autre, sans espace entre elles.
-    &--stats {
-      gap: 0;
-    }
-  }
-  &__step {
-    width: 22px;
-    height: 22px;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: 2px solid #000;
-    background: #1a1a1d;
-    color: #d9ae4a;
-    font-size: 12px;
-    cursor: pointer;
-
-    &:hover:not(:disabled) {
-      background: #2a2a2e;
-    }
-    &:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
-  }
-  &__level-label {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    font-size: 17px;
-    color: #d9ae4a;
-
-    // PV (maison, tours) : rouge, même teinte que le pourcentage de vie du
-    // panneau du soldat.
-    &--hp {
-      color: #d33b3b;
-    }
-  }
-  &__level-star {
-    width: 17px;
-    height: 17px;
-    image-rendering: pixelated;
-
-    // Étoile de niveau du soldat : très légèrement réduite par rapport aux
-    // icônes épée/cœur des bâtiments.
-    &--soldier {
-      width: 15px;
-      height: 15px;
+    // Cases jointives : les bordures voisines se chevauchent au lieu de
+    // doubler le trait sur la couture (comme le séparateur unique du plateau).
+    .soldier-stat-badge + .soldier-stat-badge {
+      margin-left: -2px;
     }
   }
 
-  // Ligne « par tour » dédiée : hauteur réservée même vide pour aligner le coût
-  // d'entretien / revenu (et donc le prix) d'une carte à l'autre.
+  // Entretien (rouge) ou revenu (vert) par tour, en pastille dans le coin haut
+  // de la vignette : une valeur, pas une phrase (« /tour » est dans l'infobulle).
   &__perturn {
+    position: absolute;
+    top: 0;
+    right: 0;
     display: flex;
     align-items: center;
-    justify-content: center;
-    min-height: 15px;
+    gap: 2px;
+    padding: 1px 3px;
+    border: 2px solid #000;
+    font-size: 12px;
+    line-height: 1;
+    color: #0d0d0f;
+
+    &--upkeep {
+      background: #d97a7a;
+    }
+    &--income {
+      background: #6bbf78;
+    }
+  }
+  &__perturn-icon {
+    width: 11px;
+    height: 11px;
+    image-rendering: pixelated;
   }
 
-  // Une affinité n'a ni PV/attaque ni entretien/revenu : cet espace, vide sur
-  // les autres cartes, rappelle sa règle (blocage du combat même élément),
-  // à la place de `&__level` + `&__perturn`.
+  // Une affinité n'a ni PV/attaque ni entretien/revenu : cet espace, occupé
+  // ailleurs par le bandeau, rappelle sa règle (blocage du combat même élément).
   &__affinity-note {
     flex: 1;
     display: flex;
     align-items: center;
     margin: 0;
-    padding: 2px 1px;
+    padding: 0 1px;
     text-align: center;
     color: #a9a9a9;
     font-size: 11px;
@@ -338,38 +321,16 @@
   }
 
   // Prix : poussé tout en bas (mêmes hauteurs de carte => prix alignés).
+  // Volontairement DISCRET — ce n'est pas un bouton, c'est la carte entière
+  // qui achète ; une barre dorée pleine largeur laissait croire l'inverse.
   &__price {
     margin-top: auto;
-    align-self: stretch;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 3px;
-    padding: 2px 4px;
-    border: 2px solid #000;
-    background: #c9a13f;
-    color: #0d0d0f;
     font-size: 15px;
-  }
-}
-
-.shop-stat {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 13px;
-  color: #cfcfcf;
-
-  &__icon {
-    width: 13px;
-    height: 13px;
-    image-rendering: pixelated;
-  }
-  &--upkeep {
-    color: #d97a7a;
-  }
-  &--income {
-    color: #6bbf78;
+    color: #e8c261;
   }
 }
 

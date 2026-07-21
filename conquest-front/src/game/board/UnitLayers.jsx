@@ -7,13 +7,14 @@
 // l'unité, ou des jauges pixel art.
 import {memo} from 'react';
 import {soldierSkin, soldierSprite, hasUnlockedBonus} from '@conquest/shared-engine/data/soldier.js';
-import {BUILDING_STATS, maxAtk, maxHp} from '@conquest/shared-engine/engine/rules.js';
+import {BUILDING_STATS, canFight, isAttackable, maxAtk, maxHp} from '@conquest/shared-engine/engine/rules.js';
 import {unitScale, spriteFacesLeft} from '@conquest/shared-engine/data/units.js';
 import {
     AFFINITY_SRC,
     BASE_SCALE,
     BASE_SRC,
     BEHAVIOR_SRC,
+    NO_FIGHT_SRC,
     NOTIF_SRC,
     PLACEMENT_SRC,
     placementSrc,
@@ -373,6 +374,38 @@ export const BehaviorMarkers = memo(function BehaviorMarkers({
                 href={BEHAVIOR_SRC}
                 x={cell.cx - badge / 2}
                 y={cell.cy - size * 0.62 - badge / 2}
+                width={badge}
+                height={badge}
+                style={{imageRendering: 'pixelated'}}
+                pointerEvents="none"
+            />
+        );
+    });
+});
+
+// Croix posée sur toutes les unités ENNEMIES que le soldat sélectionné ne peut
+// pas combattre à cause de son affinité (`canFight`) : un soldat de feu voit
+// une croix sur tous les ennemis de feu, un bouclier sur tous les ennemis sans
+// affinité ou eux-mêmes boucliers. La couche n'existe que si le soldat
+// sélectionné PORTE une affinité — sans affinité, aucun combat n'est interdit
+// (hormis face à un bouclier, déjà marqué depuis l'autre bord).
+//
+// Dessinée APRÈS le voile (`Dimmer`) : la croix reste lisible même sur les
+// cases hors de portée, où l'information est justement la plus utile.
+export const NoFightMarkers = memo(function NoFightMarkers({placements, cellMap, size, mover}) {
+    if (!mover?.affinity) return null;
+    const badge = size * 0.62;
+    return [...placements.entries()].map(([id, placed]) => {
+        if (placed.playerId === mover.playerId) return null;
+        if (!isAttackable(placed) || canFight(mover, placed)) return null;
+        const cell = cellMap.get(id);
+        if (!cell) return null;
+        return (
+            <image
+                key={'nofight' + id}
+                href={NO_FIGHT_SRC}
+                x={cell.cx - badge / 2}
+                y={cell.cy - badge / 2}
                 width={badge}
                 height={badge}
                 style={{imageRendering: 'pixelated'}}

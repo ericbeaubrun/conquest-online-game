@@ -70,45 +70,6 @@
     image-rendering: pixelated;
   }
 
-  // Bouton d'ouverture de la boutique de bonus, avec compteur d'achats possibles.
-  &__bonus-btn {
-    align-self: flex-start;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 8px;
-    font: inherit;
-    font-size: 13px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #e4e4e4;
-    background: $panel-ink-raised;
-    border: 2px solid $panel-edge;
-    cursor: pointer;
-
-    &:hover {
-      background: $panel-ink-hover;
-      color: #ffd766;
-    }
-
-    &--active {
-      color: #ffd766;
-      border-color: #ffd766;
-    }
-  }
-
-  // Pastille verte : nombre de bonus achetables immédiatement.
-  &__bonus-count {
-    min-width: 16px;
-    padding: 0 3px;
-    font-size: 12px;
-    line-height: 16px;
-    text-align: center;
-    color: #1c1c1c;
-    background: #5bd35b;
-    border: 1px solid #000;
-  }
-
   // Le portrait est un bouton (reset des styles natifs) : il bascule entre
   // les specs et la boutique de bonus, et affiche le niveau du soldat.
   &__portrait {
@@ -168,6 +129,45 @@
     filter: drop-shadow(0 0 2px #000);
   }
 
+  // Étiquette : invite à ouvrir la boutique de bonus, collée au bord bas du
+  // portrait mais contenue à l'intérieur (ne déborde pas du cadre). Habillage
+  // pixel-art comme le reste du panneau : police pixel, cadre noir franc, coins
+  // carrés, aucune ombre floue.
+  &__portrait &__upgrade-badge {
+    position: absolute;
+    bottom: 3px;
+    left: 3px;
+    right: 3px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 1px 2px;
+    font-family: $pixel-font;
+    font-size: 10px;
+    line-height: 12px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    color: #1c1c1c;
+    background: #ffd766;
+    border: 2px solid #000;
+  }
+
+  // Nombre de bonus débloqués, accolé au texte « UPGRADE ». Carré (pas de coins
+  // arrondis), même cadre noir que les pastilles atk/PV.
+  &__upgrade-count {
+    min-width: 12px;
+    padding: 0 2px;
+    font-family: $pixel-font;
+    font-size: 10px;
+    line-height: 12px;
+    text-align: center;
+    color: #1c1c1c;
+    background: #5bd35b;
+    border: 1px solid #000;
+  }
+
   // Bandeau attaque / PV sous le portrait : les deux pastilles sont COLLÉES
   // dans un même cadre noir, exactement comme `.stat-banner` sur le plateau.
   // Aucune bordure interne propre aux pastilles : seul le filet séparateur.
@@ -220,6 +220,118 @@
     min-width: 230px;
     padding-top: 4px;
     border-top: 1px solid $panel-edge;
+  }
+
+  // Fiche d'empire (panneau de la base) : six lignes au lieu d'une seule, donc
+  // deux colonnes pour ne pas doubler la hauteur du panneau. Le remplissage se
+  // fait en COLONNES (`grid-auto-flow: column`) avec un nombre de lignes fixé :
+  // les lignes se lisent de haut en bas, colonne par colonne, dans l'ordre du
+  // JSX (territoire/rang/armée à gauche, constructions/trésor/entretien à droite).
+  &__specs--wide {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(3, auto);
+    column-gap: 22px;
+    min-width: 460px;
+  }
+}
+
+// Propriétaire d'une base, à droite du titre du panneau : carré de couleur puis
+// nom, exactement la lecture des profils de la barre du haut.
+.building-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+
+  &__chip {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #000;
+  }
+
+  // « IA » inscrit dans le carré (comme .player-profile__ai) : pas de badge
+  // voisin supplémentaire dans un titre déjà chargé.
+  &__ai {
+    font-family: $pixel-font;
+    font-size: 8px;
+    line-height: 1;
+    color: #000;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+
+  &__name {
+    font-size: 13px;
+    color: #e4e4e4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // Marque « c'est votre base » (online) : discrète, à droite du nom.
+  &__you {
+    padding: 0 3px;
+    font-family: $pixel-font;
+    font-size: 9px;
+    line-height: 14px;
+    color: #1c1c1c;
+    background: #ffd766;
+    border: 1px solid #000;
+  }
+}
+
+// Précision accolée à une valeur de spécification (part de territoire, revenu,
+// puissance d'armée) : même ligne, mais en retrait — c'est un commentaire du
+// nombre qui précède, pas un second nombre.
+.soldier-spec__hint {
+  margin-left: 4px;
+  font-size: 12px;
+  color: #9a9a9a;
+
+  &--gain {
+    color: #6fbf6f;
+  }
+  &--cost {
+    color: #ff6b6b;
+  }
+}
+
+// Objectif de victoire : dernière ligne de la fiche d'empire, juste sous le
+// trésor (même colonne de la grille `&__specs--wide`). Même gabarit que
+// `.soldier-spec` (libellé à gauche, valeur à droite), avec en plus une jauge
+// pixel-art (cadre noir franc, pas de coins arrondis) qui se remplit à la
+// couleur du joueur.
+.empire-goal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+
+  &__value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ffd766;
+    white-space: nowrap;
+  }
+
+  &__bar {
+    width: 44px;
+    flex: 0 0 auto;
+    height: 10px;
+    background: #14141a;
+    border: 2px solid #000;
+    box-shadow: inset 0 0 0 1px $panel-edge;
+  }
+
+  &__fill {
+    display: block;
+    height: 100%;
   }
 }
 
@@ -305,6 +417,15 @@
   background: $panel-ink-raised;
   border: 2px solid $panel-edge;
 
+  // Colonne portrait : portrait puis bandeau atk/PV collé dessous, même
+  // agencement que `.soldier-panel__portrait-col` (en plus petit).
+  &__portrait-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+
   &__portrait {
     position: relative;
     flex: 0 0 auto;
@@ -322,6 +443,31 @@
       height: 42px;
       object-fit: contain;
       image-rendering: pixelated;
+    }
+  }
+
+  // Bandeau attaque / PV sous le portrait, même objet que `.soldier-panel__stats`
+  // (pastilles collées dans un même cadre noir), en plus petit pour rester
+  // proportionnel au portrait de 52px.
+  &__stat-badges {
+    display: flex;
+    width: 52px;
+    flex: 0 0 auto;
+    border: 2px solid #000;
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.4);
+
+    .soldier-stat-badge {
+      flex: 1 1 0;
+      width: auto;
+      min-width: 0;
+      font-size: 13px;
+      padding: 1px;
+      border: none;
+      box-shadow: none;
+    }
+
+    .soldier-stat-badge + .soldier-stat-badge {
+      border-left: 2px solid #000;
     }
   }
 
@@ -415,27 +561,6 @@
     gap: 5px;
   }
 
-  // Profil de statistiques du bonus (ce que le soldat DEVIENT en l'équipant).
-  &__stats {
-    margin: 0;
-    font-size: 13px;
-    line-height: 1.2;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  // Valeur d'une statistique, colorée selon l'écart avec celle du soldat :
-  // vert si elle monte, rouge si elle descend, neutre si elle ne bouge pas.
-  &__stat {
-    margin-right: 6px;
-    font-weight: 700;
-
-    &--up { color: #5bd35b; }
-    &--down { color: #ff6b6b; }
-    &--same { color: #d8d8d8; }
-  }
-
   // Icônes de ligne (défi = parchemin, effet = épée) : pixel net, non déformées.
   &__line-icon {
     flex: 0 0 auto;
@@ -446,23 +571,12 @@
   }
 
   // Badges superposés au portrait de la carte (au-dessus de l'image du bonus).
-  // Scindés sous `&__portrait` pour l'emporter sur la règle générique de l'image.
-  &__portrait &__lock,
+  // Scindée sous `&__portrait` pour l'emporter sur la règle générique de l'image.
+  // Notification en haut-gauche : bonus débloqué et réclamable.
   &__portrait &__notif {
     position: absolute;
     image-rendering: pixelated;
     filter: drop-shadow(0 0 2px #000);
-  }
-  // Cadenas centré : aperçu d'un niveau autre que celui du soldat.
-  &__portrait &__lock {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 26px;
-    height: 26px;
-  }
-  // Notification en haut-gauche : bonus débloqué et réclamable.
-  &__portrait &__notif {
     top: -6px;
     left: -6px;
     width: 20px;
@@ -500,9 +614,13 @@
   }
 
   // Bouton d'achat / de choix du bonus.
+  // Bouton d'achat logé dans l'en-tête, à la place du prix (il le porte lui-même).
   &__buy {
-    align-self: flex-start;
-    margin-top: 4px;
+    align-self: flex-end;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
     padding: 3px 8px;
     font-size: 13px;
     color: #1c1c1c;
@@ -522,8 +640,8 @@
 
   // Étiquette « équipé ».
   &__equipped {
-    align-self: flex-start;
-    margin-top: 4px;
+    align-self: flex-end;
+    white-space: nowrap;
     font-size: 13px;
     color: #ffd766;
     letter-spacing: 0.04em;

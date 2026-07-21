@@ -9,7 +9,7 @@
 // joueur local — le plateau reste consultable (pan, zoom, sélection pour
 // inspecter) mais AUCUNE action de jeu n'est émise.
 import {useCallback, useMemo, useState} from 'react';
-import {hexId, hexHeight, pixelToHex} from '@conquest/shared-engine/data/hex.js';
+import {HEX_SIZE, hexId, hexHeight, pixelToHex} from '@conquest/shared-engine/data/hex.js';
 import {getLogicalBoard} from '@conquest/shared-engine/engine/board.js';
 import {isAffinityItem} from '@conquest/shared-engine/data/items.js';
 import {canReceiveAffinity} from '@conquest/shared-engine/data/soldier.js';
@@ -36,7 +36,14 @@ import {
     Territory,
     Tiles,
 } from './board/TerrainLayers.jsx';
-import {Bases, BehaviorMarkers, BonusNotifications, Buildings, PlacementPreview} from './board/UnitLayers.jsx';
+import {
+    Bases,
+    BehaviorMarkers,
+    BonusNotifications,
+    Buildings,
+    NoFightMarkers,
+    PlacementPreview,
+} from './board/UnitLayers.jsx';
 import './HexBoard.scss';
 
 const NO_MOVES = {moves: new Map(), allies: []};
@@ -45,6 +52,17 @@ const NO_MOVES = {moves: new Map(), allies: []};
 // combat et abattage (panneau de l'arbre visé). Un simple déplacement ou une
 // conquête n'ont rien à prévisualiser.
 const PREVIEW_KINDS = new Set(['merge', 'combat', 'chop', 'openChest', 'loot']);
+
+// Chevron du curseur de sélection : un triangle pointe en bas, posé JUSTE
+// au-dessus de l'arête haute de la case (les hexagones sont flat-top, ce bord
+// est donc à une demi-hauteur du centre). Sa taille suit celle des cases pour
+// rester proportionné quelle que soit la carte.
+const selectedChevron = ({cx, cy}) => {
+    const tipY = cy - hexHeight() / 2 - HEX_SIZE * 0.14;
+    const baseY = tipY - HEX_SIZE * 0.62;
+    const halfW = HEX_SIZE * 0.36;
+    return `${cx},${tipY} ${cx - halfW},${baseY} ${cx + halfW},${baseY}`;
+};
 
 const HexBoard = ({
                       game,
@@ -317,6 +335,14 @@ const HexBoard = ({
                     activePlayerId={activePlayerId}
                 />
                 {dimIds && <Dimmer cells={cells} activeIds={dimIds}/>}
+                {activeSoldier && (
+                    <NoFightMarkers
+                        placements={placements}
+                        cellMap={cellMap}
+                        size={itemSize}
+                        mover={mover}
+                    />
+                )}
                 {!activeSoldier && (
                     <ActionIndicators
                         placements={placements}
@@ -334,20 +360,30 @@ const HexBoard = ({
                         mover={mover}
                     />
                 )}
-                {/* Case sélectionnée : une lueur STATIQUE, puis le contour en
-                    « fourmis en marche » par-dessus. La lueur garde son
-                    `drop-shadow` d'origine — un filtre ne coûte cher que s'il
-                    doit être recalculé à chaque image, ce qui était le cas
-                    lorsqu'il était porté par le contour animé. Isolé sur un
-                    tracé immobile, il est rastérisé une fois puis réutilisé,
-                    et SEUL le contour pointillé est repeint. */}
+                {/* Case sélectionnée : un contour fixe, deux ondes « sonar » qui
+                    s'en écartent en fondu, et un chevron qui flotte au-dessus.
+                    Le mouvement radial accroche l'œil depuis n'importe où sur
+                    la carte, et le chevron — seul repère qui DÉPASSE de la
+                    case — reste identifiable une fois le plateau dézoomé, là
+                    où un contour se confond avec les surbrillances de portée.
+                    Les trois animations ne touchent que `transform` et
+                    `opacity` : le GPU compose les couches sans jamais les
+                    repeindre, comme pour `hex-board__pulse`. */}
                 {selectedCell && (
                     <g
                         className={`hex__selected${selection.kind === 'soldier' ? '' : ' hex__selected--neutral'}`}
                         pointerEvents="none"
                     >
-                        <polygon points={selectedCell.points} className="hex__selected-glow"/>
                         <polygon points={selectedCell.points} className="hex__selected-ring"/>
+                        <polygon points={selectedCell.points} className="hex__selected-wave"/>
+                        <polygon
+                            points={selectedCell.points}
+                            className="hex__selected-wave hex__selected-wave--late"
+                        />
+                        <polygon
+                            points={selectedChevron(selectedCell)}
+                            className="hex__selected-cursor"
+                        />
                     </g>
                 )}
                 </g>

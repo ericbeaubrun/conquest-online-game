@@ -198,6 +198,7 @@ $blue: #3f7fd8;
     max-width: 980px;
     width: 100%;
     margin: 0 auto;
+    @include pixel-scrollbar;
 }
 
 .setup-section {

@@ -189,7 +189,7 @@ const Shop = ({
                             className={`shop-card ${active ? 'shop-card--active' : ''} ${
                                 affordable ? '' : 'shop-card--poor'
                             } ${buyable ? '' : 'shop-card--locked'} ${
-                                (placeMode && !affinity) || active ? 'shop-card--placemode' : ''
+                                placeMode && !affinity ? 'shop-card--placeable' : ''
                             }`}
                             role="button"
                             tabIndex={buyable ? 0 : -1}
@@ -203,20 +203,27 @@ const Shop = ({
                             }}
                             title={hint}
                         >
-                            <img src={sp.sprite} alt={item.name} className="shop-card__icon" draggable={false} />
+                            {/* Vignette : le sprite, avec par-dessus les deux repères
+                                lus d'un coup d'œil — l'entretien/revenu en pastille au
+                                coin, et le bandeau atk/PV collé aux pieds de l'unité,
+                                exactement comme sur le plateau. */}
+                            <div className="shop-card__thumb">
+                                <img src={sp.sprite} alt={item.name} className="shop-card__icon" draggable={false} />
 
-                            {affinity ? (
-                                // Une affinité n'a ni PV/attaque ni entretien/revenu : les deux
-                                // rangées habituelles resteraient vides. On comble cet espace
-                                // par un rappel de sa règle (blocage du combat même élément),
-                                // adapté au nom de l'affinité de la carte.
-                                <p className="shop-card__affinity-note">
-                                    Empêche les combats {item.name.toLowerCase()} vs {item.name.toLowerCase()}
-                                </p>
-                            ) : (
-                                <>
-                                    {/* PV et attaque (soldat, tours) sous l'image. */}
-                                    <div className="shop-card__level shop-card__level--stats">
+                                {sp.upkeep ? (
+                                    <span className="shop-card__perturn shop-card__perturn--upkeep" title="Entretien par tour">
+                                        <img src="/coin.png" alt="" className="shop-card__perturn-icon" draggable={false} />
+                                        −{sp.upkeep}
+                                    </span>
+                                ) : sp.income ? (
+                                    <span className="shop-card__perturn shop-card__perturn--income" title="Revenu par tour">
+                                        <img src="/coin.png" alt="" className="shop-card__perturn-icon" draggable={false} />
+                                        +{sp.income}
+                                    </span>
+                                ) : null}
+
+                                {!affinity && (sp.atk != null || sp.hp != null) && (
+                                    <div className="shop-card__banner">
                                         {sp.atk != null && (
                                             <span
                                                 className="soldier-stat-badge soldier-stat-badge--atk soldier-stat-badge--sm"
@@ -234,27 +241,23 @@ const Shop = ({
                                             </span>
                                         )}
                                     </div>
+                                )}
+                            </div>
 
-                                    {/* Ligne « par tour » DÉDIÉE (hauteur réservée même vide) : coût
-                                        d'entretien ou revenu, toujours à la même hauteur d'une carte
-                                        à l'autre. */}
-                                    <div className="shop-card__perturn">
-                                        {sp.upkeep ? (
-                                            <span className="shop-stat shop-stat--upkeep" title="Entretien par tour">
-                                                <img src="/coin.png" alt="" className="shop-stat__icon" draggable={false} />
-                                                −{sp.upkeep}/tour
-                                            </span>
-                                        ) : sp.income ? (
-                                            <span className="shop-stat shop-stat--income" title="Revenu par tour">
-                                                <img src="/coin.png" alt="" className="shop-stat__icon" draggable={false} />
-                                                +{sp.income}/tour
-                                            </span>
-                                        ) : null}
-                                    </div>
-                                </>
+                            {/* Une affinité n'a ni PV/attaque ni entretien/revenu : on
+                                rappelle à la place sa règle (blocage du combat même
+                                élément), adaptée au nom de l'affinité de la carte. */}
+                            {affinity && (
+                                <p
+                                    className="shop-card__affinity-note"
+                                    title={`Empêche les combats ${item.name.toLowerCase()} contre ${item.name.toLowerCase()}`}
+                                >
+                                    Bloque {item.name.toLowerCase()} vs {item.name.toLowerCase()}
+                                </p>
                             )}
 
-                            {/* Prix : ancré en bas de la carte, donc aligné entre toutes. */}
+                            {/* Prix : ancré en bas de la carte, donc aligné entre toutes.
+                                Discret (pas un bouton) — c'est la carte entière qui achète. */}
                             <div className="shop-card__price">
                                 <img src="/coin.png" alt="or" className="coin-icon" draggable={false} />
                                 {sp.cost}
