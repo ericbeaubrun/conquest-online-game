@@ -28,21 +28,27 @@ const BuildingPanel = ({ building, color, owner, settings, onClose }) => (
                 <img src="/croix.png" alt="" draggable={false} />
             </button>
         )}
-        <div className="soldier-panel__portrait" style={{ borderColor: color }}>
-            <img src={SRC[building.type]} alt={LABEL[building.type]} />
-        </div>
-
-        <div className="soldier-panel__stats">
-            {building.atk != null && <AtkValue atk={building.atk} uncapped/>}
-            <HpValue hp={building.hp} uncapped/>
-        </div>
-
-        <div className="soldier-panel__specs">
-            <div className="soldier-spec">
-                <span className="soldier-spec__label">Type</span>
-                <span className="soldier-spec__value">{LABEL[building.type]}</span>
+        <div className="soldier-panel__body">
+            {/* Même gabarit que le panneau soldat : image puis bandeau de stats
+                dessous, titre et caractéristiques à droite. */}
+            <div className="soldier-panel__portrait-col">
+                <div className="soldier-panel__portrait" style={{ borderColor: color }}>
+                    <img src={SRC[building.type]} alt={LABEL[building.type]} />
+                </div>
+                <div className="soldier-panel__stats">
+                    {building.atk != null && <AtkValue atk={building.atk} uncapped/>}
+                    <HpValue hp={building.hp} uncapped/>
+                </div>
             </div>
-            <UpkeepSpec unit={building} owner={owner} settings={settings} />
+
+            <div className="soldier-panel__main">
+                <div className="soldier-panel__head">
+                    <span className="soldier-panel__atk-rank">{LABEL[building.type]}</span>
+                </div>
+                <div className="soldier-panel__specs">
+                    <UpkeepSpec unit={building} owner={owner} settings={settings} label="Entretien" />
+                </div>
+            </div>
         </div>
     </div>
 );

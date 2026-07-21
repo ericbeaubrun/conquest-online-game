@@ -24,7 +24,7 @@ export function isLocalPlayerTurn(state, localPlayerId) {
 
 // Cadence des coups d'un bot local (ms) : assez lent pour que l'humain VOIE le
 // bot jouer coup par coup, assez rapide pour ne pas traîner.
-const BOT_STEP_MS = 50;
+const BOT_STEP_MS = 100;
 
 // PILOTE DES BOTS LOCAUX. Quand le tour passe à un bot, on calcule son tour
 // complet (mêmes règles que les joueurs : chaque coup passe par le reducer) puis

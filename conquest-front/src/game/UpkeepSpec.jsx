@@ -10,7 +10,9 @@ import {upkeepFor} from '@conquest/shared-engine/data/soldier.js';
 // `cost` force le montant au lieu de le lire au barème des unités : les arbres
 // sont taxés par le TERRITOIRE (`treeUpkeep`, voir `treeUpkeepTotal`) et non par
 // `upkeepFor`, qui ne connaît que les unités possédées.
-const UpkeepSpec = ({unit, owner, settings, cost: costProp}) => {
+// `label` : libellé optionnel à gauche de la valeur (aligné sur les autres
+// lignes de caractéristiques), utile quand la ligne serait sinon orpheline.
+const UpkeepSpec = ({unit, owner, settings, cost: costProp, label}) => {
     const cost = costProp ?? upkeepFor(unit, settings);
     const forWhom = owner ? (
         <>
@@ -20,6 +22,7 @@ const UpkeepSpec = ({unit, owner, settings, cost: costProp}) => {
     ) : null;
     return (
         <div className="soldier-spec">
+            {label && <span className="soldier-spec__label">{label}</span>}
             {cost !== 0 ? (
                 <span
                     className={`soldier-spec__value ${cost > 0 ? 'soldier-spec__value--cost' : 'soldier-spec__value--gain'}`}>

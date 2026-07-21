@@ -9,9 +9,6 @@
   left: 50%;
   bottom: 12px;
   transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 12px;
   // Gouttière à droite : la croix s'y loge sans recouvrir les spécifications
   // (voir `panel-close`, ancrée dans le coin plutôt qu'en débordement).
   padding: 10px $panel-close-gutter 10px 14px;
@@ -30,7 +27,30 @@
     z-index: 20;
   }
 
-  // Colonne portrait : étoiles de niveau au-dessus du bouton portrait.
+  // Corps : portrait à gauche, colonne principale à droite. Les deux blocs
+  // partagent la même ligne de base haute, quel que soit le nombre de specs.
+  &__body {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  // Colonne principale : identité, bouton bonus, caractéristiques.
+  &__main {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  // Ligne d'identité : étoiles de niveau puis rang / race, sur une seule ligne.
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  // Colonne portrait : portrait, bandeau atk/PV collé dessous.
   &__portrait-col {
     display: flex;
     flex-direction: column;
@@ -41,13 +61,52 @@
   // Rangée de 5 étoiles représentant le niveau du soldat (1 à 5).
   &__level-stars {
     display: flex;
-    gap: 2px;
+    gap: 1px;
   }
 
   &__level-star {
-    width: 20px;
-    height: 20px;
+    width: 15px;
+    height: 15px;
     image-rendering: pixelated;
+  }
+
+  // Bouton d'ouverture de la boutique de bonus, avec compteur d'achats possibles.
+  &__bonus-btn {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    font: inherit;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #e4e4e4;
+    background: $panel-ink-raised;
+    border: 2px solid $panel-edge;
+    cursor: pointer;
+
+    &:hover {
+      background: $panel-ink-hover;
+      color: #ffd766;
+    }
+
+    &--active {
+      color: #ffd766;
+      border-color: #ffd766;
+    }
+  }
+
+  // Pastille verte : nombre de bonus achetables immédiatement.
+  &__bonus-count {
+    min-width: 16px;
+    padding: 0 3px;
+    font-size: 12px;
+    line-height: 16px;
+    text-align: center;
+    color: #1c1c1c;
+    background: #5bd35b;
+    border: 1px solid #000;
   }
 
   // Le portrait est un bouton (reset des styles natifs) : il bascule entre
@@ -109,22 +168,36 @@
     filter: drop-shadow(0 0 2px #000);
   }
 
+  // Bandeau attaque / PV sous le portrait : les deux pastilles sont COLLÉES
+  // dans un même cadre noir, exactement comme `.stat-banner` sur le plateau.
+  // Aucune bordure interne propre aux pastilles : seul le filet séparateur.
   &__stats {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 190px;
+    width: 78px; // même largeur que le portrait, le bandeau s'aligne dessous
+    flex: 0 0 auto;
+    border: 2px solid #000;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.4);
+
+    .soldier-stat-badge {
+      flex: 1 1 0;
+      width: auto;
+      min-width: 0;
+      font-size: 18px;
+      padding: 2px;
+      border: none;
+      box-shadow: none;
+    }
+
+    .soldier-stat-badge + .soldier-stat-badge {
+      border-left: 2px solid #000;
+    }
   }
 
   // Rang d'attaque (RPG) affiché au-dessus de la barre d'attaque, séparé des
   // barres atk/pv par un petit filet.
+  // Rang / race sur la ligne d'identité, à droite des étoiles.
   &__atk-rank {
-    align-self: flex-start;
-    width: 100%;
-    margin-bottom: 6px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid $panel-edge;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -137,12 +210,16 @@
     color: #eed222;
   }
 
+  // Caractéristiques : une ligne « libellé … valeur » chacune, largeur juste
+  // suffisante pour que la valeur ne retombe pas sous son libellé.
   &__specs {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    font-size: 16px;
-    min-width: 150px;
+    gap: 3px;
+    font-size: 14px;
+    min-width: 230px;
+    padding-top: 4px;
+    border-top: 1px solid $panel-edge;
   }
 }
 
@@ -512,14 +589,18 @@
 
 .soldier-spec {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 22px;
 
   &__label {
     color: #a9a9a9;
+    white-space: nowrap;
   }
   &__value {
     color: #ffd766;
+    text-align: right;
   }
   // Icône d'affinité (feu / glace / foudre) affichée à la place du libellé.
   &__affinity {
@@ -535,21 +616,15 @@
   &__value--gain {
     color: #ffd766;
   }
-
-  // Boutons de choix du comportement (pilote automatique du soldat).
-  &__behaviors {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
 }
 
-// Bouton d'un comportement : discret au repos, doré quand il est actif.
-.behavior-btn {
-  padding: 2px 6px;
+// Sélecteur de comportement : une seule liste déroulante (« Choisir… » = aucun
+// comportement) au lieu d'une rangée de boutons, pour tenir sur une ligne.
+// Doré dès qu'un comportement est actif.
+.behavior-select {
+  padding: 1px 4px;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   color: #d5d5d5;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid #555;
@@ -566,5 +641,11 @@
     background: #ffd766;
     border-color: #ffd766;
     font-weight: 700;
+  }
+
+  // Le menu natif s'ouvre hors du panneau : options lisibles sur fond sombre.
+  option {
+    color: #e4e4e4;
+    background: #1c1c22;
   }
 }
