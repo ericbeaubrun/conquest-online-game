@@ -56,6 +56,12 @@ export const treeRarity = (tree) => {
     return TREE_RARITIES.find((r) => weight >= r.min) ?? TREE_RARITIES[TREE_RARITIES.length - 1];
 };
 
+// Essence la PLUS RARE du jeu : celle au coefficient d'apparition le plus
+// faible. Déduite comme les raretés (jamais saisie à la main) : rééquilibrer les
+// poids déplace automatiquement le défi « Ninja », qui s'appuie dessus.
+export const RAREST_TREE_KIND = TREE_KINDS.reduce((a, b) => (b.weight < a.weight ? b : a));
+export const isRarestTree = (tree) => treeKind(tree).id === RAREST_TREE_KIND.id;
+
 // Or gagné en abattant `tree`, à partir de la récompense de base configurée.
 // Arrondi à l'entier inférieur : les multiplicateurs fractionnaires (0,5 / 1,5)
 // ne doivent pas introduire d'or décimal dans les bourses.

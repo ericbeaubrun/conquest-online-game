@@ -2,9 +2,11 @@
 // Centralisées ici pour que le reducer, les sélecteurs et — plus tard — le
 // serveur du mode « online » partagent exactement les mêmes valeurs.
 
+import {isSkeleton} from '../data/units.js';
+
 export const MAX_MOVE = 2; // pas de déplacement maximum d'un soldat par tour
 export const MERGE_MAX = 5; // niveau maximum d'un soldat fusionné
-export const BASE_INCOME = 10; // or gagné par tour avant le bonus de territoire
+export const BASE_INCOME = 15; // or gagné par tour avant le bonus de territoire
 export const STARTING_GOLD = 0; // or de départ de chaque joueur
 export const HOUSE_INCOME = 10; // or/tour rapporté par chaque maison possédée
 
@@ -15,7 +17,10 @@ export const HOUSE_INCOME = 10; // or/tour rapporté par chaque maison possédé
 // (voir `upkeepFor` / `bonusUpkeep` dans soldier.js).
 export const SOLDIER_UPKEEP = {1: 2, 2: 4, 3: 8, 4: 16, 5: 32}; // par niveau de soldat
 export const SKELETON_UPKEEP = 1; // squelette invoqué (Mort-vivant / Démoniste)
-export const TOWER_UPKEEP = 10; // tour d'attaque ou de défense
+// Une tour est plus FAIBLE qu'un soldat du même prix (4/4 ou 8/1 contre 4/8
+// pour un lvl 3) et ne se déplace pas : son entretien doit donc rester bien
+// en-dessous du sien, sans quoi elle n'est jamais le bon achat.
+export const TOWER_UPKEEP = 4; // tour d'attaque ou de défense
 // Bâtiments : la maison rapporte (entretien négatif) ; base et arbres = 0.
 export const BUILDING_UPKEEP = {
     base: 0,
@@ -148,11 +153,17 @@ export function isTower(unit) {
 // égaux à sa propre attaque (dégâts SIMULTANÉS). Une unité dont les PV tombent
 // à 0 meurt (`dead`). Bonus « Viking » : un soldat-viking ne subit AUCUN dégât
 // d'une tour (dans les deux sens : qu'il l'attaque ou qu'une tour le frappe).
+// Bonus « Chevalier noir » : même principe face aux SQUELETTES — il ne prend
+// aucun dégât d'un squelette, qu'il l'attaque ou qu'il en soit attaqué.
 // Fonction PURE partagée par le reducer (application) et l'aperçu d'interface —
 // mêmes règles partout.
 export function combatResult(attacker, defender) {
-    const atkImmune = attacker?.bonus === 'viking' && isTower(defender);
-    const defImmune = defender?.bonus === 'viking' && isTower(attacker);
+    const atkImmune =
+        (attacker?.bonus === 'viking' && isTower(defender)) ||
+        (attacker?.bonus === 'blackKnight' && isSkeleton(defender));
+    const defImmune =
+        (defender?.bonus === 'viking' && isTower(attacker)) ||
+        (defender?.bonus === 'blackKnight' && isSkeleton(attacker));
     const atkHp = atkImmune ? (attacker.hp || 0) : Math.max(0, (attacker.hp || 0) - (defender.atk || 0));
     const defHp = defImmune ? (defender.hp || 0) : Math.max(0, (defender.hp || 0) - (attacker.atk || 0));
     return {

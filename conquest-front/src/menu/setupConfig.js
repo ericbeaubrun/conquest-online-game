@@ -58,7 +58,10 @@ const ITEM_COST_FIELDS = [...ITEMS, ...AFFINITY_ITEMS].map((it) => ({
     label: it.name,
     default: DEFAULT_SETTINGS.itemCost[it.id],
     min: 0,
-    max: 99,
+    // Les prix se comptent en dizaines depuis que la boutique est calée sur le
+    // revenu (soldat 25, maison 60) : un plafond à 99 interdirait d'en essayer
+    // de plus élevés.
+    max: 999,
     step: 1,
     unit: '💰',
 }));
@@ -382,7 +385,7 @@ export const GAME_SETTINGS = [
         group: 'Partie',
         type: 'number',
         min: 50,
-        max: 2000,
+        max: 10000,
         step: 50,
         unit: '💰',
         help: 'Or à accumuler pour gagner la course à l’or.',

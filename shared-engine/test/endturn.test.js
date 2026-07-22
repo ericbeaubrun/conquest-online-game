@@ -24,8 +24,10 @@ import {
     PRIEST_HP_COST,
     VAMPIRE_DRAIN,
     MAGICIAN_GOLD_REWARD,
-    KING_INCOME_MULT,
+    KING_HOUSE_INCOME_MULT,
+    BONUS_OFFERS,
 } from '../data/soldier.js';
+import { HOUSE_INCOME } from '../engine/rules.js';
 
 // Cases contiguës de la carte « duel » : '-4,0' est la base de p1, les trois
 // autres lui sont adjacentes et lui appartiennent au départ.
@@ -47,6 +49,19 @@ const soldier = (over = {}) => ({
     progress: {},
     ...over,
 });
+
+// Réglages neutralisant l'ENTRETIEN de tous les bonus. Les tests ci-dessous
+// mesurent l'EFFET d'un bonus par comparaison appariée (même plateau, seul le
+// bonus diffère) : son entretien fausserait la mesure, puisqu'il ne pèse que sur
+// la branche qui porte le bonus. Pire, un entretien supérieur au revenu ferait
+// tomber les DEUX branches à zéro (le revenu est borné à 0) et la comparaison ne
+// mesurerait plus rien. Les neutraliser rend ces tests indépendants de
+// l'équilibrage : changer un prix ne doit pas casser un test d'effet.
+const SANS_ENTRETIEN = {
+    settings: {
+        bonusUpkeep: Object.fromEntries(BONUS_OFFERS.map((b) => [b.id, 0])),
+    },
+};
 
 // Construit un état « de laboratoire » et joue UN END_TURN pour p1.
 // Les apparitions aléatoires (arbres, coffres) sont coupées pour que seul
@@ -123,20 +138,26 @@ test('Vampire : draine un allié adjacent à son profit', () => {
 
 // --- Magicien : transmet SON affinité et rapporte de l'or -------------------
 test('Magicien : transmet son affinité à un allié neutre et rapporte de l’or', () => {
-    const s = endTurnWith({
-        [A]: soldier({ uid: 1, bonus: 'magician', affinity: 'fire' }),
-        [B]: soldier({ uid: 2, affinity: null }),
-    });
+    const s = endTurnWith(
+        {
+            [A]: soldier({ uid: 1, bonus: 'magician', affinity: 'fire' }),
+            [B]: soldier({ uid: 2, affinity: null }),
+        },
+        SANS_ENTRETIEN
+    );
     assert.equal(at(s, B).affinity, 'fire');
     assert.ok(kinds(s).includes('bonusMagician'));
 
     // Contrôle APPARIÉ : même plateau, même entretien, seul le bonus diffère.
     // Comparer à une valeur absolue ne prouverait rien — le revenu de base la
     // dépasse déjà, et masquerait une récompense devenue nulle.
-    const temoin = endTurnWith({
-        [A]: soldier({ uid: 1, affinity: 'fire' }),
-        [B]: soldier({ uid: 2, affinity: null }),
-    });
+    const temoin = endTurnWith(
+        {
+            [A]: soldier({ uid: 1, affinity: 'fire' }),
+            [B]: soldier({ uid: 2, affinity: null }),
+        },
+        SANS_ENTRETIEN
+    );
     assert.equal(
         s.gold.p1 - temoin.gold.p1,
         MAGICIAN_GOLD_REWARD,
@@ -153,13 +174,28 @@ test('Magicien sans affinité : rien à transmettre', () => {
     assert.ok(!kinds(s).includes('bonusMagician'));
 });
 
-// --- Roi : +50 % de revenu ---------------------------------------------------
-test('Roi : majore le revenu du joueur', () => {
-    const sans = endTurnWith({ [A]: soldier({ uid: 1 }) });
-    const avec = endTurnWith({ [A]: soldier({ uid: 1, bonus: 'king' }) });
-    assert.ok(avec.gold.p1 > sans.gold.p1, 'le roi doit rapporter davantage');
+// --- Roi : les maisons rapportent double ------------------------------------
+test('Roi : double le rendement des maisons du joueur', () => {
+    const maison = { type: 'house', playerId: 'p1', hp: 2 };
+    const sans = endTurnWith({ [A]: soldier({ uid: 1 }), [B]: maison }, SANS_ENTRETIEN);
+    const avec = endTurnWith(
+        { [A]: soldier({ uid: 1, bonus: 'king' }), [B]: maison },
+        SANS_ENTRETIEN
+    );
+    assert.equal(
+        avec.gold.p1 - sans.gold.p1,
+        HOUSE_INCOME,
+        'une maison doit rapporter son rendement une seconde fois'
+    );
     assert.ok(kinds(avec).includes('bonusKing'));
-    assert.equal(KING_INCOME_MULT, 1.5, 'constante de référence inchangée');
+    assert.equal(KING_HOUSE_INCOME_MULT, 2, 'constante de référence inchangée');
+});
+
+test('Roi : sans maison, aucun revenu supplémentaire', () => {
+    const sans = endTurnWith({ [A]: soldier({ uid: 1 }) }, SANS_ENTRETIEN);
+    const avec = endTurnWith({ [A]: soldier({ uid: 1, bonus: 'king' }) }, SANS_ENTRETIEN);
+    assert.equal(avec.gold.p1, sans.gold.p1);
+    assert.ok(!kinds(avec).includes('bonusKing'));
 });
 
 // --- Conquérant : annexe les cases vides adjacentes -------------------------

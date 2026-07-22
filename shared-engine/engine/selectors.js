@@ -10,7 +10,7 @@ import {
     canFight,
     isAttackable,
 } from './rules.js';
-import {upkeepFor} from '../data/soldier.js';
+import {upkeepFor, KING_HOUSE_INCOME_MULT, RUNNER_MOVE_MULT} from '../data/soldier.js';
 import {canChopTree} from '../data/trees.js';
 import {getLogicalBoard} from './board.js';
 import {DOMINATION_PERCENT, ECONOMY_GOAL} from './settings.js';
@@ -36,7 +36,7 @@ export function computeReachable(state, board, startId) {
     const mover = placements.get(startId); // soldat qui se déplace (pour la fusion)
     // Bonus « Coureur » : portée de déplacement doublée à l'intérieur du
     // territoire (la conquête reste limitée à 1 case hors territoire).
-    const maxMove = mover?.bonus === 'runner' ? MAX_MOVE * 2 : MAX_MOVE;
+    const maxMove = mover?.bonus === 'runner' ? MAX_MOVE * RUNNER_MOVE_MULT : MAX_MOVE;
     // Bonus « Ninja » : déplacement « fantôme » — traverse TOUT (soldats
     // alliés/ennemis, structures, bases, arbres). Les cases occupées deviennent
     // des relais de passage (on ne s'arrête que sur une case libre). En revanche
@@ -222,13 +222,31 @@ export function treeUpkeepTotal(state, playerId) {
     return per * n;
 }
 
+// Bonus « Roi » : tant qu'un soldat du joueur porte ce bonus (et est en vie),
+// ses maisons rapportent `KING_HOUSE_INCOME_MULT` fois plus. Renvoie le SURPLUS
+// d'or ainsi gagné (0 sans roi ni maison) — le reste du revenu (base, cases,
+// entretiens) n'est pas touché. Lu par `incomeFor`, donc par l'interface ET par
+// la fin de tour : un seul et même revenu partout.
+export function kingHouseIncomeBonus(state, playerId) {
+    let hasKing = false;
+    let houses = 0;
+    for (const placed of state.placements.values()) {
+        if (placed.playerId !== playerId) continue;
+        if (placed.type === 'house') houses += 1;
+        else if (placed.type === 'soldier' && placed.bonus === 'king') hasKing = true;
+    }
+    if (!hasKing || !houses) return 0;
+    const perHouse = -upkeepFor({type: 'house'}, state.settings); // entretien négatif = rendement
+    return Math.max(0, Math.floor(perHouse * (KING_HOUSE_INCOME_MULT - 1)) * houses);
+}
+
 // Revenu d'un joueur pour un tour : base + 1 or par case possédée, moins
 // l'entretien de ses unités et de ses arbres (jamais négatif). Les maisons ayant
-// un entretien négatif, elles augmentent au contraire ce revenu. Le revenu de
-// base est configurable (retombe sur `BASE_INCOME` sinon).
+// un entretien négatif, elles augmentent au contraire ce revenu — doublé par le
+// bonus « Roi ». Le revenu de base est configurable (retombe sur `BASE_INCOME`).
 export function incomeFor(state, playerId) {
     const base = state.settings?.baseIncome ?? BASE_INCOME;
-    const gross = base + ownedCount(state, playerId);
+    const gross = base + ownedCount(state, playerId) + kingHouseIncomeBonus(state, playerId);
     return Math.max(0, gross - upkeepTotal(state, playerId) - treeUpkeepTotal(state, playerId));
 }
 

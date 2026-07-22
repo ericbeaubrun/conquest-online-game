@@ -36,7 +36,7 @@ import {
     SHIELD_AFFINITY,
 } from './rules.js';
 import {ITEM_COST, isAffinityItem} from '../data/items.js';
-import {treeReward, treeAffinity, canChopTree} from '../data/trees.js';
+import {treeReward, treeAffinity, canChopTree, isRarestTree} from '../data/trees.js';
 import {makeLoot, lootGold, lootHp, lootAtk, lootAffinity, lootUnit} from '../data/chests.js';
 import {
     CHALLENGE_METRICS,
@@ -44,6 +44,9 @@ import {
     bonusPriceOf,
     isBonusUnlocked,
     WARRIOR_KILL_REWARD,
+    LUMBERJACK_REWARD_MULT,
+    ADVENTURER_CASE_REWARD,
+    THIEF_ENEMY_CASE_REWARD,
     isSkeleton,
     canReceiveAffinity,
     purchasedSoldierStats,
@@ -103,11 +106,11 @@ function reduceMove(state, {fromId, toId}) {
     if (dest.kind === 'conquer') {
         ownership = new Map(ownership);
         ownership.set(toId, state.activePlayerId);
-        // Bonus « Aventurier » : récolte 1 or par case conquise. Bonus
-        // « Voleur » : 1 or supplémentaire par case volée à un adversaire.
+        // Bonus « Aventurier » : prime par case conquise. Bonus « Voleur » :
+        // prime par case volée à un adversaire (barèmes dans `soldier.js`).
         let reward = 0;
-        if (soldier.bonus === 'adventurer') reward += 1;
-        if (soldier.bonus === 'thief' && isEnemyCase) reward += 1;
+        if (soldier.bonus === 'adventurer') reward += ADVENTURER_CASE_REWARD;
+        if (soldier.bonus === 'thief' && isEnemyCase) reward += THIEF_ENEMY_CASE_REWARD;
         if (reward > 0) {
             const purse = state.gold[state.activePlayerId] || 0;
             gold = {...state.gold, [state.activePlayerId]: purse + reward};
@@ -305,23 +308,19 @@ function reduceAttack(state, {fromId, toId}) {
         }
     }
 
-    // Défi & bonus « Chevalier noir » : tuer un squelette au combat le crédite
-    // (débloque le bonus), et un chevalier noir équipé ABSORBE ses statistiques
-    // (les additionne aux siennes, comme une fusion, plafonnées).
+    // Défi « Chevalier noir » : tuer un squelette au combat le crédite (débloque
+    // le bonus). Le bonus lui-même est une IMMUNITÉ aux squelettes : elle est
+    // appliquée par `combatResult` (aucun dégât reçu), on la notifie seulement ici.
     if (!attacker.dead && isSkeleton(deadDefender)) {
         const alive = placements.get(attackerFinalId);
         if (alive?.uid === from.uid) {
-            let knight = withProgress(alive, CHALLENGE_METRICS.SKELETONS_KILLED, 1);
-            if (from.bonus === 'blackKnight') {
-                knight = {
-                    ...knight,
-                    hp: Math.min((knight.hp || 0) + (to.hp || 0), SOLDIER_HP_MAX),
-                    atk: Math.min((knight.atk || 0) + (to.atk || 0), SOLDIER_ATK_MAX),
-                };
-                events.push({kind: 'bonusBlackKnight', playerId: from.playerId});
-            }
-            placements.set(attackerFinalId, knight);
+            placements.set(attackerFinalId, withProgress(alive, CHALLENGE_METRICS.SKELETONS_KILLED, 1));
         }
+    }
+    if (from.bonus === 'blackKnight' && isSkeleton(to)) {
+        events.push({kind: 'bonusBlackKnight', playerId: from.playerId});
+    } else if (to?.bonus === 'blackKnight' && isSkeleton(from)) {
+        events.push({kind: 'bonusBlackKnight', playerId: to.playerId});
     }
 
     // Bonus « Guerrier » : tuer un ennemi (soldat ou tour) rapporte une prime,
@@ -401,12 +400,16 @@ function reduceChop(state, {fromId, toId}) {
         );
     }
 
-    // Avancement des défis : +1 arbre abattu, et +1 si l'arbre était sur une
-    // case possédée par un adversaire (territoire ennemi).
+    // Avancement des défis : +1 arbre abattu, +1 si l'arbre était sur une case
+    // possédée par un adversaire (territoire ennemi), et +1 s'il s'agissait de
+    // l'essence la plus rare du jeu (défi « Ninja »).
     let chopper = withProgress(from, CHALLENGE_METRICS.TREES_CHOPPED, 1);
     const treeOwner = state.ownership.get(toId);
     if (treeOwner != null && treeOwner !== state.activePlayerId) {
         chopper = withProgress(chopper, CHALLENGE_METRICS.ENEMY_TREES_CHOPPED, 1);
+    }
+    if (isRarestTree(tree)) {
+        chopper = withProgress(chopper, CHALLENGE_METRICS.RAREST_TREES_CHOPPED, 1);
     }
 
     // Arbre élémentaire abattu par un soldat SANS affinité : l'élément de
@@ -439,7 +442,7 @@ function reduceChop(state, {fromId, toId}) {
     const baseReward = state.settings?.treeReward ?? TREE_REWARD;
     // Récompense modulée par l'essence de l'arbre ; le bonus « Bûcheron » la double.
     const kindReward = treeReward(tree, baseReward);
-    const reward = from.bonus === 'lumberjack' ? kindReward * 2 : kindReward;
+    const reward = from.bonus === 'lumberjack' ? kindReward * LUMBERJACK_REWARD_MULT : kindReward;
     const purse = state.gold[state.activePlayerId] || 0;
     const gold = {...state.gold, [state.activePlayerId]: purse + reward};
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);

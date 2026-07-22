@@ -117,7 +117,7 @@ export function describeEvent(event, state) {
         case 'bonusUndead':
             return {tone: 'bonus', color, text: `${side} — Mort-vivant : squelette laissé sur place`};
         case 'bonusBlackKnight':
-            return {tone: 'bonus', color, text: `${side} — Chevalier noir : statistiques du squelette absorbées`};
+            return {tone: 'bonus', color, text: `${side} — Chevalier noir : insensible au squelette, aucun dégât subi`};
         case 'bonusDruid':
             return {tone: 'bonus', color, text: `${side} — Druide : arbre transformé en allié`};
         case 'bonusFarmer':
@@ -139,7 +139,7 @@ export function describeEvent(event, state) {
         case 'bonusSorcererDragon':
             return {tone: 'bonus', color, text: `${side} — Sorcier : dragon invoqué`};
         case 'bonusKing':
-            return {tone: 'bonus', color, text: `${side} — Roi : +${event.amount} or de revenu`};
+            return {tone: 'bonus', color, text: `${side} — Roi : maisons doublées, +${event.amount} or`};
 
         default:
             return null;

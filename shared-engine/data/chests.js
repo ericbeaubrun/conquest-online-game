@@ -25,12 +25,18 @@ export const CHEST_SRC = '/characters/chest.png';
 
 export const LOOT_KINDS = [
     // --- Or (47 %) : plus la somme est grosse, plus elle est rare ---
-    {id: 'gold5', label: '5 or', src: '/coin.png', weight: 14, gold: 5},
-    {id: 'gold10', label: '10 or', src: '/coin.png', weight: 12, gold: 10},
-    {id: 'gold20', label: '20 or', src: '/coin.png', weight: 10, gold: 20},
-    {id: 'gold30', label: '30 or', src: '/coin.png', weight: 6, gold: 30},
-    {id: 'gold40', label: '40 or', src: '/coin.png', weight: 3, gold: 40},
-    {id: 'gold50', label: '50 or', src: '/coin.png', weight: 2, gold: 50},
+    // ATTENTION : l'`id` est une clé de TRANSPORT (il voyage sur le réseau et
+    // dort dans les parties sauvegardées) ; il ne suit donc PAS le montant quand
+    // celui-ci est rééquilibré. `gold5` vaut 15 or, et c'est normal — seul
+    // `gold` fait foi. Les montants sont calés sur la boutique : le plus gros
+    // coffre vaut ~1,5 soldat de niveau 2, un beau coup de chance mais jamais
+    // une partie gagnée.
+    {id: 'gold5', label: '15 or', src: '/coin.png', weight: 14, gold: 15},
+    {id: 'gold10', label: '30 or', src: '/coin.png', weight: 12, gold: 30},
+    {id: 'gold20', label: '60 or', src: '/coin.png', weight: 10, gold: 60},
+    {id: 'gold30', label: '90 or', src: '/coin.png', weight: 6, gold: 90},
+    {id: 'gold40', label: '120 or', src: '/coin.png', weight: 3, gold: 120},
+    {id: 'gold50', label: '150 or', src: '/coin.png', weight: 2, gold: 150},
     // --- Statistiques (20 %) ---
     {id: 'heart', label: 'Cœur', src: '/heart.png', weight: 10, hp: 1},
     {id: 'sword', label: 'Épée', src: '/sword.png', weight: 10, atk: 1},

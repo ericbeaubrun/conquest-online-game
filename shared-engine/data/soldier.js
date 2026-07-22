@@ -16,6 +16,7 @@ import {
 } from '../engine/rules.js';
 import { ITEM_COST } from './items.js';
 import { isSkeleton, isSummonedUnit, unitUpkeep, unitLabel, unitKindById } from './units.js';
+import { RAREST_TREE_KIND } from './trees.js';
 
 // Un couple de statistiques au format « ATK/PV » — la convention d'affichage du
 // jeu (le Prêtre est un 1/32, le Vampire un 8/1).
@@ -55,7 +56,8 @@ export const AFFINITIES = [
 // de ces métriques se débloque quand l'objectif est atteint.
 export const CHALLENGE_METRICS = {
     TREES_CHOPPED: 'treesChopped', // arbres abattus (n'importe où)
-ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
+    ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
+    RAREST_TREES_CHOPPED: 'rarestTreesChopped', // arbres de l'essence la plus rare abattus
     CASES_CONQUERED: 'casesConquered', // cases conquises
     ENEMY_CASES_CONQUERED: 'enemyCasesConquered', // cases volées à un adversaire
     CASES_TRAVELED_OWN: 'casesTraveledOwn', // cases parcourues dans son territoire
@@ -93,6 +95,22 @@ export {isSkeleton, isSummonedUnit};
 export const canReceiveAffinity = (u) =>
     !!u && u.type === 'soldier' && u.affinity == null;
 
+// Bonus « Bûcheron » : multiplicateur appliqué à l'or d'abattage d'un arbre,
+// APRÈS le multiplicateur d'essence (voir `treeReward` dans `trees.js`).
+export const LUMBERJACK_REWARD_MULT = 2;
+
+// Bonus « Aventurier » : or récolté à chaque case conquise, quelle qu'elle soit.
+export const ADVENTURER_CASE_REWARD = 1;
+
+// Bonus « Voleur » : or récolté par case prise à un ADVERSAIRE (une case neutre
+// ne rapporte rien). Un soldat ne portant qu'un seul bonus, cette prime et celle
+// de l'Aventurier ne se rencontrent jamais sur la même unité.
+export const THIEF_ENEMY_CASE_REWARD = 1;
+
+// Bonus « Coureur » : multiplicateur de la portée de déplacement à l'intérieur
+// du territoire (la conquête reste limitée à 1 case hors territoire).
+export const RUNNER_MOVE_MULT = 2;
+
 // Bonus « Alchimiste » : à chaque fin de tour de son propriétaire, il transmute
 // sa propre chair en arme — il se retire des PV pour armer l'allié adjacent le
 // moins offensif. Même logique d'échange que le « Prêtre », dans l'autre sens.
@@ -107,10 +125,11 @@ export const PRIEST_HP_COST = 1; // PV que le prêtre se retire en échange
 // Bonus « Magicien » : à chaque fin de tour de son propriétaire, il transmet SA
 // PROPRE affinité à UN allié adjacent sans affinité, et rapporte cette prime
 // d'or à chaque don.
-export const MAGICIAN_GOLD_REWARD = 10;
+export const MAGICIAN_GOLD_REWARD = 30;
 
-// Bonus « Guerrier » : chaque ennemi qu'il tue rapporte cette prime d'or.
-export const WARRIOR_KILL_REWARD = 20;
+// Bonus « Guerrier » : chaque ennemi qu'il tue rapporte cette prime d'or. Calée
+// sur le prix d'un soldat de base : trois victimes financent un remplaçant.
+export const WARRIOR_KILL_REWARD = 60;
 
 // Bonus « Démoniste » : à chaque fin de tour il invoque un squelette allié
 // (l'espèce « skeleton2 » du catalogue `units.js`) sur une case voisine libre.
@@ -161,7 +180,7 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl1/lumberJack.png',
         requiredLevel: 1,
         stats: {atk: 1, hp: 2},
-        price: 10,
+        price: 40,
         challenge: {
             metric: CHALLENGE_METRICS.TREES_CHOPPED,
             goal: 5,
@@ -175,7 +194,7 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl1/aventurer.png',
         requiredLevel: 1,
         stats: {atk: 1, hp: 2},
-        price: 10,
+        price: 40,
         challenge: {
             metric: CHALLENGE_METRICS.CASES_CONQUERED,
             goal: 10,
@@ -203,7 +222,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl2/farmer.png',
         requiredLevel: 1,
         stats: {atk: 1, hp: 2},
-        price: 20,
+        price: 50,
+        upkeep: 2,
         challenge: {
             metric: CHALLENGE_METRICS.ENEMY_TREES_CHOPPED,
             goal: 1,
@@ -219,7 +239,7 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl2/thief.png',
         requiredLevel: 2,
         stats: {atk: 2, hp: 4},
-        price: 10,
+        price: 80,
         challenge: {
             metric: CHALLENGE_METRICS.ENEMY_CASES_CONQUERED,
             goal: 10,
@@ -234,6 +254,7 @@ export const BONUS_OFFERS = [
         requiredLevel: 2,
         stats: {atk: 2, hp: 4},
         price: null,
+        upkeep: 2,
         challenge: {
             metric: CHALLENGE_METRICS.ENEMIES_KILLED_L2,
             goal: 1,
@@ -247,8 +268,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl2/viking.png',
         requiredLevel: 2,
         stats: {atk: 2, hp: 4},
-        price: 40,
-        upkeep: 10,
+        price: 90,
+        upkeep: 4,
         challenge: {
             metric: CHALLENGE_METRICS.TOWER_KINDS_OWNED,
             goal: 2,
@@ -265,7 +286,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl2/GoldWarrior.png',
         requiredLevel: 2,
         stats: WARRIOR_STATS,
-        price: 50,
+        price: 140,
+        upkeep: 4,
         challenge: {
             metric: CHALLENGE_METRICS.COMBATS_SURVIVED,
             goal: 3,
@@ -286,10 +308,14 @@ export const BONUS_OFFERS = [
         requiredLevel: 3,
         stats: {atk: 2, hp: 8},
         price: null,
+        upkeep: 4,
         challenge: {
-            metric: CHALLENGE_METRICS.CHESTS_OPENED,
+            metric: CHALLENGE_METRICS.RAREST_TREES_CHOPPED,
             goal: 1,
-            describe: (c, g) => `Ouvrir ${c}/${g} coffre.`,
+            describe: (c, g) =>
+                c >= g
+                    ? `${RAREST_TREE_KIND.label} abattu.`
+                    : `Abattre un ${RAREST_TREE_KIND.label.toLowerCase()} (l’arbre le plus rare).`,
         },
         effect: 'Se déplace à travers tout (soldats, structures, arbres), mais ne peut pas attaquer à travers un obstacle.',
     },
@@ -299,8 +325,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl3/vampire.png',
         requiredLevel: 3,
         stats: {atk: 8, hp: 1},
-        price: 120,
-        upkeep: 1,
+        price: 160,
+        upkeep: 5,
         challenge: {
             metric: CHALLENGE_METRICS.NO_TREES_ON_TERRITORY,
             goal: 1,
@@ -315,7 +341,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl3/magicien.png',
         requiredLevel: 3,
         stats: {atk: 2, hp: 2},
-        price: 50,
+        price: 100,
+        upkeep: 2,
         challenge: {
             metric: CHALLENGE_METRICS.HAS_AFFINITY,
             goal: 1,
@@ -329,12 +356,12 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl3/alchemist.png',
         requiredLevel: 3,
         stats: {atk: 1, hp: 16},
-        price: 76,
+        price: 150,
         upkeep: 5,
         challenge: {
-            metric: CHALLENGE_METRICS.HOUSES_OWNED,
-            goal: 2,
-            describe: (c, g) => (c >= g ? `${g} maisons possédées.` : `Posséder ${c}/${g} maisons.`),
+            metric: CHALLENGE_METRICS.CHESTS_OPENED,
+            goal: 1,
+            describe: (c, g) => `Ouvrir ${c}/${g} coffre.`,
         },
         effect: 'Se retire 1 PV pour donner +1 atk à l’allié adjacent le moins offensif.',
     },
@@ -346,8 +373,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl4/pretre.png',
         requiredLevel: 4,
         stats: {atk: 1, hp: 32},
-        price: 30,
-        upkeep: 12,
+        price: 280,
+        upkeep: 10,
         challenge: {
             metric: CHALLENGE_METRICS.HOUSES_OWNED,
             goal: 2,
@@ -361,14 +388,14 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl4/darkWarrior.png',
         requiredLevel: 4,
         stats: {atk: 8, hp: 12},
-        price: 40,
-        upkeep: 10,
+        price: 240,
+        upkeep: 8,
         challenge: {
             metric: CHALLENGE_METRICS.SKELETONS_KILLED,
             goal: 1,
             describe: (c, g) => (c >= g ? 'Squelette tué ou possédé.' : 'Tuer ou posséder un squelette.'),
         },
-        effect: 'Absorbe les stats des squelettes qu’il tue (comme une fusion).',
+        effect: 'Est insensible aux squelettes : il ne prend aucun dégât de leur part.',
     },
     {
         id: 'paladin',
@@ -376,8 +403,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl4/paladin.png',
         requiredLevel: 4,
         stats: {atk: 8, hp: 12},
-        price: 100,
-        upkeep: 20,
+        price: 320,
+        upkeep: 15,
         challenge: {
             metric: CHALLENGE_METRICS.PALADIN_IDLE_TURNS,
             goal: PALADIN_IDLE_TURNS,
@@ -413,7 +440,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl5/sorceler.png',
         requiredLevel: 5,
         stats: {atk: 4, hp: 1},
-        price: 100,
+        price: 500,
+        upkeep: 20,
         challenge: {
             metric: CHALLENGE_METRICS.NO_SORCERER_ON_BOARD,
             goal: 1,
@@ -427,8 +455,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl5/demonist.png',
         requiredLevel: 5,
         stats: WARLOCK_STATS,
-        price: 100,
-        upkeep: 40,
+        price: 450,
+        upkeep: 30,
         challenge: {
             metric: CHALLENGE_METRICS.NO_WARLOCK_ON_BOARD,
             goal: 1,
@@ -442,13 +470,14 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl5/king.png',
         requiredLevel: 5,
         stats: {atk: 1, hp: 2},
-        price: 100,
+        price: 400,
+        upkeep: 25,
         challenge: {
             metric: CHALLENGE_METRICS.NO_KING_ON_BOARD,
             goal: 1,
             describe: (c, g) => (c >= g ? 'Aucun roi sur le terrain.' : 'Qu’aucun roi ne soit sur le terrain.'),
         },
-        effect: 'Tant qu’il est en vie, +50% d’or gagné par tour.',
+        effect: 'Tant qu’il est en vie, les maisons rapportent 2x plus d’or par tour.',
     },
     {
         id: 'conqueror',
@@ -456,8 +485,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl5/conquerant.png',
         requiredLevel: 5,
         stats: {atk: 4, hp: 4},
-        price: 100,
-        upkeep: 20,
+        price: 550,
+        upkeep: 30,
         challenge: {
             metric: CHALLENGE_METRICS.NO_CONQUEROR_ON_BOARD,
             goal: 1,
@@ -467,9 +496,10 @@ export const BONUS_OFFERS = [
     },
 ];
 
-// Bonus « Roi » : multiplicateur appliqué au revenu de fin de tour du joueur
-// tant qu'un de ses soldats porte ce bonus (est en vie).
-export const KING_INCOME_MULT = 1.5;
+// Bonus « Roi » : multiplicateur appliqué au SEUL rendement des maisons du
+// joueur, à la fin de son tour, tant qu'un de ses soldats porte ce bonus (est
+// en vie). Le reste du revenu (base, cases, entretiens) n'est pas touché.
+export const KING_HOUSE_INCOME_MULT = 2;
 
 // Bonus « Sorcier » : à la fin du tour de son propriétaire, il ENVOÛTE les
 // soldats ENNEMIS portant l'un des trois autres bonus de niveau 5. Le soldat

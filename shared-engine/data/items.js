@@ -2,11 +2,16 @@
 
 import { AFFINITY_IDS } from '../engine/rules.js';
 
+// Les prix sont calés sur le REVENU, pas sur une échelle arbitraire : un joueur
+// démarre à 15 or/tour + 1 or par case possédée (4 au départ), soit 19 or au
+// premier tour. Un soldat de base vaut donc ~1,5 tour de revenu, une maison ~3
+// tours et s'amortit en 6. Sans ce calage, l'or ne limite plus rien et les
+// seules contraintes du jeu redeviennent la place sur le plateau et l'entretien.
 export const ITEMS = [
-    { id: 'house', name: 'Maison', src: '/house.png', cost: 2 },
-    { id: 'attackTower', name: "Tour d'attaque", src: '/attackTower.png', cost: 3 },
-    { id: 'defenseTower', name: 'Tour de défense', src: '/defenseTower.png', cost: 3 },
-    { id: 'soldier', name: 'Soldat', src: '/characters/lvl1/SoldierLVL1.png', cost: 1 },
+    { id: 'house', name: 'Maison', src: '/house.png', cost: 60 },
+    { id: 'attackTower', name: "Tour d'attaque", src: '/attackTower.png', cost: 60 },
+    { id: 'defenseTower', name: 'Tour de défense', src: '/defenseTower.png', cost: 60 },
+    { id: 'soldier', name: 'Soldat', src: '/characters/lvl1/SoldierLVL1.png', cost: 25 },
 ];
 
 // Affinités achetables en boutique. Contrairement aux ITEMS, elles ne se posent
@@ -15,9 +20,12 @@ export const ITEMS = [
 // `canReceiveAffinity` et `reducePlaceAffinity`). Leur id est celui de
 // l'affinité elle-même, ce qui fait de leur achat un `PLACE_ITEM` ordinaire.
 export const AFFINITY_ITEMS = [
-    { id: 'fire', name: 'Feu', src: '/fire.png', cost: 5 },
-    { id: 'ice', name: 'Glace', src: '/ice.png', cost: 5 },
-    { id: 'lightning', name: 'Foudre', src: '/thunder.png', cost: 5 },
+    // Une affinité rend son porteur INCAPABLE de se battre contre la même
+    // affinité : c'est une immunité partielle, pas un ornement. D'où un prix
+    // supérieur à celui d'un soldat neuf.
+    { id: 'fire', name: 'Feu', src: '/fire.png', cost: 40 },
+    { id: 'ice', name: 'Glace', src: '/ice.png', cost: 40 },
+    { id: 'lightning', name: 'Foudre', src: '/thunder.png', cost: 40 },
 ];
 
 // Cet item de boutique est-il une affinité (et non un item posable sur une case) ?

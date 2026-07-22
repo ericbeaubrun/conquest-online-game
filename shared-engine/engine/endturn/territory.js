@@ -4,22 +4,24 @@ import {getNeighbors, hexId} from '../../data/hex.js';
 import {
     CHALLENGE_METRICS,
     PALADIN_IDLE_TURNS,
-    KING_INCOME_MULT,
     isSummonedUnit,
     unlockedBonusIds,
 } from '../../data/soldier.js';
+import {kingHouseIncomeBonus} from '../selectors.js';
 import {soldiersWithBonus} from './helpers.js';
 
-// Bonus « Roi » : tant qu'un soldat-roi du joueur est en vie, +50 % de revenu.
+// Bonus « Roi » : tant qu'un soldat-roi du joueur est en vie, ses maisons
+// rapportent KING_HOUSE_INCOME_MULT fois plus. Le surplus est DÉJÀ compris dans
+// `ctx.income` (calculé par `incomeFor`, source unique lue aussi par
+// l'interface) : cet effet ne fait que le NOTIFIER.
 // Premier effet du pipeline — son évènement ouvre donc le journal du tour.
 export function applyKingIncome(ctx) {
-    const {state, events, placements, income} = ctx;
+    const {state, events} = ctx;
     const pid = state.activePlayerId;
-    if (!soldiersWithBonus(placements, pid, 'king').length) return ctx;
-    const boosted = Math.floor(income * KING_INCOME_MULT);
-    if (boosted <= income) return ctx;
-    events.push({kind: 'bonusKing', playerId: pid, amount: boosted - income});
-    return {...ctx, income: boosted};
+    const amount = kingHouseIncomeBonus(state, pid);
+    if (amount <= 0) return ctx;
+    events.push({kind: 'bonusKing', playerId: pid, amount});
+    return ctx;
 }
 
 // Défi « Paladin » : un soldat qui termine son tour SANS AVOIR AGI (ni déplacé,
