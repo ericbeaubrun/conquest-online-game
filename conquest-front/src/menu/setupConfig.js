@@ -5,7 +5,7 @@
 
 import { MAPS, DEFAULT_MAP_ID } from '@conquest/shared-engine/data/maps.js';
 import { DEFAULT_SETTINGS } from '@conquest/shared-engine/engine/settings.js';
-import { ITEMS, AFFINITY_ITEMS } from '@conquest/shared-engine/data/items.js';
+import { ITEMS, AFFINITY_ITEMS, SACRIFICE_POTION_ITEM } from '@conquest/shared-engine/data/items.js';
 import { BONUS_OFFERS } from '@conquest/shared-engine/data/soldier.js';
 
 // --- Palette de couleurs des joueurs ---
@@ -14,7 +14,8 @@ import { BONUS_OFFERS } from '@conquest/shared-engine/data/soldier.js';
 import { COLOR_PALETTE } from '@conquest/shared-engine/data/colors.js';
 export { COLOR_PALETTE };
 
-// --- Difficultés de bot ---
+// Difficultés de bot proposées à la sélection (l'algorithme reste vierge pour
+// l'instant : la difficulté n'est encore qu'une étiquette).
 export const BOT_DIFFICULTIES = [
     { id: 'easy', label: 'Débutant' },
     { id: 'normal', label: 'Équilibré' },
@@ -53,7 +54,7 @@ export function makeDefaultPlayers(count = MIN_PLAYERS) {
 // --- Sous-champs des réglages « groupe » (barèmes détaillés) ---
 // Chaque groupe édite un objet { clé -> nombre } ; les valeurs par défaut sont
 // tirées de DEFAULT_SETTINGS (source de vérité du moteur).
-const ITEM_COST_FIELDS = [...ITEMS, ...AFFINITY_ITEMS].map((it) => ({
+const ITEM_COST_FIELDS = [...ITEMS, ...AFFINITY_ITEMS, SACRIFICE_POTION_ITEM].map((it) => ({
     key: it.id,
     label: it.name,
     default: DEFAULT_SETTINGS.itemCost[it.id],
@@ -74,6 +75,7 @@ const UPKEEP_FIELDS = [
     { key: 'soldier5', label: 'Soldat niv. 5' },
     { key: 'tower', label: 'Tour' },
     { key: 'skeleton', label: 'Squelette' },
+    { key: 'skeleton2', label: 'Squelette (Démoniste)' },
 ].map((f) => ({ ...f, default: DEFAULT_SETTINGS.upkeep[f.key], min: 0, max: 99, step: 1, unit: '/tour' }));
 
 const BONUS_PRICE_FIELDS = BONUS_OFFERS.map((b) => ({
@@ -81,7 +83,9 @@ const BONUS_PRICE_FIELDS = BONUS_OFFERS.map((b) => ({
     label: b.label,
     default: DEFAULT_SETTINGS.bonusPrice[b.id],
     min: 0,
-    max: 999,
+    // Le plafond doit rester au-dessus du bonus le plus cher (le Roi, 2000) :
+    // un maximum trop bas ROGNERAIT silencieusement le prix par défaut affiché.
+    max: 9999,
     step: 5,
     unit: '💰',
 }));
@@ -90,7 +94,8 @@ const BONUS_UPKEEP_FIELDS = BONUS_OFFERS.map((b) => ({
     key: b.id,
     label: b.label,
     default: DEFAULT_SETTINGS.bonusUpkeep[b.id],
-    min: 0,
+    // Positif = le bonus COÛTE de l'or par tour ; négatif = il en RAPPORTE.
+    min: -99,
     max: 99,
     step: 1,
     unit: '/tour',
@@ -301,7 +306,7 @@ export const GAME_SETTINGS = [
         group: 'Unités',
         type: 'number',
         min: 1,
-        max: 32,
+        max: 16,
         step: 1,
         unit: '❤',
         help: 'Points de vie d’un soldat de niveau 1. Les niveaux supérieurs suivent les mêmes proportions.',

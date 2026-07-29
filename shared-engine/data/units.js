@@ -46,18 +46,22 @@ export const UNIT_KINDS = [
         unit: 'skeleton', // même espèce que ci-dessus, en plus robuste
         label: 'Squelette',
         src: '/characters/lvl5/skeleton2.png',
-        hp: 2,
+        hp: 3,
         atk: 2,
         level: 1,
-        upkeep: 1,
+        upkeep: 8, // squelette du « Démoniste » : la contrepartie d'une armée gratuite
     },
     {
         id: 'druidTree',
         label: 'Arbre-druide',
         src: '/characters/lvl4/druidTree.png',
         hp: 2,
-        atk: 2,
+        atk: 6,
         level: 2,
+        // Le « Druide » est gratuit et sans entretien : c'est ICI qu'il paie.
+        // Chaque arbre transformé pèse lourd sur le revenu — annoncé dans le
+        // texte du bonus, qui lit cette valeur (voir `unitUpkeepText`).
+        upkeep: 16,
     },
     {
         id: 'dragon',
@@ -66,6 +70,7 @@ export const UNIT_KINDS = [
         hp: 16,
         atk: 16,
         level: 1,
+        upkeep: 0, // le prix du dragon est celui du « Sorcier » : il ne coûte rien ensuite
         scale: 1.6, // colosse : son sprite déborde de sa case
         faces: 'left', // dessiné tête à gauche, à rebours de la convention
     },
@@ -78,6 +83,7 @@ export const UNIT_KINDS = [
         hp: 1,
         atk: 2,
         level: 1,
+        upkeep: 1,
     },
     // --- Créatures d'envoûtement (bonus « Sorcier ») ---
     // Elles REMPLACENT un soldat existant : il garde son propriétaire, sa case
@@ -99,9 +105,15 @@ for (const k of UNIT_KINDS) {
     if (!BY_UNIT[marker]) BY_UNIT[marker] = k;
 }
 
-// Espèce d'une unité POSÉE (d'après son marqueur), ou `null` pour un soldat
-// ordinaire — qui n'appartient à aucune de ces espèces.
-export const unitKind = (u) => (u?.unit ? BY_UNIT[u.unit] ?? null : null);
+// Espèce d'une unité POSÉE, ou `null` pour un soldat ordinaire — qui
+// n'appartient à aucune de ces espèces.
+//
+// L'ENTRÉE EXACTE du catalogue (`kindId`, écrite à la fabrication) prime sur le
+// marqueur : deux entrées partagent un marqueur (les deux squelettes) mais pas
+// leurs caractéristiques — celui du Démoniste coûte deux fois plus cher. Les
+// unités d'avant l'ajout de `kindId` retombent sur le marqueur, comme avant.
+export const unitKind = (u) =>
+    (u?.kindId ? BY_ID[u.kindId] ?? null : null) ?? (u?.unit ? BY_UNIT[u.unit] ?? null : null);
 
 // Espèce par identifiant de catalogue (pour fabriquer une unité neuve).
 export const unitKindById = (id) => BY_ID[id] ?? null;

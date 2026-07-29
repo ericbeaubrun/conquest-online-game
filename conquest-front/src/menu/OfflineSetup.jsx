@@ -1,7 +1,7 @@
 // Page de configuration d'une partie HORS-LIGNE. Objectif : un maximum de
 // personnalisation via des champs et des toggles. Trois sections :
 //   1. Carte      — choisit le plateau (fixe la capacité en joueurs).
-//   2. Joueurs    — ajoute/retire des joueurs, Humain/Bot, difficulté, couleur, nom.
+//   2. Joueurs    — ajoute/retire des joueurs, couleur, nom.
 //   3. Réglages   — paramètres d'équilibrage rendus depuis un schéma déclaratif
 //                   (voir setupConfig.js) pour pouvoir en ajouter/retirer facilement.
 // Un bandeau collant en bas lance la partie.
@@ -15,7 +15,7 @@ import {
     makeDefaultPlayer,
     defaultSettings,
 } from './setupConfig.js';
-import { Segmented, ColorPicker, AdvancedSettings } from './SetupControls.jsx';
+import { ColorPicker, AdvancedSettings, Segmented } from './SetupControls.jsx';
 
 // --- Ligne d'un joueur ---
 const PlayerRow = ({ index, player, usedColors, canRemove, onChange, onRemove }) => {
@@ -33,19 +33,20 @@ const PlayerRow = ({ index, player, usedColors, canRemove, onChange, onRemove })
             <Segmented
                 size="sm"
                 options={[
-                    { value: 'human', label: 'Joueur' },
+                    { value: 'human', label: 'Humain' },
                     { value: 'bot', label: 'Bot' },
                 ]}
                 value={player.kind}
                 onChange={(kind) => onChange({ ...player, kind })}
             />
 
-            {/* Le nom est saisissable pour un joueur ; un bot est nommé par sa difficulté. */}
+            {/* Le nom est saisissable pour un humain ; un bot est nommé par sa
+                difficulté (choisie ici même). */}
             {isBot ? (
                 <Segmented
                     size="sm"
                     options={BOT_DIFFICULTIES.map((d) => ({ value: d.id, label: d.label }))}
-                    value={player.botDifficulty}
+                    value={player.botDifficulty || 'normal'}
                     onChange={(botDifficulty) => onChange({ ...player, botDifficulty })}
                 />
             ) : (

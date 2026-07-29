@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { deserializeState } from '@conquest/shared-engine/engine/serialize.js';
 import { gameReducer } from '@conquest/shared-engine/engine/reducer.js';
+import { restoreTurnStart } from '@conquest/shared-engine/engine/turnReset.js';
 
 const SERVER_URL = import.meta.env?.VITE_SERVER_URL || 'http://localhost:3000';
 
@@ -46,6 +47,13 @@ export function useOnlineSession() {
     // à reprendre. `null` = aucun choix en attente (salle d'attente, ou déjà placé).
     const [seatOptions, setSeatOptions] = useState(null);
     const serverStateRef = useRef(null); // dernier état reçu du serveur (autorité), pour rollback
+    // Point de retour du tour courant, pris sur les états FAISANT AUTORITÉ (jamais
+    // sur un état optimiste). Le serveur garde le sien — seul valable — ; celui-ci
+    // ne sert qu'à afficher la restitution sans attendre l'aller-retour.
+    const turnStartRef = useRef(null);
+    // Un coup a-t-il été joué depuis le début du tour ? Pilote l'activation du
+    // bouton (un retour arrière « à vide » n'aurait rien à restituer).
+    const [turnDirty, setTurnDirty] = useState(false);
 
     useEffect(() => {
         const socket = io(SERVER_URL, { transports: ['websocket'] });
@@ -88,6 +96,16 @@ export function useOnlineSession() {
         socket.on('game:state', (raw) => {
             const s = deserializeState(raw);
             serverStateRef.current = s;
+            // Nouveau tour (la main a changé) ou nouvelle partie (le compteur de
+            // tours est reparti) : cet état devient le point de retour. Sinon on
+            // conserve celui du tour en cours — y compris quand l'état reçu est
+            // justement une restitution, qui ne doit pas se prendre elle-même
+            // pour un nouveau départ.
+            const prev = turnStartRef.current;
+            if (!prev || prev.activePlayerId !== s.activePlayerId || prev.turn !== s.turn) {
+                turnStartRef.current = s;
+                setTurnDirty(false);
+            }
             setGameState(s);
         });
         // Coup refusé par le serveur : on annule l'optimisme en revenant au
@@ -119,19 +137,14 @@ export function useOnlineSession() {
     const reorderSeat = useCallback((playerId, direction) => {
         socketRef.current?.emit('lobby:reorder', { code: lobby?.code, playerId, direction });
     }, [lobby?.code]);
-    // Bascule une place libre entre « ouverte » (human) et « bot » (hôte).
+    // Bascule une place LIBRE entre « ouverte » et « bot » (hôte).
     const setSeatKind = useCallback((playerId, kind) => {
         socketRef.current?.emit('lobby:seatkind', { code: lobby?.code, playerId, kind });
     }, [lobby?.code]);
-    // Change la couleur d'un bot (hôte).
-    const setBotColor = useCallback((playerId, color) => {
-        socketRef.current?.emit('lobby:botcolor', { code: lobby?.code, playerId, color });
-    }, [lobby?.code]);
-    // Change la difficulté d'un bot (hôte).
+    // Change la difficulté d'un siège bot (hôte).
     const setBotDifficulty = useCallback((playerId, difficulty) => {
         socketRef.current?.emit('lobby:botdifficulty', { code: lobby?.code, playerId, difficulty });
     }, [lobby?.code]);
-
     // Position (playerId) de CE client, DÉDUITE des sièges : elle suit le membre,
     // donc elle change automatiquement quand l'hôte réordonne les joueurs.
     const localPlayerId = useMemo(() => {
@@ -178,23 +191,45 @@ export function useOnlineSession() {
             const next = gameReducer(prev, action);
             return next === prev ? prev : next; // no-op si le moteur juge le coup illégal
         });
+        setTurnDirty(true);
         socket.emit('game:action', action);
+    }, []);
+
+    // --- Retour au début de son tour ---
+    // Contrairement à une action de jeu, ce n'est PAS une action du moteur : le
+    // serveur détient l'instantané (un client ne peut donc pas injecter un état
+    // arbitraire) et rediffusera l'état restauré. On l'applique quand même
+    // localement d'abord : la restitution étant déterministe et notre instantané
+    // venant du serveur, l'état diffusé sera le même — aucun clignotement.
+    //
+    // L'opération est ABSOLUE (elle vise un état fixe, pas « le dernier coup ») :
+    // deux demandes consécutives, ou une demande croisant un coup encore en vol,
+    // aboutissent au même résultat.
+    const resetTurn = useCallback(() => {
+        const socket = socketRef.current;
+        if (!socket) return;
+        setGameState((prev) => restoreTurnStart(prev, turnStartRef.current));
+        setTurnDirty(false);
+        socket.emit('game:reset-turn');
     }, []);
 
     // Session de jeu au format attendu par GameLayout. `ready` vrai dès qu'un état
     // serveur est arrivé ; `isMyTurn` faux hors de son tour ou en spectateur.
-    const session = useMemo(
-        () => ({
+    const session = useMemo(() => {
+        const isMyTurn =
+            !!gameState && localPlayerId != null && gameState.activePlayerId === localPlayerId;
+        return {
             state: gameState,
             dispatch,
             mode: 'online',
             localPlayerId,
             ready: !!gameState,
-            isMyTurn:
-                !!gameState && localPlayerId != null && gameState.activePlayerId === localPlayerId,
-        }),
-        [gameState, dispatch, localPlayerId]
-    );
+            isMyTurn,
+            resetTurn,
+            // Jamais hors de son tour : on ne rejoue que SON propre tour.
+            canResetTurn: turnDirty && isMyTurn && gameState?.status === 'playing',
+        };
+    }, [gameState, dispatch, localPlayerId, resetTurn, turnDirty]);
 
-    return { phase, error, lobbies, lobby, memberId, localPlayerId, gameState, session, seatOptions, chooseSeat, spectate, createLobby, refreshList, joinLobby, setIdentity, configureLobby, reorderSeat, setSeatKind, setBotColor, setBotDifficulty, startLobby };
+    return { phase, error, lobbies, lobby, memberId, localPlayerId, gameState, session, seatOptions, chooseSeat, spectate, createLobby, refreshList, joinLobby, setIdentity, configureLobby, reorderSeat, setSeatKind, setBotDifficulty, startLobby };
 }

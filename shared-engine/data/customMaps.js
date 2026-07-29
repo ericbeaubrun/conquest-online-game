@@ -14,7 +14,7 @@
 // donne à la carte son ambiance propre. Toutes les clés sont facultatives —
 // celles qu'on omet gardent la couleur par défaut de terrain.js.
 
-import { defineAsciiMap } from './mapDSL.js';
+import {defineAsciiMap} from './mapDSL.js';
 
 export const CUSTOM_MAPS = [
     // Un couloir avec une rivière centrale et deux forêts défensives (2 joueurs).
@@ -71,4 +71,72 @@ export const CUSTOM_MAPS = [
             . . . . 2     T T T   T T T     4 . . . .
         `,
     }),
+
+    defineAsciiMap({
+        id: 'ma-simple',
+        name: 'Simple',
+        palette: {
+            background: '#313030',
+            grass: '#6da04b',
+            forest: '#538b46',
+        },
+        art: `
+              . .   T T T T   T T T T   . .
+            . . . . T T T T T T T T T . . . .
+            . . . . T T T T T T T T T . . . .
+            1 . . . T T T T   T T T T . . . 2
+            . . . . T T T T T T T T T . . . .
+            . . .   T T T T T T T T T   . . .
+                .   T   T       T   T   .
+        `,
+    }),
+
+    defineAsciiMap({
+        id: 'dark-map',
+        name: 'Dark map',
+        palette: {
+            background: '#1b1c1d',
+            grass: '#8b9188',
+        },
+        art: `
+                . . . .   . . .   .   . .     . . . .
+              . . . . .     . .   . . . .   . . . . . .
+              . . . . . .     . . . . .     . . . . . . .
+              . . . . . . . . . . . . . . .     . . . . .
+              . .     . . . . . .     . . . .   . . . . . .
+            1 . . .   . . . . . . . . . . . .   . . . . . .
+            . . . . . . .   . . . . . . .       . . . . . .
+            . . . . .   .     . .   . . . . . . . . . . . 2
+                . . .     . . . .     . . . . . . . .   .
+                . .   . . . . . . .   . . . . . . .   . .
+              . .     . . . .   .   .   .   . . . . . .
+        `,
+    }),
+    defineAsciiMap({
+        id: 'paradise',
+        name: 'Paradise',
+        palette: {
+            background: '#55baec',
+            grass: '#96e462',
+        },
+        art: `
+                      1   .
+              . . . . . . . . . . .   .
+            . . . . . . . . . . .     . .
+            . . . . . . . . . . .   . . .
+            . . . . . . . . . .   . . . .
+            . . . . . . . . .     . . . .
+              . . . . . . . . . . . . . .
+              . . . . . . . . . . . . . .
+              . . . . . . . . . . . . . .
+              . . .     . . . . . . . . .
+              . . .     . . . . . . . .
+              . . . .   . . . . . . . .
+                . .   . . . . . . . . .
+                .     . . . . . . . .
+                      . . . . . . . .
+                    . . . . .   2
+        `,
+    }),
+
 ];

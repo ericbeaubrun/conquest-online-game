@@ -24,7 +24,8 @@ import {
     PRIEST_HP_COST,
     VAMPIRE_DRAIN,
     MAGICIAN_GOLD_REWARD,
-    KING_HOUSE_INCOME_MULT,
+    KING_INCOME_MULT,
+    MONK_IDLE_REWARD,
     BONUS_OFFERS,
 } from '../data/soldier.js';
 import { HOUSE_INCOME } from '../engine/rules.js';
@@ -90,17 +91,30 @@ function endTurnWith(units, { settings = {}, gold = 0, ownership = null } = {}) 
 const at = (state, cell) => state.placements.get(cell);
 const kinds = (state) => (state.events || []).map((e) => e.kind);
 
-// --- Alchimiste : -1 PV pour +1 ATK à l'allié le moins offensif -------------
-test('Alchimiste : se saigne pour armer l’allié le moins offensif', () => {
+// --- Alchimiste : -1 PV par allié adjacent, +1 ATK à chacun -----------------
+test('Alchimiste : arme TOUS les alliés adjacents, un PV par allié', () => {
     const s = endTurnWith({
         [A]: soldier({ uid: 1, bonus: 'alchemist', hp: 5, atk: 3 }),
-        [B]: soldier({ uid: 2, atk: 1 }), // le plus faible : cible attendue
+        [B]: soldier({ uid: 2, atk: 1 }),
         [C]: soldier({ uid: 3, atk: 4 }),
     });
-    assert.equal(at(s, A).hp, 5 - ALCHEMIST_HP_COST, 'l’alchimiste doit payer ses PV');
-    assert.equal(at(s, B).atk, 1 + ALCHEMIST_ATK_BUFF, 'l’allié le plus faible doit être armé');
-    assert.equal(at(s, C).atk, 4, 'l’allié le plus fort ne doit pas changer');
+    assert.equal(at(s, A).hp, 5 - 2 * ALCHEMIST_HP_COST, 'l’alchimiste paie un PV par allié armé');
+    assert.equal(at(s, B).atk, 1 + ALCHEMIST_ATK_BUFF);
+    assert.equal(at(s, C).atk, 4 + ALCHEMIST_ATK_BUFF, 'aucun allié adjacent n’est laissé de côté');
     assert.ok(kinds(s).includes('bonusAlchemist'));
+});
+
+test('Alchimiste : s’arrête avant le don qui le tuerait', () => {
+    // 2 PV : il n'a de quoi armer qu'UN seul de ses deux voisins (il doit finir
+    // son tour à 1 PV au moins). Le premier voisin rencontré l'emporte.
+    const s = endTurnWith({
+        [A]: soldier({ uid: 1, bonus: 'alchemist', hp: 2, atk: 3 }),
+        [B]: soldier({ uid: 2, atk: 1 }),
+        [C]: soldier({ uid: 3, atk: 4 }),
+    });
+    assert.equal(at(s, A).hp, 1, 'l’alchimiste ne descend jamais sous 1 PV');
+    const armed = [at(s, B).atk - 1, at(s, C).atk - 4].filter((d) => d > 0);
+    assert.equal(armed.length, 1, 'un seul allié armé');
 });
 
 test('Alchimiste : ne se sacrifie pas jusqu’à la mort', () => {
@@ -112,16 +126,16 @@ test('Alchimiste : ne se sacrifie pas jusqu’à la mort', () => {
     assert.equal(at(s, B).atk, 1);
 });
 
-// --- Prêtre : -1 PV pour soigner l'allié le plus mal en point ---------------
-test('Prêtre : soigne l’allié le plus blessé', () => {
+// --- Prêtre : -1 PV par allié adjacent, +1 PV à chacun ----------------------
+test('Prêtre : soigne TOUS les alliés adjacents, un PV par allié', () => {
     const s = endTurnWith({
         [A]: soldier({ uid: 1, bonus: 'priest', hp: 5 }),
-        [B]: soldier({ uid: 2, hp: 1 }), // le plus blessé : cible attendue
+        [B]: soldier({ uid: 2, hp: 1 }),
         [C]: soldier({ uid: 3, hp: 4 }),
     });
-    assert.equal(at(s, A).hp, 5 - PRIEST_HP_COST);
+    assert.equal(at(s, A).hp, 5 - 2 * PRIEST_HP_COST, 'le prêtre paie un PV par allié soigné');
     assert.equal(at(s, B).hp, 1 + PRIEST_HP_GIFT);
-    assert.equal(at(s, C).hp, 4);
+    assert.equal(at(s, C).hp, 4 + PRIEST_HP_GIFT, 'aucun allié adjacent n’est laissé de côté');
     assert.ok(kinds(s).includes('bonusPriest'));
 });
 
@@ -174,28 +188,45 @@ test('Magicien sans affinité : rien à transmettre', () => {
     assert.ok(!kinds(s).includes('bonusMagician'));
 });
 
-// --- Roi : les maisons rapportent double ------------------------------------
-test('Roi : double le rendement des maisons du joueur', () => {
+// --- Roi : maisons ET territoire rapportent double --------------------------
+// Le surplus se mesure par comparaison appariée : même plateau, seul le bonus
+// diffère. Le nombre de cases possédées est celui du territoire de départ, lu
+// sur l'état plutôt que recopié — il dépend de la carte.
+const casesDe = (state, pid) => [...state.ownership.values()].filter((o) => o === pid).length;
+
+test('Roi : double le rendement des maisons ET du territoire', () => {
     const maison = { type: 'house', playerId: 'p1', hp: 2 };
     const sans = endTurnWith({ [A]: soldier({ uid: 1 }), [B]: maison }, SANS_ENTRETIEN);
     const avec = endTurnWith(
         { [A]: soldier({ uid: 1, bonus: 'king' }), [B]: maison },
         SANS_ENTRETIEN
     );
+    const cases = casesDe(sans, 'p1');
     assert.equal(
         avec.gold.p1 - sans.gold.p1,
-        HOUSE_INCOME,
-        'une maison doit rapporter son rendement une seconde fois'
+        (HOUSE_INCOME + cases) * (KING_INCOME_MULT - 1),
+        'maison et cases doivent rapporter leur rendement une seconde fois'
     );
     assert.ok(kinds(avec).includes('bonusKing'));
-    assert.equal(KING_HOUSE_INCOME_MULT, 2, 'constante de référence inchangée');
+    assert.equal(KING_INCOME_MULT, 2, 'constante de référence inchangée');
 });
 
-test('Roi : sans maison, aucun revenu supplémentaire', () => {
+test('Roi : sans maison, le territoire seul est doublé', () => {
     const sans = endTurnWith({ [A]: soldier({ uid: 1 }) }, SANS_ENTRETIEN);
     const avec = endTurnWith({ [A]: soldier({ uid: 1, bonus: 'king' }) }, SANS_ENTRETIEN);
-    assert.equal(avec.gold.p1, sans.gold.p1);
-    assert.ok(!kinds(avec).includes('bonusKing'));
+    assert.equal(
+        avec.gold.p1 - sans.gold.p1,
+        casesDe(sans, 'p1') * (KING_INCOME_MULT - 1)
+    );
+    assert.ok(kinds(avec).includes('bonusKing'));
+});
+
+// --- Moine : prime d'inaction -----------------------------------------------
+test('Moine : rapporte de l’or au tour qu’il termine sans agir', () => {
+    const sans = endTurnWith({ [A]: soldier({ uid: 1 }) }, SANS_ENTRETIEN);
+    const avec = endTurnWith({ [A]: soldier({ uid: 1, bonus: 'monk' }) }, SANS_ENTRETIEN);
+    assert.equal(avec.gold.p1 - sans.gold.p1, MONK_IDLE_REWARD);
+    assert.ok(kinds(avec).includes('bonusMonk'));
 });
 
 // --- Conquérant : annexe les cases vides adjacentes -------------------------
@@ -233,17 +264,22 @@ test('END_TURN : passe la main et réinitialise les déplacements', () => {
 // où réordonner la liste est une faute d'inattention à un caractère près.
 //
 // Mise en scène : le prêtre (B) et le vampire (C) sont tous deux adjacents à
-// l'allié blessé (A). Le prêtre soigne A (+1), puis le vampire le draine (-1).
-// Inverser les deux effets donnerait un état différent.
+// l'allié blessé (A). Le prêtre soigne A, puis le vampire le draine. Inverser
+// les deux effets donnerait un état différent — le vampire ne mord jamais un
+// allié à 1 PV, donc sans le soin préalable il n'aurait rien pris.
 test('l’ordre prêtre → vampire est figé (effets chaînés sur la même cible)', () => {
     const s = endTurnWith({
         [B]: soldier({ uid: 1, bonus: 'priest', hp: 5 }),
         [C]: soldier({ uid: 2, bonus: 'vampire', hp: 3 }),
         [A]: soldier({ uid: 3, hp: 1 }), // le plus blessé : cible des deux
     });
-    assert.equal(at(s, B).hp, 4, 'le prêtre paie 1 PV');
-    assert.equal(at(s, C).hp, 4, 'le vampire gagne 1 PV');
-    assert.equal(at(s, A).hp, 1, 'soigné (+1) PUIS drainé (-1) : retour à 1');
+    assert.equal(at(s, B).hp, 5 - PRIEST_HP_COST, 'le prêtre paie son don');
+    assert.equal(at(s, C).hp, 3 + VAMPIRE_DRAIN, 'le vampire encaisse sa ponction');
+    assert.equal(
+        at(s, A).hp,
+        1 + PRIEST_HP_GIFT - VAMPIRE_DRAIN,
+        'soigné PUIS drainé, dans cet ordre'
+    );
     assert.deepEqual(
         kinds(s),
         ['bonusPriest', 'bonusVampire'],

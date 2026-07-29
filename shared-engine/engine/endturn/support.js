@@ -1,8 +1,10 @@
 // Effets de fin de tour : ENTRAIDE (et prédation) entre soldats voisins.
 //
-// Les quatre suivent la même trame — repérer les porteurs du bonus, élire UNE
-// cible adjacente, procéder à l'échange — d'où l'usage de `pickAlly`, qui porte
-// la règle de départage commune (à égalité, le premier voisin l'emporte).
+// Tous repèrent d'abord leurs porteurs, puis servent leurs voisins alliés. Deux
+// familles s'y distinguent : le « Vampire » et le « Magicien » n'élisent QU'UNE
+// cible (d'où `pickAlly`, qui porte la règle de départage commune — à égalité, le
+// premier voisin l'emporte) ; l'« Alchimiste » et le « Prêtre » servent TOUT leur
+// voisinage, en payant leur don allié par allié.
 
 import {SOLDIER_ATK_MAX, SOLDIER_HP_MAX} from '../rules.js';
 import {
@@ -15,14 +17,14 @@ import {
 } from '../../data/soldier.js';
 import {soldiersWithBonus, pickAlly, neighborAllies} from './helpers.js';
 
-// Bonus « Alchimiste » : chaque alchimiste SACRIFIE 1 de ses PV pour donner +1
-// attaque (plafonnée) à UN allié adjacent — le soldat allié voisin le MOINS
-// offensif, celui qui en a le plus besoin. Chaque alchimiste agit sur sa propre
-// cible ; un même allié peut cumuler les dons de plusieurs alchimistes.
+// Bonus « Alchimiste » : chaque alchimiste arme TOUS ses voisins alliés d'un
+// coup — +1 attaque (plafonnée) à chacun — et paie ALCHEMIST_HP_COST PV PAR
+// allié servi. Un même allié peut cumuler les dons de plusieurs alchimistes.
 //
-// L'échange n'a lieu que s'il profite aux deux bouts : un alchimiste à 1 PV ne
-// se sacrifie pas (il mourrait), et personne ne se saigne pour un allié dont
-// l'attaque est déjà au plafond.
+// L'échange ne se fait que s'il profite aux deux bouts : un allié dont l'attaque
+// est déjà au plafond est sauté (sans rien coûter), et l'alchimiste s'arrête dès
+// que le don suivant le tuerait — il finit toujours son tour à 1 PV au moins.
+// Entouré de six alliés, un alchimiste à 3 PV n'en arme donc que deux.
 export function applyAlchemists(ctx) {
     const {state, board, events, placements: placementsIn} = ctx;
     const pid = state.activePlayerId;
@@ -31,30 +33,34 @@ export function applyAlchemists(ctx) {
 
     const placements = new Map(placementsIn);
     for (const [id] of alchemists) {
-        // Un alchimiste ne se sacrifie pas jusqu'à la mort : il lui faut plus de
-        // PV que ce que coûte la transmutation.
-        const alchemist = placements.get(id);
-        if ((alchemist.hp || 0) <= ALCHEMIST_HP_COST) continue;
-        const bestId = pickAlly(board, placements, pid, id, (ally) =>
-            (ally.atk || 0) < SOLDIER_ATK_MAX ? ally.atk || 0 : null
-        );
-        if (bestId == null) continue;
-        placements.set(id, {...alchemist, hp: (alchemist.hp || 0) - ALCHEMIST_HP_COST});
-        const ally = placements.get(bestId);
-        placements.set(bestId, {
-            ...ally,
-            atk: Math.min((ally.atk || 0) + ALCHEMIST_ATK_BUFF, SOLDIER_ATK_MAX),
-        });
-        events.push({kind: 'bonusAlchemist', playerId: pid});
+        let alchemist = placements.get(id);
+        let served = 0;
+        for (const [nid] of neighborAllies(board, placements, pid, id)) {
+            // Un alchimiste ne se sacrifie pas jusqu'à la mort.
+            if ((alchemist.hp || 0) - ALCHEMIST_HP_COST < 1) break;
+            const ally = placements.get(nid); // relu : un autre porteur a pu le servir
+            if ((ally.atk || 0) >= SOLDIER_ATK_MAX) continue;
+            alchemist = {...alchemist, hp: (alchemist.hp || 0) - ALCHEMIST_HP_COST};
+            placements.set(nid, {
+                ...ally,
+                atk: Math.min((ally.atk || 0) + ALCHEMIST_ATK_BUFF, SOLDIER_ATK_MAX),
+            });
+            served += 1;
+        }
+        if (!served) continue;
+        placements.set(id, alchemist);
+        events.push({kind: 'bonusAlchemist', playerId: pid, count: served});
     }
     return {...ctx, placements};
 }
 
-// Bonus « Prêtre » : chaque prêtre prend sur sa propre vie pour soigner l'allié
-// adjacent le PLUS MAL EN POINT (jamais lui-même). Sans cible éligible, il ne
-// perd rien. Comme pour l'« Alchimiste », l'échange n'a lieu que s'il profite aux
-// deux bouts : un prêtre à 1 PV ne se sacrifie pas, et personne ne se saigne
-// pour un allié déjà au maximum de ses PV.
+// Bonus « Prêtre » : chaque prêtre prend sur sa propre vie pour soigner TOUS ses
+// voisins alliés d'un coup (jamais lui-même), au prix de PRIEST_HP_COST PV PAR
+// allié soigné. Mêmes garde-fous que l'« Alchimiste », dont il est le pendant :
+// un allié déjà au maximum de ses PV est sauté sans rien coûter, et le prêtre
+// s'arrête avant le don qui le tuerait. L'échange lui est FAVORABLE (il rend
+// PRIEST_HP_GIFT PV pour PRIEST_HP_COST prélevé) : entouré, il transforme sa
+// réserve de PV en une réserve plus grande, répartie sur son escorte.
 export function applyPriests(ctx) {
     const {state, board, events, placements: placementsIn} = ctx;
     const pid = state.activePlayerId;
@@ -63,16 +69,19 @@ export function applyPriests(ctx) {
 
     const placements = new Map(placementsIn);
     for (const [id] of priests) {
-        const priest = placements.get(id);
-        if ((priest.hp || 0) <= PRIEST_HP_COST) continue;
-        const bestId = pickAlly(board, placements, pid, id, (ally) =>
-            (ally.hp || 0) < SOLDIER_HP_MAX ? ally.hp || 0 : null
-        );
-        if (bestId == null) continue;
-        placements.set(id, {...priest, hp: (priest.hp || 0) - PRIEST_HP_COST});
-        const ally = placements.get(bestId);
-        placements.set(bestId, {...ally, hp: Math.min((ally.hp || 0) + PRIEST_HP_GIFT, SOLDIER_HP_MAX)});
-        events.push({kind: 'bonusPriest', playerId: pid});
+        let priest = placements.get(id);
+        let healed = 0;
+        for (const [nid] of neighborAllies(board, placements, pid, id)) {
+            if ((priest.hp || 0) - PRIEST_HP_COST < 1) break;
+            const ally = placements.get(nid); // relu : un autre prêtre a pu le soigner
+            if ((ally.hp || 0) >= SOLDIER_HP_MAX) continue;
+            priest = {...priest, hp: (priest.hp || 0) - PRIEST_HP_COST};
+            placements.set(nid, {...ally, hp: Math.min((ally.hp || 0) + PRIEST_HP_GIFT, SOLDIER_HP_MAX)});
+            healed += 1;
+        }
+        if (!healed) continue;
+        placements.set(id, priest);
+        events.push({kind: 'bonusPriest', playerId: pid, count: healed});
     }
     return {...ctx, placements};
 }

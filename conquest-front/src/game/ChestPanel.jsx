@@ -2,10 +2,10 @@ import {
     CHEST_SRC,
     lootSrc,
     lootLabel,
-    lootRarity,
     lootGold,
     lootHp,
     lootAtk,
+    lootInvert,
     lootAffinity,
     lootUnit,
 } from '@conquest/shared-engine/data/chests.js';
@@ -22,6 +22,7 @@ const lootEffect = (loot) => {
     if (hp > 0) return `+${hp} PV`;
     const atk = lootAtk(loot);
     if (atk > 0) return `+${atk} ATK`;
+    if (lootInvert(loot)) return 'Inverse ATK et PV';
     const affinity = lootAffinity(loot);
     if (affinity) return `Affinité ${affinityLabel(affinity)}`;
     const unit = unitKindById(lootUnit(loot));
@@ -50,58 +51,56 @@ const ChestPanel = ({ loot, onClose }) => {
                     <img src="/croix.png" alt="" draggable={false} />
                 </button>
             )}
-            <div className="soldier-panel__portrait" style={{ borderColor: '#d9a441' }}>
-                <img
-                    src={loot ? lootSrc(loot) : CHEST_SRC}
-                    alt={loot ? lootLabel(loot) : 'Coffre'}
-                />
-            </div>
-
-            <div className="soldier-panel__specs">
-                <div className="soldier-spec">
-                    <span className="soldier-spec__label">Objet</span>
-                    <span className="soldier-spec__value">
-                        {loot ? lootLabel(loot) : 'Coffre fermé'}
-                    </span>
+            <div className="soldier-panel__body">
+                <div className="soldier-panel__portrait" style={{ borderColor: '#d9a441' }}>
+                    <img
+                        src={loot ? lootSrc(loot) : CHEST_SRC}
+                        alt={loot ? lootLabel(loot) : 'Coffre'}
+                    />
                 </div>
-                {loot ? (
-                    <>
-                        <div className="soldier-spec">
-                            <span className="soldier-spec__label">Effet</span>
-                            <span className="soldier-spec__value">
-                                {AFFINITY_SRC[affinity] ? (
-                                    <img
-                                        src={AFFINITY_SRC[affinity]}
-                                        alt={affinityLabel(affinity)}
-                                        title={affinityLabel(affinity)}
-                                        className="soldier-spec__affinity"
-                                    />
-                                ) : (
-                                    lootEffect(loot)
-                                )}
-                            </span>
-                        </div>
-                        <div className="soldier-spec">
-                            <span className="soldier-spec__label">Rareté</span>
-                            <span className="soldier-spec__value">{lootRarity(loot).label}</span>
-                        </div>
-                        <div className="soldier-spec">
-                            <span className="soldier-spec__label">Ramassage</span>
-                            <span className="soldier-spec__value">Déplacez un soldat dessus</span>
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        <div className="soldier-spec">
-                            <span className="soldier-spec__label">Contenu</span>
-                            <span className="soldier-spec__value">Inconnu</span>
-                        </div>
-                        <div className="soldier-spec">
-                            <span className="soldier-spec__label">Ouverture</span>
-                            <span className="soldier-spec__value">Attaquez-le avec un soldat</span>
-                        </div>
-                    </>
-                )}
+
+                <div className="soldier-panel__specs">
+                    <div className="soldier-spec">
+                        <span className="soldier-spec__label">Objet</span>
+                        <span className="soldier-spec__value">
+                            {loot ? lootLabel(loot) : 'Coffre fermé'}
+                        </span>
+                    </div>
+                    {loot ? (
+                        <>
+                            <div className="soldier-spec">
+                                <span className="soldier-spec__label">Effet</span>
+                                <span className="soldier-spec__value">
+                                    {AFFINITY_SRC[affinity] ? (
+                                        <img
+                                            src={AFFINITY_SRC[affinity]}
+                                            alt={affinityLabel(affinity)}
+                                            title={affinityLabel(affinity)}
+                                            className="soldier-spec__affinity"
+                                        />
+                                    ) : (
+                                        lootEffect(loot)
+                                    )}
+                                </span>
+                            </div>
+                            <div className="soldier-spec">
+                                <span className="soldier-spec__label">Ramassage</span>
+                                <span className="soldier-spec__value">Déplacez un soldat dessus</span>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="soldier-spec">
+                                <span className="soldier-spec__label">Contenu</span>
+                                <span className="soldier-spec__value">Inconnu</span>
+                            </div>
+                            <div className="soldier-spec">
+                                <span className="soldier-spec__label">Ouverture</span>
+                                <span className="soldier-spec__value">Attaquez-le avec un soldat</span>
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );

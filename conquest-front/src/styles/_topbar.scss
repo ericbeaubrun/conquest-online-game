@@ -399,15 +399,55 @@
   }
 }
 
+// Zone d'action : le groupe est poussé tout à droite d'un bloc, ses boutons
+// restent collés l'un à l'autre (c'est le groupe qui absorbe l'espace libre de
+// la barre, plus la fin de tour toute seule comme auparavant).
+.top-bar__actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// Recommencer son tour : volontairement SANS cadre ni couleur, comme le burger
+// et le chrono — la barre ne doit garder qu'une seule cible mise en avant, la
+// fin de tour. Il n'apparaît que lorsqu'il y a quelque chose à annuler
+// (cf. TopBar.jsx), d'où l'absence d'état désactivé.
+.reset-turn-button {
+  flex: 0 0 auto;
+  width: calc(var(--topbar-font) * 1.4);
+  height: calc(var(--topbar-font) * 1.4);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ink-300);
+  cursor: pointer;
+  user-select: none;
+  font-family: inherit;
+  transition: color 0.12s ease;
+
+  &:hover {
+    color: var(--ink-050);
+  }
+
+  // Le glyphe de rembobinage est un caractère, pas un PNG : à cette taille il
+  // reste net, et la barre n'a pas d'icône pixel qui dise « revenir en arrière ».
+  // Un cran plus gros que le texte de la barre pour rester lisible.
+  &__glyph {
+    font-size: calc(var(--topbar-font) * 1.15);
+    line-height: 1;
+  }
+}
+
 // Fin de tour : la seule cible encadrée et colorée de la barre, dans la
 // couleur du joueur actif (posée via `style` inline, repli sur le rouge si
 // elle manque). Le texte est en encre très sombre pour rester lisible
 // quelle que soit la couleur du joueur.
 .end-turn-button {
   flex: 0 0 auto;
-  // Poussé tout à droite : c'est le seul élément de la zone d'action depuis que
-  // le compteur de soldats l'a rejoint.
-  margin-left: auto;
   // Un cran plus haut que --topbar-btn-h : les icônes agrandies ont besoin de
   // respiration verticale, sinon elles touchent presque le cadre.
   height: calc(var(--topbar-btn-h) * 1.3);
@@ -476,9 +516,8 @@
     margin-right: 1px;
   }
 
-  // Flèche de fin de tour, dessinée en SVG : c'est elle qui porte l'action du
-  // bouton, donc le plus gros élément. `currentColor` reprend la couleur posée
-  // ici, pas de PNG à gérer en plus.
+  // Flèche de fin de tour (skip.png) : c'est elle qui porte l'action du
+  // bouton, donc le plus gros élément.
   //
   // Le facteur est PLAFONNÉ par la hauteur utile du bouton : à 1.75 elle fait
   // 31.5px pour 37.6px utiles (hauteur 41.6 moins les 2×2px de cadre), soit
@@ -490,8 +529,8 @@
     height: calc(var(--topbar-icon) * 1.75);
     // Détache la flèche du bloc soldat+compteur, et l'éloigne du bord droit.
     margin-left: 7px;
-    // Blanc cassé plutôt que blanc pur : moins dur contre le contour noir.
-    color: #e6e9ef;
+    // PNG pixel art : sans ça le navigateur lisse l'agrandissement.
+    image-rendering: pixelated;
   }
 
   // Soldats restant à déplacer. Le séparateur vertical évite de lire

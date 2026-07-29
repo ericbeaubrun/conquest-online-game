@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import {
     bonusOffersForLevel,
     bonusPriceOf,
-    bonusUpkeep,
+    bonusTotalUpkeep,
     canBuyBonus,
     challengeText,
     isBonusNotified,
@@ -25,7 +25,10 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
     const blocked = !!soldier.bonus && !equipped;
     // Prix et entretien effectifs (configurables par partie).
     const price = bonusPriceOf(bonus, settings);
-    const upkeep = bonusUpkeep(bonus.id, settings);
+    // Or/tour TOTAL du porteur (entretien de son niveau + surcoût du bonus) : le
+    // seul chiffre lisible pour le joueur. Le surcoût seul se lisait comme la
+    // facture entière — un niveau 1 « 2/tour » en payait en réalité 4.
+    const upkeep = bonusTotalUpkeep(bonus, settings);
     const buyable = ownLevel && canBuy && canBuyBonus(soldier, bonus, gold, settings, world);
 
     const classes = [
@@ -92,11 +95,16 @@ const BonusCard = ({soldier, bonus, settings, bonusesEnabled, gold, canBuy, ownL
                                 )}
                             </span>
                         )}
-                        {upkeep ? (
-                            <span className="bonus-card__upkeep" title="Entretien par tour">
-                                −{upkeep}/tour
-                            </span>
-                        ) : null}
+                        {/* Or/tour toujours affiché, même nul : « 0 or/tour » est une
+                            promesse en soi (le Roi, le Sorcier) et son absence se
+                            lisait comme un oubli. Positif = coût (« −N », rouge),
+                            négatif = revenu (« +N », vert). */}
+                        <span
+                            className={`bonus-card__upkeep ${upkeep > 0 ? 'bonus-card__upkeep--cost' : 'bonus-card__upkeep--gain'}`}
+                            title="Or gagné ou perdu par tour, entretien du niveau compris"
+                        >
+                            {upkeep === 0 ? '' : upkeep > 0 ? '−' : '+'}{Math.abs(upkeep)} or/tour
+                        </span>
                     </span>
                 </div>
                 <p className={`bonus-card__challenge ${unlocked ? 'bonus-card__challenge--done' : ''}`}>

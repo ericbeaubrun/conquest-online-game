@@ -1,28 +1,15 @@
 import {useLayoutEffect, useRef} from 'react';
 import {incomeFor, movableSoldierCount, playerAlive} from '@conquest/shared-engine/engine/selectors.js';
-import {BOT_DIFFICULTIES} from '../menu/setupConfig.js';
 
-// Nom affiché dans la barre. Les bots sont nommés « Bot <difficulté> » par
-// l'engine (cf. resolvePlayers dans shared-engine/engine/board.js) : le préfixe
-// « Bot » mange la moitié de la place disponible pour ne rien dire que le badge
-// IA ne dise déjà, et c'est la difficulté — la partie tronquée — qui distingue
-// les bots entre eux. On le retire donc À L'AFFICHAGE seulement : renommer dans
-// l'engine changerait l'état sérialisé (parties en ligne, toasts, écran de fin).
-//
-// On repasse par `botDifficulty` plutôt que de découper la chaîne, et le retrait
-// du préfixe ne sert que de repli (bot venu du serveur sans difficulté connue).
-const displayName = (player) => {
-    if (player.kind !== 'bot') return player.name;
-    const label = BOT_DIFFICULTIES.find((d) => d.id === player.botDifficulty)?.label;
-    return label || player.name.replace(/^Bot\s+/i, '') || player.name;
-};
+const displayName = (player) => player.name;
 
 // Barre du haut : menu, numéro de tour, chrono, profils des joueurs (nom, or et
 // revenu) et bouton de fin de tour. Purement présentationnelle.
 //
 // Trois zones : contexte à gauche (burger, tour + chrono), joueurs au centre,
-// action à droite (soldats restants, fin de tour). Une seule cible encadrée et
-// colorée dans toute la barre — le bouton de fin de tour ; cf. _topbar.scss.
+// action à droite (recommencer son tour, soldats restants, fin de tour). Une
+// seule cible encadrée et colorée dans toute la barre — le bouton de fin de
+// tour ; cf. _topbar.scss.
 //
 // Un joueur ÉLIMINÉ (plus aucune case ni soldat, cf. `playerAlive`) est grisé et
 // marqué d'une croix ; en ligne, le joueur local porte une couronne au-dessus de
@@ -37,6 +24,8 @@ const TopBar = ({
                     menuOpen,
                     onToggleMenu,
                     onEndTurn,
+                    onResetTurn,
+                    canResetTurn,
                 }) => {
     const {players, activePlayerId, gold} = state;
     const activeColor = players.find((p) => p.id === activePlayerId)?.color;
@@ -147,18 +136,14 @@ const TopBar = ({
                                 : undefined}
                         >
                             {/* Couronne « c'est vous » : à côté du carré plutôt que
-                                posée dessus, où elle masquerait le « IA » des bots. */}
+                                posée dessus. */}
                             {isLocal && (
                                 <img src="/crown.png" alt="Vous" className="player-profile__crown"/>
                             )}
-                            {/* Carré de couleur ET repère bot : le « IA » est
-                                inscrit dedans plutôt que dans un badge voisin. */}
                             <div
                                 className="player-profile__chip"
                                 style={{backgroundColor: player.color}}
-                                title={player.kind === 'bot' ? "Contrôlé par l'ordinateur" : undefined}
                             >
-                                {player.kind === 'bot' && <span className="player-profile__ai">IA</span>}
                                 {!alive && (
                                     <img
                                         src="/croix.png"
@@ -196,50 +181,54 @@ const TopBar = ({
                 })}
             </div>
 
-            {/* Soldats restants et fin de tour fusionnés : les deux répondent à
-                la même question — « ai-je fini mon tour ? » — et le compteur sert
-                d'avertissement juste avant de cliquer. Le libellé « FIN » saute,
-                les deux icônes suffisent à porter le sens. */}
-            <button
-                className="end-turn-button"
-                style={{backgroundColor: activeColor}}
-                title={
-                    canAct
-                        ? `Passer son tour — ${movableSoldiers} soldat(s) encore déplaçable(s)`
-                        : 'En attente du tour adverse'
-                }
-                onClick={onEndTurn}
-                disabled={!canAct}
-            >
-                <img src="/characters/lvl1/SoldierLVL1.png" alt="Soldats restants" className="end-turn-button__icon end-turn-button__icon--soldier"/>
-                <span className="end-turn-button__count">{movableSoldiers}</span>
-                {/* Flèche de fin de tour dessinée en SVG (plutôt que skip.png) : plus
-                    grande que l'indicateur de mouvements restants, c'est elle qui
-                    porte l'action, le compteur ne fait qu'informer.
-                    Tracé pixel art : grille de 16, sommets sur des entiers et
-                    UNIQUEMENT des segments H/V — la pointe est un escalier de 1
-                    case, pas une diagonale lissée. `crispEdges` coupe
-                    l'antialiasing, sans quoi les marches redeviennent floues et
-                    tout le bénéfice du tracé en grille est perdu.
-                    Contour noir sous le remplissage (`paint-order`) : le fond du
-                    bouton est la couleur — arbitraire — du joueur actif, et une
-                    flèche blanche seule disparaîtrait sur les teintes claires. */}
-                <svg
-                    className="end-turn-button__arrow"
-                    viewBox="0 0 16 16"
-                    aria-hidden="true"
-                    shapeRendering="crispEdges"
+            {/* Zone d'action, à droite : recommencer le tour puis le terminer,
+                dans l'ordre où ils se posent (« je me suis trompé » avant « j'ai
+                fini »). Le retour arrière reste volontairement discret — sans
+                cadre ni couleur — pour que la fin de tour demeure la seule cible
+                mise en avant de toute la barre. */}
+            <div className="top-bar__actions">
+                {/* Affiché seulement quand il y a quelque chose à annuler : un
+                    bouton grisé en permanence encombrerait la barre pour rien. */}
+                {canResetTurn && (
+                    <button
+                        type="button"
+                        className="reset-turn-button"
+                        onClick={onResetTurn}
+                        title="Recommencer ce tour — annule toutes vos actions depuis le début du tour"
+                        aria-label="Recommencer ce tour"
+                    >
+                        <span className="reset-turn-button__glyph" aria-hidden="true">↺</span>
+                    </button>
+                )}
+
+                {/* Soldats restants et fin de tour fusionnés : les deux répondent à
+                    la même question — « ai-je fini mon tour ? » — et le compteur sert
+                    d'avertissement juste avant de cliquer. Le libellé « FIN » saute,
+                    les deux icônes suffisent à porter le sens. */}
+                <button
+                    className="end-turn-button"
+                    style={{backgroundColor: activeColor}}
+                    title={
+                        canAct
+                            ? `Passer son tour — ${movableSoldiers} soldat(s) encore déplaçable(s)`
+                            : 'En attente du tour adverse'
+                    }
+                    onClick={onEndTurn}
+                    disabled={!canAct}
                 >
-                    <path
-                        d="M2 6 H8 V2 H9 V3 H10 V4 H11 V5 H12 V6 H13 V7 H14 V9 H13 V10 H12 V11 H11 V12 H10 V13 H9 V14 H8 V10 H2 Z"
-                        fill="currentColor"
-                        stroke="#000"
-                        strokeWidth="2"
-                        strokeLinejoin="miter"
-                        paintOrder="stroke"
+                    <img src="/characters/lvl1/SoldierLVL1.png" alt="Soldats restants" className="end-turn-button__icon end-turn-button__icon--soldier"/>
+                    <span className="end-turn-button__count">{movableSoldiers}</span>
+                    {/* Flèche de fin de tour : plus grande que l'indicateur de
+                        mouvements restants, c'est elle qui porte l'action, le
+                        compteur ne fait qu'informer. */}
+                    <img
+                        src="/skip.png"
+                        alt=""
+                        aria-hidden="true"
+                        className="end-turn-button__arrow"
                     />
-                </svg>
-            </button>
+                </button>
+            </div>
         </div>
     );
 };

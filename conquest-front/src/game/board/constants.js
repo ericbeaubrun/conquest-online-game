@@ -2,7 +2,7 @@
 // ici pour que `HexBoard` et ses couches partagent la même source.
 import {ITEM_SRC} from '@conquest/shared-engine/data/items.js';
 import {treeSrc} from '@conquest/shared-engine/data/trees.js';
-import {CHEST_SRC, lootSrc} from '@conquest/shared-engine/data/chests.js';
+import {CHEST_SRC, lootSrc, lootGold} from '@conquest/shared-engine/data/chests.js';
 import {unitScale} from '@conquest/shared-engine/data/units.js';
 
 export const BASE_SRC = '/base.png';
@@ -53,6 +53,10 @@ export const AFFINITY_SRC = {
     shield: '/bouclier.png',
 };
 
+// Icône de la potion de sacrifice, pour son aperçu de pose (même coin que les
+// affinités — voir `PlacementPreview`).
+export const SACRIFICE_SRC = '/potionSacrifice.png';
+
 // Surbrillance de la portée d'un soldat selon le type de case : déplacement
 // (blanc), conquête (blanc) ou fusion (blanc). Le combat n'y figure pas : sa
 // couleur dépend de l'issue prévue (voir `MoveHighlight`).
@@ -83,7 +87,9 @@ export const placementImgSize = (placed, size) => {
     // d'une case pour ne pas se confondre avec les unités qui l'occupent. Le
     // coffre, plus volumineux, est un peu plus grand que le butin qu'il livre.
     if (type === 'chest') return size * 0.85;
-    if (type === 'loot') return size * 0.4;
+    // Les pièces d'or ont leur propre icône (coin15…coin150) et méritent d'être
+    // bien lisibles : on les dessine nettement plus grandes que les autres butins.
+    if (type === 'loot') return lootGold(placed) > 0 ? size * 0.85 : size * 0.4;
     return size * unitScale(placed);
 };
 
@@ -92,6 +98,20 @@ export const placementImgSize = (placed, size) => {
 // qu'il ait l'air posé au sol plutôt que flottant en son milieu.
 export const placementImgOffsetY = (placed, size) =>
     placed?.type === 'chest' ? size * 0.18 : 0;
+
+// Sens horizontal des arbres et coffres : purement esthétique (aucune règle du
+// jeu n'en dépend), mais tiré une fois pour toutes par case plutôt qu'à chaque
+// rendu — sinon l'image retournerait au hasard à chaque re-rendu du plateau.
+// Le hasard est dérivé de l'id de la case, stable tant qu'elle n'est pas
+// recréée (ce qui n'arrive jamais pour un arbre/coffre déjà posé).
+const hashFlip = (id) => {
+    let h = 0;
+    const s = String(id);
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return (h & 1) === 1;
+};
+export const placementFlipped = (placed, id) =>
+    (placed?.type === 'tree' || placed?.type === 'chest') && hashFlip(id);
 
 // Format compact (3 caractères max) pour un nombre de points de vie élevé
 // (ex. la base) : 1000 -> « 1k », 1200 -> « 1k2 », 2000 -> « 2k »… seule la

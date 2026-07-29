@@ -2,6 +2,7 @@ import {lazy, Suspense, useEffect, useMemo, useState} from "react";
 import HexBoard from "./game/HexBoard.jsx";
 import Shop from "./game/Shop.jsx";
 import SoldierPanel from "./game/SoldierPanel.jsx";
+import ActionBar from "./game/ActionBar.jsx";
 import BuildingPanel from "./game/BuildingPanel.jsx";
 import TreePanel from "./game/TreePanel.jsx";
 import ChestPanel from "./game/ChestPanel.jsx";
@@ -16,7 +17,7 @@ import {useToasts} from "./game/useToasts.js";
 import {buildSelectionView} from "./game/selectionView.js";
 import {saveGame} from "./game/session/savedGames.js";
 import {endTurn, placeItem, buyBonus, resetGame, setBehavior} from "@conquest/shared-engine/engine/actions.js";
-import {isAffinityItem} from "@conquest/shared-engine/data/items.js";
+import {isPlacementTargetedItem} from "@conquest/shared-engine/data/items.js";
 
 // Overlay des statistiques chargé en LAZY : Recharts (et les composants de
 // graphiques) restent dans un chunk séparé, téléchargé au premier clic sur un
@@ -28,7 +29,16 @@ const GameLayout = ({session, onExit}) => {
     // SESSION, créée par le parent (hors-ligne : reducer local ; online : socket
     // partagé du lobby). GameLayout ne connaît pas le transport : il lit l'état,
     // dispatche des actions, et respecte `isMyTurn`. Identique dans les deux modes.
-    const {state, dispatch, isMyTurn, mode = "local", ready = true, localPlayerId = null} = session;
+    const {
+        state,
+        dispatch,
+        isMyTurn,
+        mode = "local",
+        ready = true,
+        localPlayerId = null,
+        resetTurn,
+        canResetTurn = false,
+    } = session;
     const online = mode === "online";
     const {players, activePlayerId, mapId, gold, settings, status, winnerId, endReason} = state;
     const bonusesEnabled = settings?.bonusesEnabled !== false;
@@ -49,6 +59,12 @@ const GameLayout = ({session, onExit}) => {
     // Sélection sur le plateau : { id, kind } — 'soldier' | 'unit' | 'building' |
     // 'tree' | 'tile'. Pilote le panneau affiché en bas (specs vs boutique).
     const [selection, setSelection] = useState(null);
+    // Ouverture de la boutique de bonus : remontée ici car pilotée aussi bien
+    // par le portrait du soldat que par la barre d'actions (`ActionBar`).
+    const [bonusOpen, setBonusOpen] = useState(false);
+    useEffect(() => {
+        setBonusOpen(false);
+    }, [selection?.id]);
     // Cible survolée, soldat sélectionné : { id, kind } — 'merge' | 'combat'.
     const [hoverTarget, setHoverTarget] = useState(null);
     // Graphique statistique ouvert (id du catalogue STAT_CHARTS), null = fermé.
@@ -58,7 +74,14 @@ const GameLayout = ({session, onExit}) => {
     // (jauges plutôt que nombres). Anciennement des boutons sur le plateau
     // lui-même, déplacés ici pour libérer ses commandes.
     const [showAllStats, setShowAllStats] = useState(false);
-    const [statBars, setStatBars] = useState(false);
+    // Affichage des deux panneaux latéraux : les commandes du plateau (zoom /
+    // recentrage, à droite) et la barre d'actions du soldat (à gauche). Réglés
+    // depuis la même section Paramètres, pour libérer l'écran au besoin.
+    const [showBoardControls, setShowBoardControls] = useState(true);
+    const [showActionBar, setShowActionBar] = useState(true);
+    // Notifications « toast » (achats, combats, morts, bonus) : affichables ou
+    // non, certaines parties préférant un plateau sans bandeaux qui défilent.
+    const [showToasts, setShowToasts] = useState(true);
     // Horodatage de la dernière sauvegarde réussie : sert d'accusé de réception
     // éphémère dans le menu (« Sauvegardé ✓ »). Sauvegarde hors-ligne uniquement.
     const [savedAt, setSavedAt] = useState(null);
@@ -66,7 +89,7 @@ const GameLayout = ({session, onExit}) => {
     const {turnTimer, timeLeft} = useTurnTimer(state, dispatch);
     // Notifications « toast » dérivées du journal d'évènements de l'état (achats,
     // combats, morts, effets de bonus). Alimenté aussi bien en local qu'en online
-    // (les actions des adversaires et des bots voyagent dans l'état).
+    // (les actions des adversaires voyagent dans l'état).
     const {toasts, dismiss: dismissToast} = useToasts(state);
 
     const colorOf = (playerId) => players.find((p) => p.id === playerId)?.color;
@@ -138,14 +161,30 @@ const GameLayout = ({session, onExit}) => {
         dispatch(endTurn());
         setSelectedItem(null);
     };
+
+    // Recommencer son tour : rend le plateau tel qu'il était quand la main est
+    // revenue au joueur (voir `engine/turnReset.js`). On confirme — c'est TOUT le
+    // tour qui repart, pas seulement le dernier coup — puis on remet l'interface à
+    // plat : les unités ayant bougé, une sélection ou un survol conservé
+    // désignerait une case dont l'occupant a changé.
+    const handleResetTurn = () => {
+        if (!canAct || !canResetTurn || !resetTurn) return;
+        if (!window.confirm("Recommencer ce tour ? Toutes vos actions de ce tour seront annulées.")) return;
+        resetTurn();
+        setSelection(null);
+        setHoverTarget(null);
+        setSelectedItem(null);
+        setBonusOpen(false);
+    };
     // Clic sur un item de boutique. Si une case vide est sélectionnée, l'item y
     // est posé directement. Sinon, on (dé)sélectionne l'item pour le mode
     // placement classique (surbrillance des cases, puis clic sur le plateau).
-    // Les affinités échappent à la pose directe : leur cible est un SOLDAT et
-    // non une case vide, elles passent donc toujours par le mode placement.
+    // Les affinités et la potion de sacrifice échappent à la pose directe :
+    // leur cible est un SOLDAT et non une case vide, elles passent donc
+    // toujours par le mode placement.
     const handleSelectItem = (id, level = 1) => {
         if (!canAct) return; // hors de son tour : la boutique est en lecture seule
-        if (placeTarget && !isAffinityItem(id)) {
+        if (placeTarget && !isPlacementTargetedItem(id)) {
             if (id) {
                 dispatch(placeItem(placeTarget, id, level));
                 setSelection(null);
@@ -185,6 +224,8 @@ const GameLayout = ({session, onExit}) => {
                 menuOpen={menuOpen}
                 onToggleMenu={() => setMenuOpen((open) => !open)}
                 onEndTurn={handleEndTurn}
+                onResetTurn={handleResetTurn}
+                canResetTurn={canAct && canResetTurn}
             />
 
             {/* Overlay : capte le clic hors du tiroir pour le refermer (en plus
@@ -209,8 +250,12 @@ const GameLayout = ({session, onExit}) => {
                 savedAt={savedAt}
                 showAllStats={showAllStats}
                 onToggleShowAllStats={() => setShowAllStats((v) => !v)}
-                statBars={statBars}
-                onToggleStatBars={() => setStatBars((v) => !v)}
+                showBoardControls={showBoardControls}
+                onToggleBoardControls={() => setShowBoardControls((v) => !v)}
+                showActionBar={showActionBar}
+                onToggleActionBar={() => setShowActionBar((v) => !v)}
+                showToasts={showToasts}
+                onToggleToasts={() => setShowToasts((v) => !v)}
             />
 
             {statsChart && (
@@ -231,7 +276,7 @@ const GameLayout = ({session, onExit}) => {
             )}
 
             <div className="game-content">
-                <Toasts toasts={toasts} onDismiss={dismissToast}/>
+                {showToasts && <Toasts toasts={toasts} onDismiss={dismissToast}/>}
                 <HexBoard
                     game={state}
                     dispatch={dispatch}
@@ -243,8 +288,33 @@ const GameLayout = ({session, onExit}) => {
                     onSelect={setSelection}
                     onHoverTarget={setHoverTarget}
                     showAllStats={showAllStats}
-                    statBars={statBars}
+                    showControls={showBoardControls}
                 />
+                {/* Barre d'actions du soldat sélectionné, au-dessus des contrôles
+                    du plateau : bonus + comportements, à la couleur du joueur. */}
+                {showActionBar && soldierView && selection?.kind === 'soldier' && (
+                    <ActionBar
+                        color={colorOf(soldierView.playerId)}
+                        selectionId={selection?.id}
+                        behavior={soldierView.behavior || null}
+                        // Comportement : modifiable seulement pour un soldat du
+                        // joueur actif, quand ce client a la main.
+                        onSetBehavior={
+                            canAct && selection?.id && soldierView.playerId === activePlayerId
+                                ? (behaviorId) => {
+                                    dispatch(setBehavior(selection.id, behaviorId));
+                                    if (behaviorId) setSelection(null);
+                                }
+                                : undefined
+                        }
+                        bonusOpen={bonusOpen}
+                        onToggleBonus={
+                            bonusesEnabled && soldierView.playerId === activePlayerId
+                                ? () => setBonusOpen((v) => !v)
+                                : undefined
+                        }
+                    />
+                )}
                 {/* Un seul panneau occupe le bas de l'écran à la fois. Priorité :
                     aperçu de fusion / combat (survol d'une cible), puis l'arbre
                     — survolé pour abattage ou sélectionné, l'aperçu primant donc
@@ -297,11 +367,18 @@ const GameLayout = ({session, onExit}) => {
                         onBuyBonus={(bonusId) => dispatch(buyBonus(selection.id, bonusId))}
                         // Comportement : modifiable seulement pour un soldat du
                         // joueur actif, quand ce client a la main.
+                        // Sélecteur de secours dans le panneau : même action que
+                        // la barre au-dessus des contrôles du plateau.
                         onSetBehavior={
                             canAct && selection?.id && soldierView.playerId === activePlayerId
-                                ? (behaviorId) => dispatch(setBehavior(selection.id, behaviorId))
+                                ? (behaviorId) => {
+                                    dispatch(setBehavior(selection.id, behaviorId));
+                                    if (behaviorId) setSelection(null);
+                                }
                                 : undefined
                         }
+                        bonusOpen={bonusOpen}
+                        onToggleBonus={setBonusOpen}
                         settings={settings}
                         bonusesEnabled={bonusesEnabled}
                         // Défis d'état : lus en direct sur le plateau courant.

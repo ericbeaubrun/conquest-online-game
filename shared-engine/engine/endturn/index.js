@@ -25,10 +25,16 @@
 // façon DIFFÉRENTE entre client et serveur si l'un des deux n'est pas à jour.
 // Voir `test/endturn.test.js`, qui verrouille cet ordre.
 
-import {applyKingIncome, trackPaladinChallenge, ackBonusNotifications, applyConquerors} from './territory.js';
+import {
+    applyKingIncome,
+    applyMonks,
+    trackPaladinChallenge,
+    ackBonusNotifications,
+    applyConquerors,
+} from './territory.js';
 import {spawnTrees, spawnFarmerTrees, spawnChests} from './spawns.js';
 import {applyAlchemists, applyPriests, applyVampires, applyMagicians} from './support.js';
-import {spawnWarlockSkeletons, applySorcerers} from './summons.js';
+import {spawnWarlockSkeletons} from './summons.js';
 
 export const END_TURN_EFFECTS = [
     applyKingIncome, // revenu majoré : ouvre le journal du tour
@@ -40,7 +46,9 @@ export const END_TURN_EFFECTS = [
     applyVampires, // ponction : PV drainés à l'allié le mieux portant
     applyMagicians, // don d'affinité, contre de l'or
     spawnWarlockSkeletons, // invocation de squelettes
-    applySorcerers, // envoûtement des bonus de niveau 5, ou dragon
+    applyMonks, // prime d'inaction — AVANT la remise à zéro des déplacements
+    // (le sort du « Sorcier » n'est plus ici : il est jeté une seule fois, à
+    // l'achat du bonus — voir `castSorcererSpell`)
     trackPaladinChallenge, // défi d'inaction — AVANT la remise à zéro des déplacements
     ackBonusNotifications, // accusé de réception des bonus débloqués
     applyConquerors, // annexion des cases vides voisines

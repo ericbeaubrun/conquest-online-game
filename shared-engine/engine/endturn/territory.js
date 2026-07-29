@@ -3,25 +3,50 @@
 import {getNeighbors, hexId} from '../../data/hex.js';
 import {
     CHALLENGE_METRICS,
+    MONK_IDLE_REWARD,
+    PALADIN_IDLE_HEAL,
     PALADIN_IDLE_TURNS,
     isSummonedUnit,
     unlockedBonusIds,
 } from '../../data/soldier.js';
-import {kingHouseIncomeBonus} from '../selectors.js';
+import {SOLDIER_HP_MAX} from '../rules.js';
+import {kingIncomeBonus} from '../selectors.js';
 import {soldiersWithBonus} from './helpers.js';
 
-// Bonus « Roi » : tant qu'un soldat-roi du joueur est en vie, ses maisons
-// rapportent KING_HOUSE_INCOME_MULT fois plus. Le surplus est DÉJÀ compris dans
-// `ctx.income` (calculé par `incomeFor`, source unique lue aussi par
+// Bonus « Roi » : tant qu'un soldat-roi du joueur est en vie, ses maisons ET son
+// territoire rapportent KING_INCOME_MULT fois plus. Le surplus est DÉJÀ compris
+// dans `ctx.income` (calculé par `incomeFor`, source unique lue aussi par
 // l'interface) : cet effet ne fait que le NOTIFIER.
 // Premier effet du pipeline — son évènement ouvre donc le journal du tour.
 export function applyKingIncome(ctx) {
     const {state, events} = ctx;
     const pid = state.activePlayerId;
-    const amount = kingHouseIncomeBonus(state, pid);
+    const amount = kingIncomeBonus(state, pid);
     if (amount <= 0) return ctx;
     events.push({kind: 'bonusKing', playerId: pid, amount});
     return ctx;
+}
+
+// Bonus « Moine » : chaque moine qui termine le tour SANS AVOIR AGI (absent de
+// `movedSoldiers`, exactement le même critère que le défi du « Paladin »)
+// rapporte MONK_IDLE_REWARD or. Le gain passe par `ctx.income`, comme celui du
+// « Magicien » : c'est le revenu de fin de tour qui le verse, pas une écriture
+// directe sur la bourse.
+//
+// DOIT s'exécuter AVANT la réinitialisation de `movedSoldiers`, pour la même
+// raison que `trackPaladinChallenge` : l'inaction ne se lit que sur le tour
+// écoulé, aucune lecture instantanée ne la reconstitue.
+export function applyMonks(ctx) {
+    const {state, events, placements} = ctx;
+    const pid = state.activePlayerId;
+    let gold = 0;
+    for (const [, p] of soldiersWithBonus(placements, pid, 'monk')) {
+        if (state.movedSoldiers.has(p.uid)) continue; // il a agi : rien
+        gold += MONK_IDLE_REWARD;
+    }
+    if (!gold) return ctx;
+    events.push({kind: 'bonusMonk', playerId: pid, gold});
+    return {...ctx, income: ctx.income + gold};
 }
 
 // Défi « Paladin » : un soldat qui termine son tour SANS AVOIR AGI (ni déplacé,
@@ -39,14 +64,24 @@ export function trackPaladinChallenge(ctx) {
     let placements = null; // copié à la volée seulement si un compteur change
     for (const [id, p] of placementsIn) {
         if (p.type !== 'soldier' || p.playerId !== pid || isSummonedUnit(p)) continue;
+        const idle = !state.movedSoldiers.has(p.uid);
         const cur = p.progress?.[metric] || 0;
         let next;
         if (cur >= PALADIN_IDLE_TURNS) next = cur; // déjà accompli : reste acquis
-        else if (!state.movedSoldiers.has(p.uid)) next = cur + 1; // resté immobile
+        else if (idle) next = cur + 1; // resté immobile
         else next = 0; // a agi : série interrompue
-        if (next === cur) continue;
+
+        // Effet « Paladin » : son immobilité le SOIGNE (plafonné au maximum d'un
+        // soldat) — la même inaction que mesure son défi, récompensée une fois le
+        // bonus porté.
+        const hp =
+            p.bonus === 'paladin' && idle
+                ? Math.min((p.hp || 0) + PALADIN_IDLE_HEAL, SOLDIER_HP_MAX)
+                : p.hp;
+
+        if (next === cur && hp === p.hp) continue;
         if (!placements) placements = new Map(placementsIn);
-        placements.set(id, {...p, progress: {...p.progress, [metric]: next}});
+        placements.set(id, {...p, hp, progress: {...p.progress, [metric]: next}});
     }
     return placements ? {...ctx, placements} : ctx;
 }

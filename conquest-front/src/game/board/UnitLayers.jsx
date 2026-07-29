@@ -2,15 +2,15 @@
 // notifications de bonus et aperçu de pose. Les stats d'attaque / de vie ne sont
 // dessinées que sur les cases listées dans `visibleStatIds` (case survolée,
 // soldat sélectionné et ses cibles — ou toutes les unités quand le bouton
-// « stats » du plateau est actif). Elles prennent DEUX formes au choix du
-// joueur (`statBars`, second bouton du plateau) : un bandeau chiffré sous
-// l'unité, ou des jauges pixel art.
+// « stats » du plateau est actif), sous la forme d'un bandeau chiffré posé sous
+// l'unité.
 import {memo} from 'react';
 import {soldierSkin, soldierSprite, hasUnlockedBonus} from '@conquest/shared-engine/data/soldier.js';
-import {BUILDING_STATS, canFight, isAttackable, maxAtk, maxHp} from '@conquest/shared-engine/engine/rules.js';
+import {BUILDING_STATS, canFight, isAttackable} from '@conquest/shared-engine/engine/rules.js';
 import {unitScale, spriteFacesLeft} from '@conquest/shared-engine/data/units.js';
 import {
     AFFINITY_SRC,
+    SACRIFICE_SRC,
     BASE_SCALE,
     BASE_SRC,
     BEHAVIOR_SRC,
@@ -18,6 +18,7 @@ import {
     NOTIF_SRC,
     PLACEMENT_SRC,
     placementSrc,
+    placementFlipped,
     formatStatCompact,
     formatUnitStatCompact,
     placementImgSize,
@@ -110,89 +111,10 @@ const StatBanner = ({cx, cy, size, atk, hp, yOffset = 0.42, formatValue = format
     );
 };
 
-// Jauge « pixel art » : un cadre noir, une gouttière sombre, et un remplissage
-// coloré proportionnel à `ratio` (0 → 1). Le remplissage part du BAS pour une
-// jauge verticale et de la GAUCHE pour une jauge horizontale. Aucun arrondi et
-// `shape-rendering: crispEdges` (voir la feuille de style) : les bords restent
-// nets à tous les zooms, comme les sprites.
-const StatBar = ({x, y, width, height, ratio, kind, vertical = false}) => {
-    const clamped = Math.max(0, Math.min(1, ratio));
-    const fillW = vertical ? width : width * clamped;
-    const fillH = vertical ? height * clamped : height;
-    return (
-        <>
-            <rect
-                x={x}
-                y={y}
-                width={width}
-                height={height}
-                className="stat-bar__track"
-            />
-            {clamped > 0 && (
-                <rect
-                    // Jauge verticale : le remplissage est ancré en bas, d'où le
-                    // décalage de la part manquante sur `y`.
-                    x={x}
-                    y={vertical ? y + height - fillH : y}
-                    width={fillW}
-                    height={fillH}
-                    className={`stat-bar__fill stat-bar__fill--${kind}`}
-                />
-            )}
-        </>
-    );
-};
-
-// Jauges d'attaque / de points de vie d'une unité : la vie en barre HORIZONTALE
-// sous l'unité, l'attaque en barre VERTICALE sur son flanc gauche. Les jauges
-// sont dimensionnées sur les plafonds du moteur (`maxHp` / `maxAtk`) pour rester
-// comparables d'une unité à l'autre. `atk` à `null` n'affiche pas de jauge
-// d'attaque (la base et la maison n'attaquent pas).
-const StatBars = ({cx, cy, size, atk, hp, atkMax, hpMax}) => {
-    const thickness = size * 0.11;
-    const length = size * 0.62;
-    return (
-        <>
-            {atk != null && atkMax > 0 && (
-                <StatBar
-                    x={cx - size * 0.46}
-                    y={cy - length / 2}
-                    width={thickness}
-                    height={length}
-                    ratio={atk / atkMax}
-                    kind="atk"
-                    vertical
-                />
-            )}
-            {hpMax > 0 && (
-                <StatBar
-                    x={cx - length / 2}
-                    y={cy + size * 0.42}
-                    width={length}
-                    height={thickness}
-                    ratio={hp / hpMax}
-                    kind="hp"
-                />
-            )}
-        </>
-    );
-};
-
-// Stats d'une unité, sous la forme choisie par le joueur : jauges (`statBars`)
-// ou bandeau chiffré. Les deux formes affichent les MÊMES valeurs ; seules les
-// jauges ont besoin des plafonds (`atkMax` / `hpMax`) pour se dimensionner, et
-// seul le bandeau a besoin d'un format et d'une hauteur (`numberProps`, pour
-// les unités hautes dont le bandeau remonte sous le sprite).
-const UnitStats = ({statBars, cx, cy, size, atk, hp, atkMax, hpMax, numberProps}) =>
-    statBars ? (
-        <StatBars cx={cx} cy={cy} size={size} atk={atk} hp={hp} atkMax={atkMax} hpMax={hpMax}/>
-    ) : (
-        <StatBanner cx={cx} cy={cy} size={size} atk={atk} hp={hp} {...numberProps}/>
-    );
 
 // Bases, dessinées au-dessus des cases. Une base détruite (assiégée jusqu'à
 // 0 PV) disparaît : sa case redevient une case normale.
-export const Bases = memo(function Bases({baseCells, size, destroyedBases, baseHp, visibleStatIds, statBars}) {
+export const Bases = memo(function Bases({baseCells, size, destroyedBases, baseHp, visibleStatIds}) {
     const s = size * BASE_SCALE;
     return baseCells
         .filter((cell) => !destroyedBases?.has(cell.id))
@@ -208,17 +130,15 @@ export const Bases = memo(function Bases({baseCells, size, destroyedBases, baseH
                     pointerEvents="none"
                 />
                 {visibleStatIds.has(cell.id) && (
-                    <UnitStats
-                        statBars={statBars}
+                    <StatBanner
                         cx={cell.cx}
                         cy={cell.cy}
                         size={size}
                         atk={null}
                         hp={baseHp?.[cell.id] ?? BUILDING_STATS.base.hp}
-                        hpMax={BUILDING_STATS.base.hpMax}
                         // Base : pas d'attaque, une seule case (PV). Le sprite
                         // débordant de la case, le bandeau remonte sur lui.
-                        numberProps={{yOffset: 0.14}}
+                        yOffset={0.14}
                     />
                 )}
             </g>
@@ -227,7 +147,7 @@ export const Bases = memo(function Bases({baseCells, size, destroyedBases, baseH
 
 // Items posés (soldats, maisons, tours). Le niveau d'un soldat se lit à son
 // sprite (skin par niveau) plutôt qu'à un badge numérique.
-export const Buildings = memo(function Buildings({placements, cellMap, size, visibleStatIds, statBars}) {
+export const Buildings = memo(function Buildings({placements, cellMap, size, visibleStatIds}) {
     // Les unités qui débordent de leur case (le dragon) sont dessinées EN
     // DERNIER : sans ce tri, l'ordre d'insertion de la carte des items les
     // ferait passer sous un voisin posé après elles, et le colosse aurait l'air
@@ -253,14 +173,19 @@ export const Buildings = memo(function Buildings({placements, cellMap, size, vis
                     width={imgSize}
                     height={imgSize}
                     style={{imageRendering: 'pixelated'}}
-                    // Miroir horizontal (autour du centre de la case) quand le
-                    // sens visé ne correspond pas à celui du sprite. Les sprites
-                    // sont dessinés vers la droite par convention ; les rares
-                    // espèces dessinées vers la gauche (le corbeau) le déclarent
-                    // au catalogue, et leur miroir s'inverse.
-                    transform={isSoldier && (placed.facing === 'left') !== spriteFacesLeft(placed)
-                        ? `translate(${2 * cell.cx} 0) scale(-1 1)`
-                        : undefined}
+                    // Miroir horizontal (autour du centre de la case) : pour un
+                    // soldat, quand le sens visé ne correspond pas à celui du
+                    // sprite (les sprites sont dessinés vers la droite par
+                    // convention ; les rares espèces dessinées vers la gauche,
+                    // comme le corbeau, le déclarent au catalogue et leur miroir
+                    // s'inverse) ; pour un arbre/coffre, un sens tiré au hasard
+                    // par case pour éviter que tous pointent dans le même sens.
+                    transform={
+                        (isSoldier && (placed.facing === 'left') !== spriteFacesLeft(placed))
+                        || placementFlipped(placed, id)
+                            ? `translate(${2 * cell.cx} 0) scale(-1 1)`
+                            : undefined
+                    }
                 />
                 {showStats && isSoldier && AFFINITY_SRC[placed.affinity] && (
                     <image
@@ -273,8 +198,7 @@ export const Buildings = memo(function Buildings({placements, cellMap, size, vis
                     />
                 )}
                 {showStats && (isBuilding || isSoldier) && (
-                    <UnitStats
-                        statBars={statBars}
+                    <StatBanner
                         cx={cell.cx}
                         cy={cell.cy}
                         size={size}
@@ -282,14 +206,10 @@ export const Buildings = memo(function Buildings({placements, cellMap, size, vis
                         // maison n'a donc aucune attaque à montrer.
                         atk={isSoldier ? placed.atk ?? 0 : BUILDING_STATS[placed.type]?.atk ?? null}
                         hp={placed.hp ?? 0}
-                        atkMax={maxAtk(placed)}
-                        hpMax={maxHp(placed)}
-                        numberProps={{
-                            formatValue: isSoldier || isTower ? formatUnitStatCompact : formatStatCompact,
-                            // Maison : pas d'attaque, une seule case (PV), et
-                            // un bandeau remonté comme pour la base.
-                            ...(placed.type === 'house' ? {yOffset: 0.14} : null),
-                        }}
+                        formatValue={isSoldier || isTower ? formatUnitStatCompact : formatStatCompact}
+                        // Maison : pas d'attaque, une seule case (PV), et un
+                        // bandeau remonté comme pour la base.
+                        {...(placed.type === 'house' ? {yOffset: 0.14} : null)}
                     />
                 )}
                 {placed.type === 'chest' && (
@@ -373,7 +293,7 @@ export const BehaviorMarkers = memo(function BehaviorMarkers({
                 key={'behav' + id}
                 href={BEHAVIOR_SRC}
                 x={cell.cx - badge / 2}
-                y={cell.cy - size * 0.62 - badge / 2}
+                y={cell.cy - size * 0.48 - badge / 2}
                 width={badge}
                 height={badge}
                 style={{imageRendering: 'pixelated'}}
@@ -386,14 +306,15 @@ export const BehaviorMarkers = memo(function BehaviorMarkers({
 // Croix posée sur toutes les unités ENNEMIES que le soldat sélectionné ne peut
 // pas combattre à cause de son affinité (`canFight`) : un soldat de feu voit
 // une croix sur tous les ennemis de feu, un bouclier sur tous les ennemis sans
-// affinité ou eux-mêmes boucliers. La couche n'existe que si le soldat
-// sélectionné PORTE une affinité — sans affinité, aucun combat n'est interdit
-// (hormis face à un bouclier, déjà marqué depuis l'autre bord).
+// affinité ou eux-mêmes boucliers — ET, symétriquement, un soldat SANS
+// affinité voit une croix sur tous les ennemis boucliers (le bouclier refuse
+// aussi le combat dans ce sens, voir `canFight`). La couche ne peut donc plus
+// se limiter aux porteurs d'affinité : `canFight` fait déjà tout le tri.
 //
 // Dessinée APRÈS le voile (`Dimmer`) : la croix reste lisible même sur les
 // cases hors de portée, où l'information est justement la plus utile.
 export const NoFightMarkers = memo(function NoFightMarkers({placements, cellMap, size, mover}) {
-    if (!mover?.affinity) return null;
+    if (!mover) return null;
     const badge = size * 0.62;
     return [...placements.entries()].map(([id, placed]) => {
         if (placed.playerId === mover.playerId) return null;
@@ -419,17 +340,18 @@ export const NoFightMarkers = memo(function NoFightMarkers({placements, cellMap,
 // sur la case survolée quand elle est un emplacement de pose valide : le joueur
 // voit ce qu'il s'apprête à placer avant de valider (soldat, maison, tour).
 export const PlacementPreview = ({cell, type, soldierLevel, size}) => {
-    // Affinité : la case porte déjà le soldat visé — on prévisualise donc la
-    // seule icône de l'élément, à l'emplacement exact de son futur badge (coin
-    // haut-droit, voir la couche `Buildings`). Pas de désaturation ici : la
-    // couleur EST l'information qui distingue feu, glace et foudre.
-    const affinitySrc = AFFINITY_SRC[type];
-    if (affinitySrc) {
+    // Affinité / potion de sacrifice : la case porte déjà le soldat visé — on
+    // prévisualise donc la seule icône de l'effet, à l'emplacement exact de son
+    // futur badge (coin haut-droit, voir la couche `Buildings`). Pas de
+    // désaturation ici : la couleur EST l'information (feu, glace, foudre —
+    // ou l'or de la potion).
+    const badgeSrc = type === 'sacrifice' ? SACRIFICE_SRC : AFFINITY_SRC[type];
+    if (badgeSrc) {
         if (!cell) return null;
         const badge = size * 0.3;
         return (
             <image
-                href={affinitySrc}
+                href={badgeSrc}
                 x={cell.cx + size * 0.14}
                 y={cell.cy - size * 0.52}
                 width={badge}

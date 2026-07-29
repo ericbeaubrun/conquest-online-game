@@ -8,6 +8,20 @@ import {MongoClient} from 'mongodb';
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const DB_NAME = process.env.MONGODB_DB || 'conquest';
 
+// Retire les identifiants d'une URI de connexion : `//utilisateur:motdepasse@`
+// devient `//***@`. Une URI de production part dans les logs de l'hébergeur
+// (Render), qui ne sont ni éphémères ni forcément privés — le mot de passe du
+// cluster n'a rien à y faire. Le reste de l'URI (hôte, options) est conservé :
+// c'est ce qui rend le message utile au diagnostic.
+//
+// S'applique aussi aux messages d'ERREUR du driver, qui recrachent volontiers
+// l'URI complète telle qu'elle lui a été passée.
+export const maskCredentials = (text) => String(text).replace(/\/\/[^/@\s]+@/g, '//***@');
+
+// URI expurgée, seule forme AFFICHABLE. C'est elle qu'exporte ce module : rien
+// à l'extérieur n'a besoin de l'URI en clair (le driver, lui, la lit ici même).
+const SAFE_URI = maskCredentials(URI);
+
 let client = null;
 let db = null;
 
@@ -20,7 +34,7 @@ export async function connectDb() {
     // Index pour lister rapidement les parties ouvertes, plus récentes d'abord.
     await db.collection('lobbies').createIndex({status: 1, updatedAt: -1});
     // eslint-disable-next-line no-console
-    console.log(`MongoDB connecté : ${URI} (base « ${DB_NAME} »)`);
+    console.log(`MongoDB connecté : ${SAFE_URI} (base « ${DB_NAME} »)`);
     return db;
 }
 
@@ -40,4 +54,4 @@ export async function closeDb() {
     db = null;
 }
 
-export {URI as MONGODB_URI};
+export {SAFE_URI as MONGODB_URI_SAFE};

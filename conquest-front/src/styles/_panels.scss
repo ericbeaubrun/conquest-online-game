@@ -529,11 +529,19 @@
     }
   }
 
-  // Entretien prélevé chaque tour tant que le bonus est équipé.
+  // Or par tour tant que le bonus est équipé : rouge quand il est PRÉLEVÉ
+  // (Ninja), vert quand il est RAPPORTÉ (Guerrier).
   &__upkeep {
     font-size: 12px;
-    color: #ff6b6b;
     white-space: nowrap;
+
+    &--cost {
+      color: #ff6b6b;
+    }
+
+    &--gain {
+      color: #5bd35b;
+    }
   }
 
   &__challenge {

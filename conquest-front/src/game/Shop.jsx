@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ITEMS, AFFINITY_ITEMS, isAffinityItem } from '@conquest/shared-engine/data/items.js';
+import {
+    ITEMS,
+    AFFINITY_ITEMS,
+    SACRIFICE_POTION_ITEM,
+    SACRIFICE_GOLD_PER_POINT,
+    isAffinityItem,
+    isSacrificeItem,
+    isPlacementTargetedItem,
+} from '@conquest/shared-engine/data/items.js';
 import { BUILDING_STATS } from '@conquest/shared-engine/engine/rules.js';
 import {
     upkeepFor,
@@ -19,9 +27,10 @@ import { formatStatCompact } from './board/constants.js';
 // tiennent dans une SEULE rangée horizontale scrollable (plus de pagination) :
 // d'abord le soldat de base, la maison et les tours, puis les soldats de
 // niveau supérieur (achat direct, prix/stats doublés à chaque niveau, comme une
-// fusion), enfin les affinités (feu / glace / foudre), qui ne se posent pas sur
-// une case mais sur un soldat allié sans affinité. Les flèches ◀ ▶ font défiler
-// la rangée (elles ne changent plus de page).
+// fusion), puis les affinités (feu / glace / foudre) et enfin la potion de
+// sacrifice — ces dernières ne se posent pas sur une case mais sur un soldat
+// allié (sans affinité pour les premières, à plus d'1 PV pour la potion). Les
+// flèches ◀ ▶ font défiler la rangée (elles ne changent plus de page).
 const SOLDIER_UPGRADE_LEVELS = Array.from(
     { length: MAX_SOLDIER_PURCHASE_LEVEL - 1 },
     (_, i) => i + 2
@@ -37,6 +46,7 @@ const SHOP_ITEMS = [
         level,
     })),
     ...AFFINITY_ITEMS,
+    SACRIFICE_POTION_ITEM,
 ];
 
 // Distance de défilement d'un clic sur une flèche (~2 cartes de large).
@@ -45,9 +55,10 @@ const SHOP_SCROLL_STEP = 220;
 // Caractéristiques affichées pour un item donné : PV (et attaque pour le
 // soldat et les tours) en tête de carte.
 function specsFor(item, settings) {
-    // Affinité : ni PV, ni attaque, ni entretien — seulement son icône et son
-    // prix (les badges de stats sont alors omis de la carte).
-    if (isAffinityItem(item.id)) {
+    // Affinité / potion de sacrifice : ni PV, ni attaque, ni entretien —
+    // seulement leur icône et leur prix (les badges de stats sont alors omis
+    // de la carte). Les deux ciblent un élément déjà posé plutôt qu'une case vide.
+    if (isPlacementTargetedItem(item.id)) {
         return {
             cost: settings?.itemCost?.[item.id] ?? item.cost,
             sprite: item.src,
@@ -172,16 +183,21 @@ const Shop = ({
                     const affordable = activeGold >= sp.cost;
                     const buyable = affordable && canAct;
                     const buy = () => buyable && onSelect(active ? null : item.id, level);
-                    // Une affinité se pose sur un SOLDAT, pas sur une case : même
-                    // en pose directe, elle demande de choisir sa cible.
+                    // Une affinité ou la potion de sacrifice se posent sur un
+                    // ÉLÉMENT déjà en jeu, pas sur une case : même en pose
+                    // directe, elles demandent de choisir leur cible.
                     const affinity = isAffinityItem(item.id);
+                    const sacrifice = isSacrificeItem(item.id);
+                    const targeted = affinity || sacrifice;
                     const hint = !affordable
                         ? `${item.name} — or insuffisant`
                         : affinity
                             ? `${item.name} — sélectionner puis choisir un soldat sans affinité`
-                            : placeMode
-                                ? 'Poser sur la case'
-                                : `${item.name} — sélectionner puis poser`;
+                            : sacrifice
+                                ? `${item.name} — sélectionner puis choisir un soldat allié`
+                                : placeMode
+                                    ? 'Poser sur la case'
+                                    : `${item.name} — sélectionner puis poser`;
                     return (
                         // Tout le container est cliquable pour acheter (plus accessible).
                         <div
@@ -189,7 +205,7 @@ const Shop = ({
                             className={`shop-card ${active ? 'shop-card--active' : ''} ${
                                 affordable ? '' : 'shop-card--poor'
                             } ${buyable ? '' : 'shop-card--locked'} ${
-                                placeMode && !affinity ? 'shop-card--placeable' : ''
+                                placeMode && !targeted ? 'shop-card--placeable' : ''
                             }`}
                             role="button"
                             tabIndex={buyable ? 0 : -1}
@@ -203,63 +219,92 @@ const Shop = ({
                             }}
                             title={hint}
                         >
-                            {/* Vignette : le sprite, avec par-dessus les deux repères
-                                lus d'un coup d'œil — l'entretien/revenu en pastille au
-                                coin, et le bandeau atk/PV collé aux pieds de l'unité,
-                                exactement comme sur le plateau. */}
+                            {/* Vignette : le sprite SEUL, bien lisible — plus rien ne
+                                le recouvre. Les repères chiffrés (atk/PV, puis le
+                                coût par tour) sont empilés SOUS lui, chacun sur sa
+                                propre ligne, à la même hauteur d'une carte à l'autre. */}
                             <div className="shop-card__thumb">
                                 <img src={sp.sprite} alt={item.name} className="shop-card__icon" draggable={false} />
+                            </div>
 
-                                {sp.upkeep ? (
-                                    <span className="shop-card__perturn shop-card__perturn--upkeep" title="Entretien par tour">
-                                        <img src="/coin.png" alt="" className="shop-card__perturn-icon" draggable={false} />
-                                        −{sp.upkeep}
+                            {/* Bandeau atk/PV : même objet que sur le plateau, posé
+                                juste sous le sprite (et non plus par-dessus). */}
+                            <div className="shop-card__banner">
+                                {!targeted && sp.atk != null && (
+                                    <span
+                                        className="soldier-stat-badge soldier-stat-badge--atk soldier-stat-badge--sm"
+                                        title="Attaque"
+                                    >
+                                        {formatStatCompact(sp.atk)}
                                     </span>
-                                ) : sp.income ? (
-                                    <span className="shop-card__perturn shop-card__perturn--income" title="Revenu par tour">
-                                        <img src="/coin.png" alt="" className="shop-card__perturn-icon" draggable={false} />
-                                        +{sp.income}
+                                )}
+                                {!targeted && sp.hp != null && (
+                                    <span
+                                        className="soldier-stat-badge soldier-stat-badge--hp soldier-stat-badge--sm"
+                                        title="Points de vie"
+                                    >
+                                        {formatStatCompact(sp.hp)}
                                     </span>
-                                ) : null}
-
-                                {!affinity && (sp.atk != null || sp.hp != null) && (
-                                    <div className="shop-card__banner">
-                                        {sp.atk != null && (
-                                            <span
-                                                className="soldier-stat-badge soldier-stat-badge--atk soldier-stat-badge--sm"
-                                                title="Attaque"
-                                            >
-                                                {formatStatCompact(sp.atk)}
-                                            </span>
-                                        )}
-                                        {sp.hp != null && (
-                                            <span
-                                                className="soldier-stat-badge soldier-stat-badge--hp soldier-stat-badge--sm"
-                                                title="Points de vie"
-                                            >
-                                                {formatStatCompact(sp.hp)}
-                                            </span>
-                                        )}
-                                    </div>
                                 )}
                             </div>
 
                             {/* Une affinité n'a ni PV/attaque ni entretien/revenu : on
-                                rappelle à la place sa règle (blocage du combat même
-                                élément), adaptée au nom de l'affinité de la carte. */}
+                                rappelle à la place sa règle. Les trois éléments
+                                s'annulent entre eux (« feu vs feu ») ; le bouclier,
+                                lui, refuse le combat contre tout sauf les éléments —
+                                sa note est donc à part. */}
                             {affinity && (
                                 <p
                                     className="shop-card__affinity-note"
-                                    title={`Empêche les combats ${item.name.toLowerCase()} contre ${item.name.toLowerCase()}`}
+                                    title={
+                                        item.id === 'shield'
+                                            ? 'Ne combat que le feu, la glace et la foudre'
+                                            : `Empêche les combats ${item.name.toLowerCase()} contre ${item.name.toLowerCase()}`
+                                    }
                                 >
-                                    Bloque {item.name.toLowerCase()} vs {item.name.toLowerCase()}
+                                    {item.id === 'shield'
+                                        ? 'Bloque tout sauf feu/glace/foudre'
+                                        : `Bloque ${item.name.toLowerCase()} vs ${item.name.toLowerCase()}`}
                                 </p>
                             )}
 
-                            {/* Prix : ancré en bas de la carte, donc aligné entre toutes.
-                                Discret (pas un bouton) — c'est la carte entière qui achète. */}
+                            {/* Potion de sacrifice : même absence de PV/attaque/
+                                entretien qu'une affinité, même rappel de règle à
+                                la place. */}
+                            {sacrifice && (
+                                <p
+                                    className="shop-card__affinity-note"
+                                    title="Transforme le soldat ciblé en un tas d'or au sol, à ramasser"
+                                >
+                                    {`Tas d'or : (ATK+PV) × ${SACRIFICE_GOLD_PER_POINT}`}
+                                </p>
+                            )}
+
+                            {/* Coût / revenu récurrent : une ligne à part, sous le
+                                sprite, lue « −2 🪙 / tour » — valeur colorée (rouge
+                                = dépense, vert = gain), pièce, puis l'unité en clair.
+                                Le chiffre seul se confondait avec le prix d'achat. */}
+                            <div className="shop-card__perturn-row">
+                                {sp.upkeep ? (
+                                    <span className="shop-card__perturn shop-card__perturn--upkeep" title="Entretien par tour">
+                                        <em className="shop-card__perturn-value">−{sp.upkeep}</em>
+                                        <img src="/coin.png" alt="or" className="shop-card__perturn-icon" draggable={false} />
+                                        <em className="shop-card__perturn-unit">/ tour</em>
+                                    </span>
+                                ) : sp.income ? (
+                                    <span className="shop-card__perturn shop-card__perturn--income" title="Revenu par tour">
+                                        <em className="shop-card__perturn-value">+{sp.income}</em>
+                                        <img src="/coin.png" alt="or" className="shop-card__perturn-icon" draggable={false} />
+                                        <em className="shop-card__perturn-unit">/ tour</em>
+                                    </span>
+                                ) : null}
+                            </div>
+
+                            {/* Prix d'achat : ancré en bas de la carte (donc aligné
+                                entre toutes) et volontairement le plus GROS élément
+                                chiffré — c'est l'information de décision. */}
                             <div className="shop-card__price">
-                                <img src="/coin.png" alt="or" className="coin-icon" draggable={false} />
+                                <img src="/coin.png" alt="or" className="shop-card__price-icon" draggable={false} />
                                 {sp.cost}
                             </div>
                         </div>

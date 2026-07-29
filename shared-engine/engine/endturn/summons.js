@@ -35,20 +35,25 @@ export function spawnWarlockSkeletons(ctx) {
     return {...ctx, placements, uidSeq};
 }
 
-// Bonus « Sorcier » : chaque sorcier jette son sort sur TOUS les soldats ENNEMIS
-// portant l'un des trois autres bonus de niveau 5 — le roi devient un cochon, le
-// démoniste une couronne, le conquérant une grenouille : des créatures 1/1 sans
-// effet, qui gardent leur affinité et restent à leur propriétaire.
+// Bonus « Sorcier » : le sort est jeté UNE SEULE FOIS, à L'ACHAT du bonus (voir
+// `reduceBuyBonus`) — et non à chaque fin de tour. Ce n'est donc pas un effet du
+// pipeline de fin de tour, mais une fonction appelée par le réducteur.
+//
+// Le sorcier frappe TOUS les soldats ENNEMIS portant l'un des trois autres bonus
+// de niveau 5 — le roi devient un cochon, le démoniste une couronne, le
+// conquérant une grenouille : des créatures 1/1 sans effet, qui gardent leur
+// affinité et restent à leur propriétaire.
 //
 // Si le plateau ne porte AUCUNE de ces trois cibles (ni chez l'ennemi, ni chez
 // soi), le sort se reporte sur une invocation : un dragon sur une case libre du
-// territoire, voisine du sorcier. Une seule fois par sorcier (`dragonSummoned`),
-// sans quoi il en produirait un à chaque tour.
-export function applySorcerers(ctx) {
-    const {state, board, events, placements: placementsIn} = ctx;
+// territoire, voisine du sorcier. Le sort étant unique, une absence de cible ou
+// de case d'accueil le fait simplement retomber : rien n'est retenté plus tard.
+//
+// Renvoie `{placements, uidSeq, events}` — `placements` est la carte d'origine
+// si le sort n'a rien produit.
+export function castSorcererSpell(state, board, placementsIn, uidSeqIn, cellId) {
     const pid = state.activePlayerId;
-    const sorcerers = soldiersWithBonus(placementsIn, pid, 'sorcerer');
-    if (!sorcerers.length) return ctx;
+    const events = [];
 
     // Cibles : les porteurs des bonus envoûtables. On distingue les ENNEMIS (à
     // envoûter) de la présence GLOBALE, qui seule conditionne l'invocation du
@@ -68,25 +73,18 @@ export function applySorcerers(ctx) {
             placements.set(id, makeCursed(victim, curseFor(victim.bonus)));
         }
         events.push({kind: 'bonusSorcerer', playerId: pid, count: victims.length});
-        return {...ctx, placements};
+        return {placements, uidSeq: uidSeqIn, events};
     }
-    if (anyOnBoard) return ctx; // cibles alliées seules : rien à faire
+    // Cibles alliées seules : rien à faire.
+    if (anyOnBoard) return {placements: placementsIn, uidSeq: uidSeqIn, events};
 
-    // Aucune cible nulle part : invocation du dragon, une fois par sorcier.
+    // Aucune cible nulle part : invocation du dragon.
+    if (!board.cellMap.get(cellId)) return {placements: placementsIn, uidSeq: uidSeqIn, events};
+    const spot = freeOwnedNeighbor(state, board, placementsIn, pid, cellId);
+    if (!spot) return {placements: placementsIn, uidSeq: uidSeqIn, events};
     const placements = new Map(placementsIn);
-    let uidSeq = ctx.uidSeq;
-    let summoned = false;
-    for (const [id] of sorcerers) {
-        const sorcerer = placements.get(id);
-        if (sorcerer.dragonSummoned) continue;
-        if (!board.cellMap.get(id)) continue;
-        const spot = freeOwnedNeighbor(state, board, placements, pid, id);
-        if (!spot) continue; // aucune case d'accueil : le sorcier retentera au prochain tour
-        uidSeq += 1;
-        placements.set(spot, makeUnit('dragon', pid, `s${uidSeq}`));
-        placements.set(id, {...sorcerer, dragonSummoned: true});
-        summoned = true;
-        events.push({kind: 'bonusSorcererDragon', playerId: pid});
-    }
-    return summoned ? {...ctx, placements, uidSeq} : ctx;
+    const uidSeq = uidSeqIn + 1;
+    placements.set(spot, makeUnit('dragon', pid, `s${uidSeq}`));
+    events.push({kind: 'bonusSorcererDragon', playerId: pid});
+    return {placements, uidSeq, events};
 }

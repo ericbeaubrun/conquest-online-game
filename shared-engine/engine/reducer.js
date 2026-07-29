@@ -35,20 +35,32 @@ import {
     TREE_REWARD,
     SHIELD_AFFINITY,
 } from './rules.js';
-import {ITEM_COST, isAffinityItem} from '../data/items.js';
-import {treeReward, treeAffinity, canChopTree, isRarestTree} from '../data/trees.js';
-import {makeLoot, lootGold, lootHp, lootAtk, lootAffinity, lootUnit} from '../data/chests.js';
+import {ITEM_COST, isAffinityItem, isSacrificeItem, SACRIFICE_GOLD_PER_POINT} from '../data/items.js';
+import {treeReward, treeAffinity, canChopTree} from '../data/trees.js';
+import {
+    makeLoot,
+    lootGold,
+    lootHp,
+    lootAtk,
+    lootInvert,
+    lootAffinity,
+    lootUnit,
+    coinSrcForGold,
+} from '../data/chests.js';
 import {
     CHALLENGE_METRICS,
     BONUS_OFFERS,
     bonusPriceOf,
     isBonusUnlocked,
     WARRIOR_KILL_REWARD,
+    BLACK_KNIGHT_SKELETON_REWARD,
     LUMBERJACK_REWARD_MULT,
     ADVENTURER_CASE_REWARD,
     THIEF_ENEMY_CASE_REWARD,
     isSkeleton,
+    isSummonedUnit,
     canReceiveAffinity,
+    canReceiveSacrifice,
     purchasedSoldierStats,
     soldierCostForLevel,
     BEHAVIORS,
@@ -295,16 +307,19 @@ function reduceAttack(state, {fromId, toId}) {
         ownership.set(toId, state.activePlayerId);
     }
 
-    // Défi « Mort-vivant » : tuer un soldat ennemi de niveau ≥ 2. Crédité à
-    // l'attaquant seulement s'il survit (sinon sa progression disparaît avec lui).
-    if (
-        !attacker.dead &&
-        deadDefender?.type === 'soldier' &&
-        (deadDefender.level || 1) >= 2
-    ) {
+    // Compteurs de mise à mort, crédités à l'attaquant seulement s'il survit
+    // (sinon sa progression disparaît avec lui) :
+    //   - ENEMIES_KILLED : toute unité tuée. Il ne DÉBLOQUE rien, il FERME —
+    //     c'est lui qui fait perdre au « Moine » son défi d'innocence ;
+    //   - ENEMIES_KILLED_L2 : les seuls soldats de niveau ≥ 2 (défi « Mort-vivant »).
+    if (!attacker.dead && deadDefender?.type === 'soldier') {
         const alive = placements.get(attackerFinalId);
         if (alive?.uid === from.uid) {
-            placements.set(attackerFinalId, withProgress(alive, CHALLENGE_METRICS.ENEMIES_KILLED_L2, 1));
+            let credited = withProgress(alive, CHALLENGE_METRICS.ENEMIES_KILLED, 1);
+            if ((deadDefender.level || 1) >= 2) {
+                credited = withProgress(credited, CHALLENGE_METRICS.ENEMIES_KILLED_L2, 1);
+            }
+            placements.set(attackerFinalId, credited);
         }
     }
 
@@ -329,6 +344,13 @@ function reduceAttack(state, {fromId, toId}) {
     if (from.bonus === 'warrior' && !attacker.dead && deadDefender) {
         const purse = state.gold[state.activePlayerId] || 0;
         gold = {...state.gold, [state.activePlayerId]: purse + WARRIOR_KILL_REWARD};
+    }
+
+    // Bonus « Chevalier noir » : même principe, mais réservé aux SQUELETTES —
+    // l'attaquant doit survivre et le squelette être bel et bien mort.
+    if (from.bonus === 'blackKnight' && !attacker.dead && isSkeleton(deadDefender)) {
+        const purse = gold[state.activePlayerId] || 0;
+        gold = {...gold, [state.activePlayerId]: purse + BLACK_KNIGHT_SKELETON_REWARD};
     }
 
     const movedSoldiers = new Set(state.movedSoldiers).add(from.uid);
@@ -400,16 +422,13 @@ function reduceChop(state, {fromId, toId}) {
         );
     }
 
-    // Avancement des défis : +1 arbre abattu, +1 si l'arbre était sur une case
-    // possédée par un adversaire (territoire ennemi), et +1 s'il s'agissait de
-    // l'essence la plus rare du jeu (défi « Ninja »).
+    // Avancement des défis : +1 arbre abattu (défi « Bûcheron », et innocence
+    // perdue pour le « Moine »), +1 si l'arbre était sur une case possédée par un
+    // adversaire (défi « Fermier »).
     let chopper = withProgress(from, CHALLENGE_METRICS.TREES_CHOPPED, 1);
     const treeOwner = state.ownership.get(toId);
     if (treeOwner != null && treeOwner !== state.activePlayerId) {
         chopper = withProgress(chopper, CHALLENGE_METRICS.ENEMY_TREES_CHOPPED, 1);
-    }
-    if (isRarestTree(tree)) {
-        chopper = withProgress(chopper, CHALLENGE_METRICS.RAREST_TREES_CHOPPED, 1);
     }
 
     // Arbre élémentaire abattu par un soldat SANS affinité : l'élément de
@@ -557,6 +576,18 @@ function reduceTakeLoot(state, fromId, toId, soldier) {
         events.push({kind: 'lootStat', playerId: pid, stat: 'atk', amount: after - before});
     }
 
+    // Breuvage d'inversion : échange PV et attaque du ramasseur. Rien n'est
+    // ajouté ; on plafonne quand même (l'attaque max est plus basse que les PV
+    // max, un gros tas de PV peut donc être écrêté en passant côté attaque).
+    if (lootInvert(loot)) {
+        const beforeHp = taker.hp || 0;
+        const beforeAtk = taker.atk || 0;
+        const afterHp = Math.min(beforeAtk, SOLDIER_HP_MAX);
+        const afterAtk = Math.min(beforeHp, SOLDIER_ATK_MAX);
+        taker = {...taker, hp: afterHp, atk: afterAtk};
+        events.push({kind: 'lootInvert', playerId: pid, hp: afterHp, atk: afterAtk});
+    }
+
     // Affinité : offerte au ramasseur, s'il n'en a pas déjà une (une affinité ne
     // se remplace jamais).
     const affinity = lootAffinity(loot);
@@ -602,15 +633,45 @@ function reducePlaceAffinity(state, cellId, affinity) {
     );
 }
 
+// Achat de la potion de sacrifice en boutique : elle ne se pose pas sur une
+// case libre mais s'APPLIQUE au soldat qui occupe la case — un soldat du
+// joueur actif, les structures (maison, tours) et la base étant exclues (voir
+// `canReceiveSacrifice`). Le prix est débité, puis la cible est REMPLACÉE par
+// un tas d'or au sol — un butin ordinaire (`type: 'loot'`, voir
+// `data/chests.js`), ramassable par N'IMPORTE QUEL soldat en s'y déplaçant,
+// exactement comme celui d'un coffre — elle ne rejoint donc PAS directement le
+// porte-monnaie de l'acheteur. Sa valeur : `atk + hp` de la cible, au tarif
+// `SACRIFICE_GOLD_PER_POINT`.
+function reducePlaceSacrifice(state, cellId) {
+    const target = state.placements.get(cellId);
+    if (!canReceiveSacrifice(target)) return state; // pas un soldat sacrifiable
+    if (target.playerId !== state.activePlayerId) return state; // jamais un élément adverse
+
+    const cost = state.settings?.itemCost?.sacrifice ?? ITEM_COST.sacrifice ?? 0;
+    const purse = state.gold[state.activePlayerId] || 0;
+    if (purse < cost) return state; // fonds insuffisants
+
+    const goldValue = ((target.atk ?? 0) + (target.hp ?? 0)) * SACRIFICE_GOLD_PER_POINT;
+    const placements = new Map(state.placements);
+    placements.set(cellId, {type: 'loot', gold: goldValue, src: coinSrcForGold(goldValue)});
+    const gold = {...state.gold, [state.activePlayerId]: purse - cost};
+    return emit(
+        {...state, placements, gold},
+        {kind: 'sacrificeTransform', playerId: state.activePlayerId, target: unitSnapshot(target), gold: goldValue, cost}
+    );
+}
+
 // Pose d'un item (soldat, maison, tour) sur une case du territoire actif, ou
-// achat d'une affinité pour le soldat qui l'occupe.
+// achat d'une affinité / de la potion de sacrifice pour l'élément qui l'occupe.
 function reducePlace(state, {cellId, itemType, level = 1}) {
     const board = getLogicalBoard(state.mapId);
     const cell = board.cellMap.get(cellId);
     if (!cell || cell.blocked || board.baseIds.has(cellId)) return state;
-    // Les affinités ciblent un SOLDAT posé et non une case libre : elles ont
-    // leurs propres conditions (voir `reducePlaceAffinity`).
+    // Les affinités et la potion de sacrifice ciblent un ÉLÉMENT déjà posé et
+    // non une case libre : elles ont leurs propres conditions (voir
+    // `reducePlaceAffinity` / `reducePlaceSacrifice`).
     if (isAffinityItem(itemType)) return reducePlaceAffinity(state, cellId, itemType);
+    if (isSacrificeItem(itemType)) return reducePlaceSacrifice(state, cellId);
     if (state.ownership.get(cellId) !== state.activePlayerId) return state;
     if (state.placements.has(cellId)) return state; // case déjà occupée
 
@@ -661,7 +722,14 @@ function reduceBuyBonus(state, {cellId, bonusId}) {
     if (state.settings && state.settings.bonusesEnabled === false) return state; // bonus désactivés
     const soldier = state.placements.get(cellId);
     if (!soldier || soldier.type !== 'soldier') return state;
-    if (isSkeleton(soldier)) return state; // un squelette ne porte jamais de bonus
+    // Une unité INVOQUÉE ou ENVOÛTÉE ne porte jamais de bonus (squelette,
+    // arbre-druide, dragon, gobelin, créatures du sorcier) : c'est la règle du
+    // catalogue (voir `isSummonedUnit` dans `data/units.js`), déjà appliquée par
+    // l'interface (`SoldierPanel` n'ouvre pas la boutique) et par les
+    // notifications (`unlockedBonusIds`). Elle se refuse ICI aussi : le reducer
+    // est le seul rempart contre une action fabriquée à la main — un bot, ou un
+    // client qui émettrait `BUY_BONUS` directement.
+    if (isSummonedUnit(soldier)) return state;
     if (soldier.playerId !== state.activePlayerId) return state;
     if (soldier.bonus) return state; // déjà un bonus
 
@@ -680,16 +748,16 @@ function reduceBuyBonus(state, {cellId, bonusId}) {
     // Équiper un bonus, c'est PRENDRE SON PROFIL de statistiques : chaque bonus
     // porte les siennes au catalogue (voir `BONUS_OFFERS.stats`), et elles
     // remplacent celles du niveau. C'est le levier d'équilibrage principal — un
-    // Prêtre devient un mur (1/32), un Vampire une lame de verre (8/1).
+    // Prêtre devient un mur (1/16), un Vampire une lame de verre (10/2).
     const equipped = {...soldier, bonus: bonusId};
     if (bonus.stats) {
         equipped.atk = bonus.stats.atk;
         equipped.hp = bonus.stats.hp;
     }
-    if (bonusId === 'paladin') {
-        // Bonus « Paladin » : équiper le bonus, c'est prendre le BOUCLIER. Il
-        // REMPLACE l'élément que le soldat portait éventuellement — le bouclier
-        // est l'attribut du paladin, pas une affinité de plus.
+    if (bonusId === 'paladin' || bonusId === 'conqueror') {
+        // Bonus « Paladin » / « Conquérant » : équiper le bonus, c'est prendre le
+        // BOUCLIER. Il REMPLACE l'élément que le soldat portait éventuellement —
+        // le bouclier est l'attribut de ces bonus, pas une affinité de plus.
         equipped.affinity = SHIELD_AFFINITY;
     }
 

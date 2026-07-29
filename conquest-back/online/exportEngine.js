@@ -47,12 +47,23 @@ export {gameReducer} from '@conquest/shared-engine/engine/reducer.js';
 export {createInitialState} from '@conquest/shared-engine/engine/board.js';
 export {serializeState, deserializeState} from '@conquest/shared-engine/engine/serialize.js';
 export {randomSeed} from '@conquest/shared-engine/engine/rng.js';
+// Retour au début de tour : restitution PURE d'un instantané, calculée à
+// l'identique par le client (application optimiste) et par le serveur (autorité).
+export {restoreTurnStart} from '@conquest/shared-engine/engine/turnReset.js';
 // Sélecteur pur : nombre de cases possédées (sert à savoir si un joueur est
 // encore « en vie », donc reprenable par un joueur qui rejoint la partie).
 export {ownedCount} from '@conquest/shared-engine/engine/selectors.js';
+// Fin de tour : nécessaire au serveur pour clore le tour d'un siège bot après
+// l'avoir fait « jouer » (`advanceBots`, voir gameSocket.js).
+export {endTurn} from '@conquest/shared-engine/engine/actions.js';
 
 // Données de définition de partie (cartes, joueurs par défaut) : nécessaires au
 // lobby pour dériver les sièges d'une carte. Modules purs eux aussi.
-export {MAPS, getMapById, DEFAULT_MAP_ID} from '@conquest/shared-engine/data/maps.js';
+export {
+    MAPS,
+    getMapById,
+    getPlayableMapById,
+    DEFAULT_MAP_ID,
+} from '@conquest/shared-engine/data/maps.js';
 export {PLAYERS, playersForMap} from '@conquest/shared-engine/data/players.js';
 export {PALETTE_VALUES, colorName} from '@conquest/shared-engine/data/colors.js';

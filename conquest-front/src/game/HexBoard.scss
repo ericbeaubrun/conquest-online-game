@@ -26,6 +26,17 @@ $stroke_width_4: 5;
     &:active {
       cursor: grabbing;
     }
+
+    // Plateau intégré à une page défilable (démo de l'accueil) : aucune caméra
+    // locale ne capture la molette ou le geste vertical. Le tap de jeu reste actif.
+    &--embedded {
+      touch-action: pan-y;
+      cursor: pointer;
+
+      &:active {
+        cursor: pointer;
+      }
+    }
   }
 
   // Groupe racine du contenu : porte le transform de pan/zoom pendant un geste
@@ -83,7 +94,9 @@ $stroke_width_4: 5;
   &__controls {
     position: absolute;
     right: 12px;
-    bottom: 104px;
+    // Assez haut pour rester au-dessus du panneau du bas (soldat, boutique…),
+    // qui masquait les premiers boutons.
+    bottom: 200px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -377,40 +390,6 @@ $stroke_width_4: 5;
 
     &--hp {
       fill: #ffffff;
-    }
-  }
-}
-
-// Jauges « attaque/pv » dessinées sur une unité du plateau : vie en barre
-// horizontale sous l'unité, attaque en barre verticale sur son flanc gauche
-// (géométrie fixée en JS, proportionnelle à la case — voir `StatBars`).
-// `crispEdges` supprime l'anticrénelage : les bords restent francs comme ceux
-// des sprites, d'où le rendu « pixel art ».
-.stat-bar {
-  &__track,
-  &__fill {
-    pointer-events: none;
-    shape-rendering: crispEdges;
-  }
-
-  // Gouttière : le fond sombre cerné de noir sur lequel court le remplissage.
-  &__track {
-    fill: #14110f;
-    stroke: #000000;
-    stroke-width: 2px;
-  }
-
-  &__fill {
-    stroke: none;
-
-    // Points de vie : vert franc.
-    &--hp {
-      fill: #4fc03a;
-    }
-
-    // Attaque : orangé, pour se distinguer des PV au premier coup d'œil.
-    &--atk {
-      fill: #e08a2c;
     }
   }
 }

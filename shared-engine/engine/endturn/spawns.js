@@ -50,32 +50,38 @@ export function spawnTrees(ctx) {
     return {...ctx, placements};
 }
 
-// Bonus « Fermier » : chaque soldat-fermier du joueur actif fait apparaître 0 à
-// 2 arbres sur des cases collées à SON territoire (frontière), indépendamment du
-// système d'apparition normal (n'entre pas dans le plafond / la montée en
-// intensité). Un fermier ne produit QUE s'il se tient lui-même sur une case
-// frontière (sa case borde au moins une case qui n'appartient pas au joueur) :
-// un fermier enfoui au cœur du territoire ne fait rien pousser.
+// Bonus « Fermier » : chaque soldat-fermier du joueur actif fait pousser UN
+// arbre par tour, GARANTI et sans condition — où qu'il se trouve sur le plateau
+// — sur une case frontière de son territoire tirée au hasard. Rien ne l'empêche
+// hormis l'absence de place : plus aucune case frontière libre, plus d'arbre.
+// Ces arbres restent indépendants du système d'apparition normal (hors plafond
+// et hors montée en intensité).
+//
+// La FRONTIÈRE se compte face à ce qui se conquiert : une case à soi qui borde
+// un territoire ennemi, ou une terre libre (conquérable). Les bords sur le VIDE
+// (hors carte) et sur l'EAU (cases bloquées) ne sont pas des frontières — sans
+// quoi une presqu'île entière aurait compté comme telle et le fermier aurait
+// planté n'importe où sur la côte.
 export function spawnFarmerTrees(ctx) {
     const {state, board, rng, events, placements: placementsIn} = ctx;
     // Rien à faire si les arbres sont désactivés en configuration.
     if (state.settings && state.settings.treesEnabled === false) return ctx;
     const pid = state.activePlayerId;
-    // Une case est « frontière » quand elle borde au moins une case qui n'est pas
-    // au joueur (même définition pour la case du fermier et les cases de pousse).
-    const isFrontier = (q, r) =>
-        getNeighbors(q, r).some((n) => state.ownership.get(hexId(n.q, n.r)) !== pid);
-    // Combien de fermiers du joueur actif se tiennent SUR une case frontière ?
-    let farmers = 0;
-    for (const [id] of soldiersWithBonus(placementsIn, pid, 'farmer')) {
-        const cell = board.cellMap.get(id);
-        if (cell && isFrontier(cell.q, cell.r)) farmers += 1;
-    }
+    // Nombre de fermiers du joueur actif : chacun plante un arbre.
+    const farmers = soldiersWithBonus(placementsIn, pid, 'farmer').length;
     if (farmers === 0) return ctx;
 
+    // Une case à soi est « frontière » quand elle borde au moins une case de
+    // TERRE (existante et non bloquée) qui n'est pas à elle : ennemie ou libre.
+    const isFrontier = (q, r) =>
+        getNeighbors(q, r).some((n) => {
+            const cell = board.cellMap.get(hexId(n.q, n.r));
+            if (!cell || cell.blocked) return false; // vide ou eau : pas une frontière
+            return state.ownership.get(cell.id) !== pid;
+        });
+
     // Cases frontalières INTÉRIEURES : possédées par le joueur, libres, non
-    // bloquées, hors base, et bordant au moins une case qui n'est PAS à lui
-    // (l'arbre pousse donc du côté intérieur de la frontière, pas à l'extérieur).
+    // bloquées, hors base (l'arbre pousse du côté intérieur de la frontière).
     const eligible = board.cells.filter((c) => {
         if (c.blocked || board.baseIds.has(c.id) || placementsIn.has(c.id)) return false;
         if (state.ownership.get(c.id) !== pid) return false; // seulement sur son sol
@@ -85,14 +91,11 @@ export function spawnFarmerTrees(ctx) {
 
     const placements = new Map(placementsIn);
     let planted = 0;
-    for (let f = 0; f < farmers; f += 1) {
-        const want = rng.int(3); // 0, 1 ou 2 arbres
-        for (let i = 0; i < want && eligible.length; i += 1) {
-            const idx = rng.int(eligible.length);
-            const [cell] = eligible.splice(idx, 1); // case consommée (un arbre max)
-            placements.set(cell.id, makeTree(rng)); // essence tirée au coefficient d'apparition
-            planted += 1;
-        }
+    for (let f = 0; f < farmers && eligible.length; f += 1) {
+        const idx = rng.int(eligible.length);
+        const [cell] = eligible.splice(idx, 1); // case consommée (un arbre max)
+        placements.set(cell.id, makeTree(rng)); // essence tirée au coefficient d'apparition
+        planted += 1;
     }
     if (planted > 0) events.push({kind: 'bonusFarmer', playerId: pid, count: planted});
     return {...ctx, placements};

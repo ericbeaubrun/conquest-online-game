@@ -145,9 +145,7 @@ const BuildingPanel = ({ building, color, owner, world, localPlayerId, settings,
                             dans le carré, comme là-bas. */}
                         {owner && (
                             <span className="building-owner" title={`Base de ${owner.name}`}>
-                                <span className="building-owner__chip" style={{ backgroundColor: owner.color }}>
-                                    {owner.kind === 'bot' && <span className="building-owner__ai">IA</span>}
-                                </span>
+                                <span className="building-owner__chip" style={{ backgroundColor: owner.color }} />
                                 <span className="building-owner__name">{owner.name}</span>
                                 {localPlayerId && owner.id === localPlayerId && (
                                     <span className="building-owner__you">VOUS</span>

@@ -7,7 +7,13 @@
 // un évènement à ignorer). `tone` pilote la teinte du toast, `color` est la
 // couleur du joueur concerné (pastille d'accent).
 
-import {atkRankLabel, affinityLabel, bonusLabel, raceLabel} from '@conquest/shared-engine/data/soldier.js';
+import {
+    atkRankLabel,
+    affinityLabel,
+    bonusLabel,
+    raceLabel,
+    PRIEST_HP_GIFT,
+} from '@conquest/shared-engine/data/soldier.js';
 import {unitLabel, unitKindById} from '@conquest/shared-engine/data/units.js';
 import {lootLabel} from '@conquest/shared-engine/data/chests.js';
 import {SOLDIER_ATK_MAX} from '@conquest/shared-engine/engine/rules.js';
@@ -64,6 +70,19 @@ export function describeEvent(event, state) {
             return {tone: 'buy', color, text: `${side} : affinité ${affinityLabel(event.affinity)} appliquée ${spend(event.cost)}`};
         case 'buyBonus':
             return {tone: 'buy', color, text: `${side} : bonus ${bonusLabel(event.bonusId)} équipé ${spend(event.cost)}`};
+        case 'sacrificeTransform':
+            return {
+                tone: 'buy',
+                color,
+                text: `${side} : potion de sacrifice — ${unitTitle(state, event.target)} transformé en tas d'or (${event.gold} or) ${spend(event.cost)}`,
+            };
+
+        // --- Tour recommencé ---
+        // Émis hors reducer (cf. `engine/turnReset.js`). En ligne, les
+        // adversaires ont assisté au tour en direct : sans cette annonce, leur
+        // plateau reculerait sans explication.
+        case 'turnReset':
+            return {tone: 'system', color, text: `${side} recommence son tour`};
 
         // --- Fusion ---
         case 'merge':
@@ -110,6 +129,8 @@ export function describeEvent(event, state) {
                     : `${side} : butin — ${stat} déjà au maximum`,
             };
         }
+        case 'lootInvert':
+            return {tone: 'bonus', color, text: `${side} : butin — ATK et PV inversés (${event.atk} ATK / ${event.hp} PV)`};
         case 'lootUnit':
             return {tone: 'bonus', color, text: `${side} : butin — ${unitKindById(event.unit)?.label ?? 'renfort'} allié rejoint le combat`};
 
@@ -123,9 +144,11 @@ export function describeEvent(event, state) {
         case 'bonusFarmer':
             return {tone: 'bonus', color, text: `${side} — Fermier : ${event.count} arbre${event.count > 1 ? 's' : ''} poussé${event.count > 1 ? 's' : ''}`};
         case 'bonusAlchemist':
-            return {tone: 'bonus', color, text: `${side} — Alchimiste : +1 ATK à un allié (−1 PV)`};
+            return {tone: 'bonus', color, text: `${side} — Alchimiste : +1 ATK à ${event.count} allié${event.count > 1 ? 's' : ''} (−${event.count} PV)`};
         case 'bonusPriest':
-            return {tone: 'bonus', color, text: `${side} — Prêtre : +1 PV à un allié (−1 PV)`};
+            return {tone: 'bonus', color, text: `${side} — Prêtre : +${PRIEST_HP_GIFT} PV à ${event.count} allié${event.count > 1 ? 's' : ''} (−${event.count} PV)`};
+        case 'bonusMonk':
+            return {tone: 'bonus', color, text: `${side} — Moine : contemplation ${earn(event.gold)}`};
         case 'bonusVampire':
             return {tone: 'bonus', color, text: `${side} — Vampire : ${event.amount} PV drainés`};
         case 'bonusMagician':
@@ -139,7 +162,7 @@ export function describeEvent(event, state) {
         case 'bonusSorcererDragon':
             return {tone: 'bonus', color, text: `${side} — Sorcier : dragon invoqué`};
         case 'bonusKing':
-            return {tone: 'bonus', color, text: `${side} — Roi : maisons doublées, +${event.amount} or`};
+            return {tone: 'bonus', color, text: `${side} — Roi : maisons et territoire doublés, +${event.amount} or`};
 
         default:
             return null;

@@ -185,10 +185,10 @@
   }
 
   // ---- Boutique ----
-  // Sur petit écran le tiroir ouvert mangeait une grosse part de l'écran. On ne
-  // touche PAS aux tailles de contenu (sprite 52px, pastilles, prix) : seuls les
-  // paddings, gouttières et hauteurs de calage sont resserrés, et les flèches de
-  // page rétrécies pour rendre la largeur aux cartes.
+  // Sur petit écran le tiroir ouvert mangeait une grosse part de l'écran :
+  // paddings, gouttières et vignette sont resserrés, et les flèches de page
+  // rétrécies pour rendre la largeur aux cartes. Le prix reste le plus gros
+  // chiffre de la carte, et la pastille « /tour » tient sur une seule ligne.
   .shop-drawer {
     &__handle {
       padding: 3px 12px;
@@ -239,16 +239,26 @@
   }
 
   .shop-card {
-    width: 78px;
+    width: 86px;
     gap: 3px;
     padding: 4px 3px;
 
+    &__thumb {
+      min-height: 60px;
+    }
     &__icon {
-      width: 50px;
-      height: 50px;
+      width: 52px;
+      height: 52px;
     }
     &__perturn {
       font-size: 11px;
+      padding: 1px 2px;
+    }
+    &__perturn-unit {
+      font-size: 9px;
+    }
+    &__price {
+      font-size: 19px;
     }
     &__affinity-note {
       padding: 1px 0;

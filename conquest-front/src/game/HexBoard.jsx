@@ -11,8 +11,8 @@
 import {useCallback, useMemo, useState} from 'react';
 import {HEX_SIZE, hexId, hexHeight, pixelToHex} from '@conquest/shared-engine/data/hex.js';
 import {getLogicalBoard} from '@conquest/shared-engine/engine/board.js';
-import {isAffinityItem} from '@conquest/shared-engine/data/items.js';
-import {canReceiveAffinity} from '@conquest/shared-engine/data/soldier.js';
+import {isAffinityItem, isSacrificeItem} from '@conquest/shared-engine/data/items.js';
+import {canReceiveAffinity, canReceiveSacrifice} from '@conquest/shared-engine/data/soldier.js';
 import {buildGeometry} from '@conquest/shared-engine/render/geometry.js';
 import {getMapById} from '@conquest/shared-engine/data/maps.js';
 import {mapBackground, terrainColors} from '@conquest/shared-engine/data/terrain.js';
@@ -75,7 +75,12 @@ const HexBoard = ({
                       onSelect,
                       onHoverTarget,
                       showAllStats = false,
-                      statBars = false,
+                      // Boutons de zoom / recentrage à droite du plateau :
+                      // masquables depuis la section Paramètres du menu burger.
+                      showControls = true,
+                      // Caméra désactivable dans un plateau embarqué : les clics
+                      // restent actifs, mais molette et gestes font défiler la page.
+                      cameraEnabled = true,
                   }) => {
     const {
         mapId,
@@ -112,15 +117,22 @@ const HexBoard = ({
     const itemSize = hexHeight() * 0.8;
 
     // Cases où le joueur actif peut poser l'item : à lui, hors base, non occupées.
-    // Une AFFINITÉ fait exception : elle ne se pose pas sur une case libre mais
-    // sur un soldat du joueur actif encore sans affinité (mêmes conditions que
-    // le reducer, via `canReceiveAffinity`).
+    // Une AFFINITÉ ou la POTION DE SACRIFICE font exception : elles ne se posent
+    // pas sur une case libre mais sur un soldat du joueur actif (encore sans
+    // affinité, ou à plus d'1 PV — mêmes conditions que le reducer, via
+    // `canReceiveAffinity` / `canReceiveSacrifice`).
     const placeableCells = useMemo(() => {
         if (!selectedItem) return [];
         if (isAffinityItem(selectedItem)) {
             return cells.filter((c) => {
                 const placed = placements.get(c.id);
                 return canReceiveAffinity(placed) && placed.playerId === activePlayerId;
+            });
+        }
+        if (isSacrificeItem(selectedItem)) {
+            return cells.filter((c) => {
+                const placed = placements.get(c.id);
+                return canReceiveSacrifice(placed) && placed.playerId === activePlayerId;
             });
         }
         return cells.filter(
@@ -155,9 +167,8 @@ const HexBoard = ({
     // l'unité pointée). `null` hors du plateau.
     const [hoveredCellId, setHoveredCellId] = useState(null);
     // `showAllStats` (afficher les stats atk/PV sur toutes les unités, sans
-    // avoir à survoler) et `statBars` (les dessiner en jauges plutôt qu'en
-    // nombres) sont maintenant réglés depuis la section Paramètres du menu
-    // burger — reçus en props plutôt qu'en état local.
+    // avoir à survoler) est réglé depuis la section Paramètres du menu burger —
+    // reçu en prop plutôt qu'en état local.
 
     // Cases dont les jauges (attaque / points de vie) s'affichent : la case
     // survolée, et — quand un soldat est sélectionné — le soldat lui-même ainsi
@@ -186,6 +197,7 @@ const HexBoard = ({
         base,
         onTap: (clientX, clientY) => handleTap(clientX, clientY),
         onRightClick: deselect,
+        enabled: cameraEnabled,
     });
 
     // Case (hexagone) sous un point écran.
@@ -268,7 +280,7 @@ const HexBoard = ({
         <div className="hex-board" style={{borderColor: colors[activePlayerId], background}}>
             <svg
                 ref={svgRef}
-                className="hex-board__svg"
+                className={`hex-board__svg${cameraEnabled ? '' : ' hex-board__svg--embedded'}`}
                 viewBox={viewBox}
                 preserveAspectRatio="xMidYMid meet"
                 {...handlers}
@@ -310,14 +322,12 @@ const HexBoard = ({
                     destroyedBases={destroyedBases}
                     baseHp={baseHp}
                     visibleStatIds={visibleStatIds}
-                    statBars={statBars}
                 />
                 <Buildings
                     placements={placements}
                     cellMap={cellMap}
                     size={itemSize}
                     visibleStatIds={visibleStatIds}
-                    statBars={statBars}
                 />
                 <BonusNotifications
                     placements={placements}
@@ -389,6 +399,7 @@ const HexBoard = ({
                 </g>
             </svg>
 
+            {showControls && (
             <div className="hex-board__controls">
                 <button onClick={() => zoomBy(0.8)} aria-label="Zoom avant" title="Zoom avant">
                     +
@@ -400,6 +411,7 @@ const HexBoard = ({
                     ⤢
                 </button>
             </div>
+            )}
         </div>
     );
 };

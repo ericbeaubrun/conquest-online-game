@@ -54,10 +54,9 @@ const OnlineFlow = ({ onExit }) => {
                 memberId={s.memberId}
                 onConfigure={s.configureLobby}
                 onReorder={s.reorderSeat}
-                onSetIdentity={s.setIdentity}
-                onSetSeatKind={s.setSeatKind}
-                onSetBotColor={s.setBotColor}
+                onSeatKind={s.setSeatKind}
                 onSetBotDifficulty={s.setBotDifficulty}
+                onSetIdentity={s.setIdentity}
                 onStart={s.startLobby}
                 onQuit={onExit}
             />

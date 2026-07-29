@@ -36,8 +36,11 @@ export function useToasts(state) {
             if (eventSeq < lastSeenRef.current) lastSeenRef.current = eventSeq;
             return;
         }
-        // Réinitialisation détectée (rejouer une partie) : on repart proprement.
-        if (eventSeq < lastSeenRef.current) lastSeenRef.current = 0;
+        // Séquence qui RECULE : on se réaligne dessus sans rien re-notifier. Cas
+        // d'une partie rejouée (le compteur repart de 0), ou d'un journal tronqué.
+        // Surtout pas de remise à 0 aveugle ici : elle ferait re-défiler les 40
+        // évènements conservés dès que la séquence recule d'un cran.
+        if (eventSeq < lastSeenRef.current) lastSeenRef.current = eventSeq;
 
         const fresh = events.filter((e) => e.seq > lastSeenRef.current);
         if (!fresh.length) return;

@@ -12,10 +12,14 @@
 // qu'il fait AUJOURD'HUI. Un échec ne signale donc pas forcément un bug, mais
 // toujours un changement de comportement à valider consciemment.
 //
-//   node --test shared-engine/test/
+//   npm test
 //
-// Si un écart est INTENTIONNEL (règle modifiée), relancer avec :
-//   UPDATE_GOLDEN=1 node --test shared-engine/test/
+// (Toujours passer par `npm test` : il porte le motif entre guillemets que Node
+// étend lui-même. Lui donner le DOSSIER — `node --test shared-engine/test/` —
+// échoue sous Node 24 + Windows.)
+//
+// Si un écart est INTENTIONNEL (règle modifiée), ré-enregistrer avec :
+//   UPDATE_GOLDEN=1 npm test          (PowerShell : $env:UPDATE_GOLDEN=1; npm test)
 // puis relire attentivement le diff des empreintes dans golden.json.
 
 import { test } from 'node:test';

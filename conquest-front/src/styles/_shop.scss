@@ -187,7 +187,8 @@
 // le prix, poussé en bas pour rester aligné d'une carte à l'autre.
 .shop-card {
   flex: 0 0 auto;
-  width: 84px;
+  // Assez large pour que la pastille « −10 /tour » tienne sur une ligne.
+  width: 92px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -243,33 +244,38 @@
     animation: shop-card-march 0.6s linear infinite;
   }
 
-  // Vignette : le sprite, et par-dessus lui les deux repères (entretien au
-  // coin, bandeau atk/PV aux pieds). La hauteur réserve le débord du bandeau.
+  // Vignette : le sprite SEUL, sur un fond légèrement creusé qui le détache du
+  // fond de la carte. Plus aucune pastille ne se superpose à lui — l'image de
+  // l'élément doit rester entièrement lisible. `flex: 1` absorbe l'écart entre
+  // cartes de hauteurs différentes (voir `align-items: stretch` sur `.shop`) :
+  // c'est la vignette qui grandit, pas un vide sous le coût/tour.
   &__thumb {
-    position: relative;
     width: 100%;
+    min-height: 68px;
+    flex: 1 1 auto;
     display: flex;
+    align-items: center;
     justify-content: center;
-    padding-bottom: 9px; // moitié basse du bandeau, qui déborde du sprite
+    background: #0b0b0d;
+    border: 2px solid #232329;
   }
 
   &__icon {
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     object-fit: contain;
     image-rendering: pixelated;
   }
 
-  // Bandeau atk/PV collé aux pieds du sprite : MÊME objet que sur le plateau
+  // Bandeau atk/PV posé JUSTE SOUS le sprite : MÊME objet que sur le plateau
   // (`.stat-banner` dans `HexBoard.scss`) — orangé/rouge, cadre noir, cases
-  // jointives — pour que la lecture soit immédiate d'un support à l'autre.
+  // jointives. Hauteur réservée même sans stats (affinités) pour que les
+  // lignes suivantes restent alignées d'une carte à l'autre.
   &__banner {
-    position: absolute;
-    left: 50%;
-    bottom: 0;
-    transform: translateX(-50%);
+    min-height: 24px;
     display: flex;
     align-items: center;
+    justify-content: center;
 
     // Cases jointives : les bordures voisines se chevauchent au lieu de
     // doubler le trait sur la couture (comme le séparateur unique du plateau).
@@ -278,32 +284,49 @@
     }
   }
 
-  // Entretien (rouge) ou revenu (vert) par tour, en pastille dans le coin haut
-  // de la vignette : une valeur, pas une phrase (« /tour » est dans l'infobulle).
-  &__perturn {
-    position: absolute;
-    top: 0;
-    right: 0;
+  // Ligne du récurrent : hauteur réservée même quand l'item n'a ni entretien
+  // ni revenu (affinités), pour garder le prix aligné entre toutes les cartes.
+  &__perturn-row {
+    min-height: 17px;
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 1px 3px;
+    justify-content: center;
+  }
+
+  // Récurrent, lu « −2 🪙 / tour » : plaque SOMBRE (pas de pavé de couleur qui
+  // rivalisait avec le prix), la couleur ne portant que sur la valeur — rouge
+  // pour une dépense, vert pour un gain — et l'unité écrite en toutes lettres.
+  &__perturn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
     border: 2px solid #000;
+    background: #131316;
     font-size: 12px;
     line-height: 1;
-    color: #0d0d0f;
+    white-space: nowrap;
+  }
+  &__perturn-value,
+  &__perturn-unit {
+    font-style: normal;
 
-    &--upkeep {
-      background: #d97a7a;
+    .shop-card__perturn--upkeep & {
+      color: #e2703a;
     }
-    &--income {
-      background: #6bbf78;
+    .shop-card__perturn--income & {
+      color: #6bbf78;
     }
   }
   &__perturn-icon {
     width: 11px;
     height: 11px;
     image-rendering: pixelated;
+  }
+  // « / tour » : même couleur que la valeur, en un peu plus terne pour rester
+  // secondaire au chiffre.
+  &__perturn-unit {
+    opacity: 0.75;
   }
 
   // Une affinité n'a ni PV/attaque ni entretien/revenu : cet espace, occupé
@@ -320,17 +343,28 @@
     line-height: 1.25;
   }
 
-  // Prix : poussé tout en bas (mêmes hauteurs de carte => prix alignés).
-  // Volontairement DISCRET — ce n'est pas un bouton, c'est la carte entière
-  // qui achète ; une barre dorée pleine largeur laissait croire l'inverse.
+  // Prix d'achat : nettement le plus gros chiffre de la carte — c'est sur lui
+  // que se prend la décision. Un liseré haut le sépare des repères récurrents.
+  // Plus de `margin-top: auto` : la vignette (`&__thumb`, en `flex: 1`)
+  // absorbe déjà l'écart de hauteur entre cartes, donc le prix suit le
+  // coût/tour à la même distance partout, sans vide.
   &__price {
-    margin-top: auto;
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    font-size: 15px;
-    color: #e8c261;
+    gap: 4px;
+    padding-top: 4px;
+    border-top: 2px solid #232329;
+    font-size: 22px;
+    line-height: 1;
+    color: #ffd766;
+    text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+  }
+  &__price-icon {
+    width: 16px;
+    height: 16px;
+    image-rendering: pixelated;
   }
 }
 

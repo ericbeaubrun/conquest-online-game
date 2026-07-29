@@ -10,12 +10,12 @@
 //     'lobby:join'   { code, name?, color? }         rejoint une partie (siège libre) ou l'observe
 //     'lobby:identity' { name?, color? }             modifie SON nom / SA couleur
 //     'lobby:configure' { code, mapId?, settings? }  (hôte) règle carte/paramètres avant le démarrage
-//     'lobby:seatkind' { code, playerId, kind }      (hôte) bascule une place libre entre 'human'/'bot'
-//     'lobby:botcolor' { code, playerId, color }     (hôte) change la couleur d'un bot
-//     'lobby:botdifficulty' { code, playerId, difficulty }  (hôte) change la difficulté d'un bot
 //     'lobby:reorder' { code, playerId, direction }  (hôte) échange une position avec sa voisine (up/down)
+//     'lobby:seatkind' { code, playerId, kind }      (hôte) bascule une place libre entre 'human'/'bot'
+//     'lobby:botdifficulty' { code, playerId, difficulty }  (hôte) change la difficulté d'un bot
 //     'lobby:start'  { code }                        (hôte) démarre la partie
 //     'game:action'  action                          joue une action de jeu
+//     'game:reset-turn'                              (joueur actif) recommence SON tour
 //   serveur -> client
 //     'lobby:list'    [ résumés ]
 //     'lobby:joined'  { code, memberId, playerId|null, lobby } (à l'émetteur qui rejoint)
@@ -25,7 +25,6 @@
 //     'game:rejected' { reason, action? }            (au seul émetteur)
 
 import { serializeState } from './exportEngine.js';
-import { endTurn } from '@conquest/shared-engine/engine/actions.js';
 import {
     createLobby,
     getLobby,
@@ -41,16 +40,17 @@ import {
     checkSavePassword,
     seatSummary,
     setMemberIdentity,
-    setSeatKind,
-    setBotColor,
-    setBotDifficulty,
     filledCount,
     reorderSeat,
+    setSeatKind,
+    setBotDifficulty,
     configureLobby,
     startLobby,
     applyAction,
+    resetTurn,
 } from './lobbyStore.js';
 import { runBotTurn } from './bot.js';
+import { endTurn } from './exportEngine.js';
 
 // Seules les actions de JEU sont acceptées d'un client. La configuration de la
 // partie (carte, réinitialisation) reste une prérogative du serveur.
@@ -186,11 +186,17 @@ function isBotSeat(entry, playerId) {
     return entry.seats.find((s) => s.playerId === playerId)?.kind === 'bot';
 }
 
-// Fait jouer les BOTS tant que c'est à leur tour. Chaque tour de bot : l'IA
-// déroule son tour complet (achats + conquêtes) puis on termine son tour ; on
-// rediffuse l'état à chaque tour pour que les humains voient l'action. Le
-// garde-fou évite toute boucle infinie (parties 100 % bots incluses).
-function advanceBots(io, entry) {
+// Rend la main à la boucle d'événements. Node est mono-thread : tant qu'on ne
+// lui rend pas la main, RIEN d'autre ne s'exécute sur le serveur — ni les
+// diffusions déjà empilées, ni les autres parties.
+const yieldToLoop = () => new Promise((resolve) => setImmediate(resolve));
+
+// Fait jouer les BOTS tant que c'est à leur tour. `runBotTurn` joue ses coups
+// via `applyAction` (qui renvoie le nouvel état), puis on termine son tour
+// nous-mêmes. On rediffuse à chaque tour pour que
+// les humains voient la main passer, et un garde-fou évite toute boucle
+// infinie (parties 100 % bots incluses).
+async function advanceBots(io, entry) {
     let safety = 0;
     while (
         entry.state &&
@@ -199,6 +205,7 @@ function advanceBots(io, entry) {
         safety < 400
     ) {
         safety += 1;
+        await yieldToLoop();
         try {
             runBotTurn(entry.state, (action) => applyAction(entry, action));
         } catch {
@@ -295,36 +302,6 @@ export function attachGameServer(io) {
             if (setMemberIdentity(entry, socket.id, { name, color })) broadcastLobby(io, entry);
         });
 
-        // --- Basculer une place libre entre « ouverte » et « bot » (hôte) ---
-        onLobby(
-            socket,
-            'lobby:seatkind',
-            (entry, { playerId, kind }) => {
-                if (setSeatKind(entry, playerId, kind)) broadcastLobby(io, entry);
-            },
-            { hostOnly: true }
-        );
-
-        // --- Choisir la couleur d'un bot (hôte) ---
-        onLobby(
-            socket,
-            'lobby:botcolor',
-            (entry, { playerId, color }) => {
-                if (setBotColor(entry, playerId, color)) broadcastLobby(io, entry);
-            },
-            { hostOnly: true }
-        );
-
-        // --- Choisir la difficulté d'un bot (hôte) ---
-        onLobby(
-            socket,
-            'lobby:botdifficulty',
-            (entry, { playerId, difficulty }) => {
-                if (setBotDifficulty(entry, playerId, difficulty)) broadcastLobby(io, entry);
-            },
-            { hostOnly: true }
-        );
-
         // --- Réordonner les positions (hôte) : échange l'occupant d'un siège
         // avec le siège voisin (haut/bas). Permet de choisir qui joue quel spawn. ---
         onLobby(
@@ -339,13 +316,33 @@ export function attachGameServer(io) {
             { hostOnly: true }
         );
 
+        // --- Basculer une place libre entre « ouverte » et « bot » (hôte) ---
+        onLobby(
+            socket,
+            'lobby:seatkind',
+            (entry, { playerId, kind }) => {
+                if (setSeatKind(entry, playerId, kind)) broadcastLobby(io, entry);
+            },
+            { hostOnly: true, waitingOnly: true }
+        );
+
+        // --- Choisir la difficulté d'un bot (hôte) ---
+        onLobby(
+            socket,
+            'lobby:botdifficulty',
+            (entry, { playerId, difficulty }) => {
+                if (setBotDifficulty(entry, playerId, difficulty)) broadcastLobby(io, entry);
+            },
+            { hostOnly: true, waitingOnly: true }
+        );
+
         // --- Démarrer la partie (hôte) ---
         onLobby(
             socket,
             'lobby:start',
             async (entry) => {
-                // Au moins 2 participants (humains et/ou bots). Le lobby n'a PAS
-                // besoin d'être plein : les places libres restent des spawns neutres.
+                // Au moins 2 participants. Le lobby n'a PAS besoin d'être plein :
+                // les places libres restent des spawns neutres.
                 if (filledCount(entry) < 2) {
                     socket.emit('lobby:error', { reason: 'not-enough-players' });
                     return;
@@ -356,7 +353,7 @@ export function attachGameServer(io) {
                 // eslint-disable-next-line no-console
                 console.log(`[lobby] '${entry.code}' démarrée par ${socket.id}`);
                 // Si le premier tour revient à un bot (ex. partie 100 % bots).
-                advanceBots(io, entry);
+                await advanceBots(io, entry);
             },
             { hostOnly: true }
         );
@@ -394,7 +391,42 @@ export function attachGameServer(io) {
                 io.to(entry.code).emit('game:state', serializeState(next));
                 if (next.status === 'over') broadcastLobby(io, entry);
                 // La fin de tour d'un humain peut donner la main à un ou des bots.
-                else advanceBots(io, entry);
+                else await advanceBots(io, entry);
+            } catch (e) {
+                socket.emit('game:rejected', { reason: 'server-error', message: String(e.message || e) });
+            }
+        });
+
+        // --- Recommencer son tour ---
+        // Mêmes contrôles d'autorité qu'une action de jeu : un siège, et la main.
+        // Aucune charge utile — l'état à restituer est celui que le SERVEUR a figé
+        // au début du tour (cf. `resetTurn`), jamais un état venu du client.
+        // Le rejeu ne concerne que le joueur actif : la main ne change pas,
+        // et aucune fin de partie n'est possible (on revient en arrière).
+        socket.on('game:reset-turn', async () => {
+            try {
+                const entry = await getLobby(socket.data.code);
+                const playerId = socket.data.playerId;
+                if (!entry || !entry.state) {
+                    socket.emit('game:rejected', { reason: 'no-game' });
+                    return;
+                }
+                if (playerId == null) {
+                    socket.emit('game:rejected', { reason: 'spectator' });
+                    return;
+                }
+                if (entry.state.activePlayerId !== playerId) {
+                    socket.emit('game:rejected', { reason: 'not-your-turn' });
+                    return;
+                }
+                const next = resetTurn(entry);
+                if (!next) {
+                    // Rien à restituer (tour intact, instantané absent ou périmé) :
+                    // le client revient au dernier état faisant autorité.
+                    socket.emit('game:rejected', { reason: 'nothing-to-reset' });
+                    return;
+                }
+                io.to(entry.code).emit('game:state', serializeState(next));
             } catch (e) {
                 socket.emit('game:rejected', { reason: 'server-error', message: String(e.message || e) });
             }

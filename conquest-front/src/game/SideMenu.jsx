@@ -14,8 +14,12 @@ const SideMenu = ({
                        onBackToMenu,
                        showAllStats,
                        onToggleShowAllStats,
-                       statBars,
-                       onToggleStatBars,
+                       showBoardControls,
+                       onToggleBoardControls,
+                       showActionBar,
+                       onToggleActionBar,
+                       showToasts,
+                       onToggleToasts,
                    }) => {
     // Accusé de réception éphémère : à chaque nouvelle sauvegarde (`savedAt`
     // change), on affiche « Sauvegardé ✓ » sur le bouton pendant 2 s.
@@ -53,12 +57,28 @@ const SideMenu = ({
             >
                 Afficher les stats atk/PV
             </button>
+            {/* Panneaux latéraux : commandes du plateau (zoom / recentrage, à
+                droite) et barre d'actions du soldat (à gauche). */}
             <button
-                className={`side-menu__toggle ${statBars ? 'side-menu__toggle--active' : ''}`}
-                onClick={() => onToggleStatBars?.()}
-                aria-pressed={!!statBars}
+                className={`side-menu__toggle ${showBoardControls ? 'side-menu__toggle--active' : ''}`}
+                onClick={() => onToggleBoardControls?.()}
+                aria-pressed={!!showBoardControls}
             >
-                Stats en jauges
+                Commandes du plateau
+            </button>
+            <button
+                className={`side-menu__toggle ${showActionBar ? 'side-menu__toggle--active' : ''}`}
+                onClick={() => onToggleActionBar?.()}
+                aria-pressed={!!showActionBar}
+            >
+                Barre d&apos;actions
+            </button>
+            <button
+                className={`side-menu__toggle ${showToasts ? 'side-menu__toggle--active' : ''}`}
+                onClick={() => onToggleToasts?.()}
+                aria-pressed={!!showToasts}
+            >
+                Notifications
             </button>
         </div>
         <div className="menu-section">

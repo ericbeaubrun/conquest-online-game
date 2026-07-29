@@ -15,11 +15,10 @@ import {
     SOLDIER_LEVEL_STATS,
 } from '../engine/rules.js';
 import { ITEM_COST } from './items.js';
-import { isSkeleton, isSummonedUnit, unitUpkeep, unitLabel, unitKindById } from './units.js';
-import { RAREST_TREE_KIND } from './trees.js';
+import { isSkeleton, isSummonedUnit, unitUpkeep, unitLabel, unitKind, unitKindById } from './units.js';
 
 // Un couple de statistiques au format « ATK/PV » — la convention d'affichage du
-// jeu (le Prêtre est un 1/32, le Vampire un 8/1).
+// jeu (le Prêtre est un 1/16, le Vampire un 10/2).
 //
 // Les textes d'effet des bonus CALCULENT ces valeurs au lieu de les recopier :
 // elles avaient divergé du moteur (un squelette annoncé 5/10 en valait 1/1, un
@@ -30,16 +29,23 @@ const statsText = (s) => (s ? `${s.atk}/${s.hp}` : '?/?');
 // Statistiques d'une espèce invoquée, lues au catalogue `units.js`.
 const unitStatsText = (kindId) => statsText(unitKindById(kindId));
 
+// Entretien d'une espèce invoquée, lu au même catalogue. Même raison d'être que
+// `statsText` : un texte d'effet qui ANNONCE une facture doit la lire là où elle
+// est appliquée, sinon les deux divergent au premier réglage.
+const unitUpkeepText = (kindId) => `${unitKindById(kindId)?.upkeep ?? 0} or/tour`;
+
 // Profils que certains bonus IMPOSENT à leur porteur quand on les équipe (ils
 // remplacent les statistiques de niveau — voir `reduceBuyBonus`). Nommés ici
 // pour que `stats:` et le texte d'effet ne puissent pas se contredire.
-const WARRIOR_STATS = {atk: 4, hp: 6};
+const WARRIOR_STATS = {atk: 2, hp: 2};
 const WARLOCK_STATS = {atk: 1, hp: 16};
+const SORCERER_STATS = {atk: 12, hp: 12};
 
-// Affinités affichables. Les trois premières s'achètent et se trouvent ; le
-// BOUCLIER, lui, ne s'obtient qu'en équipant le bonus « Paladin » — il ne figure
-// donc pas dans `AFFINITY_IDS` (tirages et boutique), seulement ici pour être
-// nommé et illustré dans les panneaux.
+// Affinités affichables. Les quatre s'achètent et se trouvent (le BOUCLIER
+// s'obtient en plus en équipant le bonus « Paladin ») ; il ne figure pas dans
+// `AFFINITY_IDS` (réservée aux éléments qui s'annulent entre eux et sortent
+// des tirages d'arbres — voir `rules.js`), seulement ici pour être nommé et
+// illustré dans les panneaux.
 export const AFFINITIES = [
     { id: 'fire', label: 'Feu' },
     { id: 'ice', label: 'Glace' },
@@ -57,15 +63,19 @@ export const AFFINITIES = [
 export const CHALLENGE_METRICS = {
     TREES_CHOPPED: 'treesChopped', // arbres abattus (n'importe où)
     ENEMY_TREES_CHOPPED: 'enemyTreesChopped', // arbres abattus en territoire ennemi
-    RAREST_TREES_CHOPPED: 'rarestTreesChopped', // arbres de l'essence la plus rare abattus
     CASES_CONQUERED: 'casesConquered', // cases conquises
     ENEMY_CASES_CONQUERED: 'enemyCasesConquered', // cases volées à un adversaire
     CASES_TRAVELED_OWN: 'casesTraveledOwn', // cases parcourues dans son territoire
+    ENEMIES_KILLED: 'enemiesKilled', // unités ennemies tuées, quel que soit leur niveau
     ENEMIES_KILLED_L2: 'enemiesKilledL2', // soldats ennemis de niveau ≥ 2 tués
     COMBATS_SURVIVED: 'combatsSurvived', // combats terminés en vie
     SKELETONS_KILLED: 'skeletonsKilled', // squelettes tués au combat
     CHESTS_OPENED: 'chestsOpened', // coffres ouverts par le soldat
     PALADIN_IDLE_TURNS: 'paladinIdleTurns', // tours consécutifs terminés sans agir
+    // Défi « Moine » : une PURETÉ, c'est-à-dire l'ABSENCE des trois compteurs
+    // ci-dessus (aucun mort, aucun arbre abattu, aucune case conquise). Dérivé
+    // de `progress`, jamais stocké — voir son évaluateur dans `SOLDIER_CHALLENGES`.
+    MONK_PURITY: 'monkPurity',
     // --- Défis d'ÉTAT : recalculés EN DIRECT, jamais stockés dans `progress`
     // (voir `STATE_CHALLENGES` plus bas). Ils s'ouvrent et se referment aussitôt
     // que la situation du plateau change, sans attendre la fin du tour.
@@ -95,41 +105,65 @@ export {isSkeleton, isSummonedUnit};
 export const canReceiveAffinity = (u) =>
     !!u && u.type === 'soldier' && u.affinity == null;
 
+// Un soldat peut-il RECEVOIR la potion de sacrifice (boutique) ? Tout soldat
+// du joueur actif — ordinaire, avec bonus, ou unité invoquée/envoûtée — sa
+// valeur en tas d'or dépend de son attaque et de ses PV (voir
+// `SACRIFICE_GOLD_PER_POINT`), jamais nulle pour un soldat réellement en jeu.
+// Les STRUCTURES (maison, tours) en sont délibérément exclues : leur ratio
+// attaque+PV / prix est bien plus favorable que celui de n'importe quel
+// soldat ou bonus (une tour d'attaque, 25 or, rendrait un tas de 60 or — 240 %
+// de son prix), ce qui en ferait une fabrique à or plutôt qu'une défense.
+// Test PUR partagé par le reducer et l'interface.
+export const canReceiveSacrifice = (u) => !!u && u.type === 'soldier';
+
 // Bonus « Bûcheron » : multiplicateur appliqué à l'or d'abattage d'un arbre,
 // APRÈS le multiplicateur d'essence (voir `treeReward` dans `trees.js`).
 export const LUMBERJACK_REWARD_MULT = 2;
 
 // Bonus « Aventurier » : or récolté à chaque case conquise, quelle qu'elle soit.
-export const ADVENTURER_CASE_REWARD = 1;
+export const ADVENTURER_CASE_REWARD = 5;
 
 // Bonus « Voleur » : or récolté par case prise à un ADVERSAIRE (une case neutre
 // ne rapporte rien). Un soldat ne portant qu'un seul bonus, cette prime et celle
 // de l'Aventurier ne se rencontrent jamais sur la même unité.
-export const THIEF_ENEMY_CASE_REWARD = 1;
+export const THIEF_ENEMY_CASE_REWARD = 10;
 
-// Bonus « Coureur » : multiplicateur de la portée de déplacement à l'intérieur
-// du territoire (la conquête reste limitée à 1 case hors territoire).
-export const RUNNER_MOVE_MULT = 2;
+// Bonus « Ninja » : multiplicateur de la portée de déplacement à l'intérieur du
+// territoire (la conquête reste limitée à 1 case hors territoire). Hérité du
+// « Coureur », retiré du catalogue et dont le ninja reprend l'effet.
+export const NINJA_MOVE_MULT = 2;
 
 // Bonus « Alchimiste » : à chaque fin de tour de son propriétaire, il transmute
-// sa propre chair en arme — il se retire des PV pour armer l'allié adjacent le
-// moins offensif. Même logique d'échange que le « Prêtre », dans l'autre sens.
-export const ALCHEMIST_ATK_BUFF = 1; // +attaque procurée à l'allié ciblé
-export const ALCHEMIST_HP_COST = 1; // PV que l'alchimiste se retire en échange
+// sa propre chair en armes — il arme TOUS ses voisins alliés à la fois, et paie
+// de ses PV pour CHACUN. Même logique d'échange que le « Prêtre », dans l'autre
+// sens : plus il est entouré, plus il se vide vite.
+export const ALCHEMIST_ATK_BUFF = 1; // +attaque procurée à chaque allié adjacent
+export const ALCHEMIST_HP_COST = 1; // PV que l'alchimiste se retire PAR allié armé
 
 // Bonus « Prêtre » : à chaque fin de tour de son propriétaire, il donne de sa
-// propre vie pour soigner l'allié adjacent le plus mal en point.
-export const PRIEST_HP_GIFT = 1; // PV rendus à l'allié ciblé
-export const PRIEST_HP_COST = 1; // PV que le prêtre se retire en échange
+// propre vie pour soigner TOUS ses voisins alliés. L'échange lui est FAVORABLE —
+// il rend deux PV pour un — ce qui est tout son intérêt : un prêtre entouré
+// transforme sa réserve de PV en une réserve deux fois plus grande, répartie.
+export const PRIEST_HP_GIFT = 2; // PV rendus à chaque allié adjacent
+export const PRIEST_HP_COST = 1; // PV que le prêtre se retire PAR allié soigné
+
+// Bonus « Moine » : or gagné à chaque tour qu'il termine SANS avoir agi. Sa
+// contemplation est sa production — le pendant économique du « Paladin », qui
+// convertit la même inaction en PV.
+export const MONK_IDLE_REWARD = 5;
 
 // Bonus « Magicien » : à chaque fin de tour de son propriétaire, il transmet SA
 // PROPRE affinité à UN allié adjacent sans affinité, et rapporte cette prime
 // d'or à chaque don.
-export const MAGICIAN_GOLD_REWARD = 30;
+export const MAGICIAN_GOLD_REWARD = 10;
 
 // Bonus « Guerrier » : chaque ennemi qu'il tue rapporte cette prime d'or. Calée
 // sur le prix d'un soldat de base : trois victimes financent un remplaçant.
-export const WARRIOR_KILL_REWARD = 60;
+export const WARRIOR_KILL_REWARD = 100;
+
+// Bonus « Chevalier noir » : or récolté à chaque squelette qu'il abat — le
+// pendant offensif de son immunité aux squelettes.
+export const BLACK_KNIGHT_SKELETON_REWARD = 30;
 
 // Bonus « Démoniste » : à chaque fin de tour il invoque un squelette allié
 // (l'espèce « skeleton2 » du catalogue `units.js`) sur une case voisine libre.
@@ -145,12 +179,23 @@ export const VAMPIRE_DRAIN = 1;
 // une unité alliée « arbre-druide » (espèce `druidTree` du catalogue
 // `units.js`), qui occupe la case de l'arbre. Le défi se débloque en ayant
 // DRUID_TREES_REQUIRED arbres sur son territoire.
-export const DRUID_TREES_REQUIRED = 5; // arbres à avoir sur son territoire
+export const DRUID_TREES_REQUIRED = 4; // arbres à avoir sur son territoire
 
 // Défi « Paladin » : nombre de tours CONSÉCUTIFS que le soldat doit terminer sans
 // avoir agi (ni déplacement, ni fusion, ni attaque, ni abattage) pour débloquer
 // le bonus.
-export const PALADIN_IDLE_TURNS = 3;
+export const PALADIN_IDLE_TURNS = 2;
+
+// Bonus « Roi » : multiplicateur appliqué aux DEUX rentrées que le joueur tire
+// de ce qu'il POSSÈDE — le rendement de ses maisons et l'or de son territoire
+// (1 or par case) — tant qu'un de ses soldats porte ce bonus et est en vie. Le
+// revenu de base et les entretiens ne sont pas touchés : le roi récompense
+// l'expansion, il n'efface pas les factures.
+export const KING_INCOME_MULT = 2;
+
+// Bonus « Paladin » : PV régénérés à la fin d'un tour qu'il a terminé SANS agir
+// — la contrepartie de son immobilité, dans la continuité de son défi.
+export const PALADIN_IDLE_HEAL = 1;
 
 // Bonus proposés dans le panneau du soldat. Chaque bonus est rattaché à UN seul
 // niveau de soldat (`requiredLevel`) : un soldat ne voit que les bonus de son
@@ -164,10 +209,17 @@ export const PALADIN_IDLE_TURNS = 3;
 //   - price    : coût en or (`null` => « Gratuit »)
 //   - stats    : { atk, hp } que le soldat PREND en équipant le bonus. Chaque
 //                bonus a son propre profil — le Prêtre encaisse (1/32), le
-//                Vampire frappe et meurt vite (8/1) — et ces valeurs REMPLACENT
+//                Vampire frappe et meurt vite (10/2) — et ces valeurs REMPLACENT
 //                celles du niveau (voir `reduceBuyBonus`). C'est le cœur de
 //                l'équilibrage : un bonus se choisit autant pour sa silhouette
 //                de statistiques que pour son effet.
+//   - upkeep   : SURCOÛT d'entretien par tour, ajouté à celui du NIVEAU du
+//                porteur (`SOLDIER_UPKEEP`) — ce n'est pas l'or/tour final.
+//                Positif = coût, négatif = revenu, absent = 0 (le bonus ne
+//                change rien à l'entretien du niveau). L'or/tour réellement
+//                payé est donné par `bonusTotalUpkeep`, et c'est LUI qui
+//                s'affiche dans le panneau : un bonus lu « −4 or/tour » coûte
+//                bien 4 or au total, entretien de niveau compris.
 //   - challenge : défi à accomplir pour débloquer. Soit une chaîne (défi pas
 //                 encore branché), soit un objet suivi { metric, goal, describe }
 //                 où `describe(courant, objectif)` produit le texte d'avancement.
@@ -180,11 +232,11 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl1/lumberJack.png',
         requiredLevel: 1,
         stats: {atk: 1, hp: 2},
-        price: 40,
+        price: 20,
         challenge: {
             metric: CHALLENGE_METRICS.TREES_CHOPPED,
-            goal: 5,
-            describe: (c, g) => `Détruire ${c}/${g} arbres.`,
+            goal: 1,
+            describe: (c, g) => `Détruire ${c}/${g} arbre.`,
         },
         effect: 'Gagne 2× plus d’or en coupant les arbres.',
     },
@@ -194,67 +246,59 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl1/aventurer.png',
         requiredLevel: 1,
         stats: {atk: 1, hp: 2},
-        price: 40,
+        price: 20,
         challenge: {
             metric: CHALLENGE_METRICS.CASES_CONQUERED,
-            goal: 10,
+            goal: 3,
             describe: (c, g) => `Conquérir ${c}/${g} cases.`,
         },
-        effect: 'Récolte 1 or par case conquise.',
+        effect: `Récolte ${ADVENTURER_CASE_REWARD} or par case conquise.`,
     },
     {
-        id: 'runner',
-        label: 'Coureur',
-        src: '/characters/lvl1/runner.png',
+        id: 'thief',
+        label: 'Voleur',
+        src: '/characters/lvl2/thief.png',
         requiredLevel: 1,
-        stats: {atk: 1, hp: 2},
-        price: null,
+        // Lame de verre du premier palier : il frappe deux fois plus fort qu'un
+        // soldat de son niveau, mais un seul coup le tue. C'est le prix de sa
+        // prime — la plus grosse rentrée d'or du niveau 1.
+        stats: {atk: 2, hp: 1},
+        price: 20,
         challenge: {
-            metric: CHALLENGE_METRICS.CASES_TRAVELED_OWN,
-            goal: 20,
-            describe: (c, g) => `Parcourir ${c}/${g} cases dans son territoire.`,
+            metric: CHALLENGE_METRICS.ENEMY_CASES_CONQUERED,
+            goal: 2,
+            describe: (c, g) => `Conquérir ${c}/${g} cases ennemies.`,
         },
-        effect: 'Se déplace 2× plus loin à l’intérieur du territoire.',
+        effect: `Gagne ${THIEF_ENEMY_CASE_REWARD} or supplémentaires par case volée à l’ennemi.`,
     },
+    // Le « Fermier » est un bonus de niveau 1 : sa production d'arbres est une
+    // ouverture économique, elle n'a d'intérêt que jouée tôt. Il garde le profil
+    // nu de son niveau (1/1) — un planteur, pas un combattant — et RAPPORTE
+    // 5 or/tour (voir `upkeep`, entretien du niveau 1 compris).
     {
         id: 'farmer',
         label: 'Fermier',
         src: '/characters/lvl2/farmer.png',
         requiredLevel: 1,
-        stats: {atk: 1, hp: 2},
-        price: 50,
-        upkeep: 2,
+        stats: {atk: 1, hp: 1},
+        price: 20,
+        upkeep: 3, // 2 (niveau 1) + 3 = 5 or/tour prélevés
         challenge: {
             metric: CHALLENGE_METRICS.ENEMY_TREES_CHOPPED,
             goal: 1,
             describe: (c, g) => `Détruire ${c}/${g} arbre sur le territoire ennemi.`,
         },
-        effect: 'Sur une case frontière, fait pousser des arbres le long de la frontière.',
+        effect: 'Fait pousser un arbre à la frontière (chaque tour).',
     },
 
     // ---- Niveau 2 ----
-    {
-        id: 'thief',
-        label: 'Voleur',
-        src: '/characters/lvl2/thief.png',
-        requiredLevel: 2,
-        stats: {atk: 2, hp: 4},
-        price: 80,
-        challenge: {
-            metric: CHALLENGE_METRICS.ENEMY_CASES_CONQUERED,
-            goal: 10,
-            describe: (c, g) => `Conquérir ${c}/${g} cases ennemies.`,
-        },
-        effect: 'Gagne 1 or supplémentaire par case volée à l’ennemi.',
-    },
     {
         id: 'undead',
         label: 'Mort-vivant',
         src: '/characters/lvl2/undead.png',
         requiredLevel: 2,
         stats: {atk: 2, hp: 4},
-        price: null,
-        upkeep: 2,
+        price: 30,
         challenge: {
             metric: CHALLENGE_METRICS.ENEMIES_KILLED_L2,
             goal: 1,
@@ -262,23 +306,26 @@ export const BONUS_OFFERS = [
         },
         effect: `À sa mort, invoque un squelette allié (${unitStatsText('skeleton')}) sur sa case.`,
     },
+    // Bonus « Ninja » : déplacement « fantôme » — traverse TOUT (soldats,
+    // structures, bases, arbres) pour se repositionner, MAIS ne peut pas
+    // attaquer à travers un obstacle (voir `computeReachable` : les cibles de
+    // combat/abattage ne sont validées que depuis une case où il peut se tenir).
+    // Il hérite en plus de la portée doublée de l'ancien « Coureur » : c'est le
+    // bonus de la MOBILITÉ, et rien d'autre ne s'en occupe plus.
     {
-        id: 'viking',
-        label: 'Viking',
-        src: '/characters/lvl2/viking.png',
+        id: 'ninja',
+        label: 'Ninja',
+        src: '/characters/lvl3/ninja.png',
         requiredLevel: 2,
         stats: {atk: 2, hp: 4},
-        price: 90,
-        upkeep: 4,
+        price: 30,
+        upkeep: 6, // 4 (niveau 2) + 6 = 10 or/tour prélevés
         challenge: {
-            metric: CHALLENGE_METRICS.TOWER_KINDS_OWNED,
-            goal: 2,
-            describe: (c, g) =>
-                c >= g
-                    ? 'Tour d’attaque et tour de défense possédées.'
-                    : `Posséder une tour d’attaque et une tour de défense (${c}/${g}).`,
+            metric: CHALLENGE_METRICS.CHESTS_OPENED,
+            goal: 1,
+            describe: (c, g) => `Ouvrir ${c}/${g} coffre.`,
         },
-        effect: 'Ne subit aucun dégât des tours.',
+        effect: `Se déplace à travers tout et ${NINJA_MOVE_MULT}× plus loin en territoire allié.`,
     },
     {
         id: 'warrior',
@@ -286,52 +333,70 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl2/GoldWarrior.png',
         requiredLevel: 2,
         stats: WARRIOR_STATS,
-        price: 140,
-        upkeep: 4,
+        price: 100,
+        upkeep: -14, // couvre l'entretien du niveau 2 (4) et RAPPORTE 8 or par tour
         challenge: {
             metric: CHALLENGE_METRICS.COMBATS_SURVIVED,
-            goal: 3,
+            goal: 2,
             describe: (c, g) => `Survivre à ${c}/${g} combats sans mourir.`,
         },
-        effect: `Passe à ${statsText(WARRIOR_STATS)} et gagne ${WARRIOR_KILL_REWARD} or par ennemi tué.`,
+        effect: `Gagne ${WARRIOR_KILL_REWARD} or pour chaque ennemi qu'il tue.`,
     },
-
-    // ---- Niveau 3 ----
-    // Bonus « Ninja » : déplacement « fantôme » — traverse TOUT (soldats,
-    // structures, bases, arbres) pour se repositionner, MAIS ne peut pas
-    // attaquer à travers un obstacle (voir `computeReachable` : les cibles de
-    // combat/abattage ne sont validées que depuis une case où il peut se tenir).
+    // Bonus « Moine » : le pacifiste. Son défi n'est pas un exploit à accomplir
+    // mais une innocence à PRÉSERVER — il s'ouvre d'emblée et se referme au
+    // premier meurtre, au premier arbre abattu, à la première case conquise.
+    // Seul défi du jeu qui se PERD, d'où sa lecture en direct dans `progress`.
     {
-        id: 'ninja',
-        label: 'Ninja',
-        src: '/characters/lvl3/ninja.png',
-        requiredLevel: 3,
-        stats: {atk: 2, hp: 8},
-        price: null,
-        upkeep: 4,
+        id: 'monk',
+        label: 'Moine',
+        src: '/characters/lvl2/monk.png',
+        requiredLevel: 2,
+        stats: {atk: 2, hp: 2},
+        price: 10,
+        upkeep: -4, // annule l'entretien du niveau 2 : le moine ne coûte rien par tour
         challenge: {
-            metric: CHALLENGE_METRICS.RAREST_TREES_CHOPPED,
+            metric: CHALLENGE_METRICS.MONK_PURITY,
             goal: 1,
             describe: (c, g) =>
                 c >= g
-                    ? `${RAREST_TREE_KIND.label} abattu.`
-                    : `Abattre un ${RAREST_TREE_KIND.label.toLowerCase()} (l’arbre le plus rare).`,
+                    ? `Ne pas tuer, abattre d'arbre ou conquérir de case.`
+                    : `Ne pas tuer, abattre d'arbre ou conquérir de case.`,
         },
-        effect: 'Se déplace à travers tout (soldats, structures, arbres), mais ne peut pas attaquer à travers un obstacle.',
+        effect: `Gagne ${MONK_IDLE_REWARD} or à chaque tour qu’il termine sans avoir agi.`,
+    },
+
+    // ---- Niveau 3 ----
+    {
+        id: 'viking',
+        label: 'Viking',
+        src: '/characters/lvl2/viking.png',
+        requiredLevel: 3,
+        stats: {atk: 2, hp: 12},
+        price: 40,
+        upkeep: 4, // 8 (niveau 3) + 4 = 12 or/tour prélevés
+        challenge: {
+            metric: CHALLENGE_METRICS.TOWER_KINDS_OWNED,
+            goal: 2,
+            describe: (c, g) =>
+                c >= g
+                    ? 'Posséder une tour d’attaque et de défense.'
+                    : `Posséder une tour d’attaque et de défense (${c}/${g}).`,
+        },
+        effect: 'Ne subit aucun dégât des tours.',
     },
     {
         id: 'vampire',
         label: 'Vampire',
         src: '/characters/lvl3/vampire.png',
         requiredLevel: 3,
-        stats: {atk: 8, hp: 1},
-        price: 160,
-        upkeep: 5,
+        stats: {atk: 10, hp: 2},
+        price: 40,
+        upkeep: 4, // 8 (niveau 3) + 4 = 12 or/tour prélevés
         challenge: {
             metric: CHALLENGE_METRICS.NO_TREES_ON_TERRITORY,
             goal: 1,
             describe: (c, g) =>
-                c >= g ? 'Territoire sans arbre.' : 'N’avoir aucun arbre sur son territoire.',
+                c >= g ? 'Aucun arbre sur son territoire.' : 'Aucun arbre sur son territoire.',
         },
         effect: 'Chaque tour, vole 1 PV à l’allié adjacent ayant le plus de PV.',
     },
@@ -340,15 +405,15 @@ export const BONUS_OFFERS = [
         label: 'Magicien',
         src: '/characters/lvl3/magicien.png',
         requiredLevel: 3,
-        stats: {atk: 2, hp: 2},
-        price: 100,
-        upkeep: 2,
+        stats: {atk: 1, hp: 4},
+        price: 40,
+        upkeep: -8, // annule l'entretien du niveau 3 : le magicien ne coûte rien par tour
         challenge: {
             metric: CHALLENGE_METRICS.HAS_AFFINITY,
             goal: 1,
             describe: (c, g) => (c >= g ? 'Affinité acquise.' : 'Porter une affinité.'),
         },
-        effect: 'Transmet son affinité à un allié adjacent, et gagne 10 or à chaque don.',
+        effect: `Transmet son affinité à un allié adjacent et gagne ${MAGICIAN_GOLD_REWARD} or.`,
     },
     {
         id: 'alchemist',
@@ -356,14 +421,14 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl3/alchemist.png',
         requiredLevel: 3,
         stats: {atk: 1, hp: 16},
-        price: 150,
-        upkeep: 5,
+        price: 40,
+        upkeep: -8, // annule l'entretien du niveau 3 : l'alchimiste paie en PV, pas en or
         challenge: {
             metric: CHALLENGE_METRICS.CHESTS_OPENED,
             goal: 1,
             describe: (c, g) => `Ouvrir ${c}/${g} coffre.`,
         },
-        effect: 'Se retire 1 PV pour donner +1 atk à l’allié adjacent le moins offensif.',
+        effect: `Chaque tour, donne +${ALCHEMIST_ATK_BUFF} atk à TOUS les alliés adjacents, au prix de ${ALCHEMIST_HP_COST} PV par allié.`,
     },
 
     // ---- Niveau 4 ----
@@ -372,30 +437,29 @@ export const BONUS_OFFERS = [
         label: 'Prêtre',
         src: '/characters/lvl4/pretre.png',
         requiredLevel: 4,
-        stats: {atk: 1, hp: 32},
-        price: 280,
-        upkeep: 10,
+        stats: {atk: 1, hp: 16},
+        price: 60,
+        upkeep: -16, // annule l'entretien du niveau 4 : le prêtre paie en PV, pas en or
         challenge: {
             metric: CHALLENGE_METRICS.HOUSES_OWNED,
-            goal: 2,
+            goal: 6,
             describe: (c, g) => (c >= g ? `${g} maisons possédées.` : `Posséder ${c}/${g} maisons.`),
         },
-        effect: 'Se retire 1 PV pour en donner 1 à l’allié adjacent le plus mal en point.',
+        effect: `Chaque tour, rend ${PRIEST_HP_GIFT} PV à TOUS les alliés adjacents, au prix de ${PRIEST_HP_COST} PV par allié.`,
     },
     {
         id: 'blackKnight',
         label: 'Chevalier noir',
         src: '/characters/lvl4/darkWarrior.png',
         requiredLevel: 4,
-        stats: {atk: 8, hp: 12},
-        price: 240,
-        upkeep: 8,
+        stats: {atk: 8, hp: 16},
+        price: 60,
         challenge: {
             metric: CHALLENGE_METRICS.SKELETONS_KILLED,
             goal: 1,
             describe: (c, g) => (c >= g ? 'Squelette tué ou possédé.' : 'Tuer ou posséder un squelette.'),
         },
-        effect: 'Est insensible aux squelettes : il ne prend aucun dégât de leur part.',
+        effect: `Ne prend aucun dégât face aux squelettes, et gagne ${BLACK_KNIGHT_SKELETON_REWARD} or par squelette tué.`,
     },
     {
         id: 'paladin',
@@ -403,8 +467,8 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl4/paladin.png',
         requiredLevel: 4,
         stats: {atk: 8, hp: 12},
-        price: 320,
-        upkeep: 15,
+        price: 150,
+        upkeep: 16, // 16 (niveau 4) + 16 = 32 or/tour prélevés
         challenge: {
             metric: CHALLENGE_METRICS.PALADIN_IDLE_TURNS,
             goal: PALADIN_IDLE_TURNS,
@@ -414,23 +478,26 @@ export const BONUS_OFFERS = [
                     : `Terminer son tour sans agir (${c}/${g} tours consécutifs).`,
         },
         effect:
-            'Porte l’affinité Bouclier divin : ne peut ni attaquer ni être attaqué par une unité à bouclier ou sans affinité.',
+            `Porte l’affinité Bouclier divin et regagne ${PALADIN_IDLE_HEAL} PV à chaque tour terminé sans agir.`,
     },
     {
         id: 'druid',
         label: 'Druide',
         src: '/characters/lvl4/druid.png',
         requiredLevel: 4,
-        stats: {atk: 1, hp: 8},
+        stats: {atk: 2, hp: 6},
         price: null,
-        upkeep: 10,
+        upkeep: -16, // annule l'entretien du niveau 4 : le druide ne coûte rien par tour
         challenge: {
             metric: CHALLENGE_METRICS.DRUID_TREES_KEPT,
             goal: DRUID_TREES_REQUIRED,
             describe: (c, g) =>
                 c >= g ? `${g} arbres sur son territoire.` : `Avoir ${c}/${g} arbres sur son territoire.`,
         },
-        effect: `Transforme l’arbre ciblé en une unité alliée (arbre-druide, ${unitStatsText('druidTree')}).`,
+        // Le druide est GRATUIT et sans entretien : sa facture, c'est son armée.
+        // Chaque arbre transformé coûte cher par tour — d'où l'annonce du prix
+        // ici, lue au catalogue des unités.
+        effect: `Transforme l’arbre ciblé en allié (${unitStatsText('druidTree')}, entretien ${unitUpkeepText('druidTree')}).`,
     },
 
     // ---- Niveau 5 ----
@@ -439,15 +506,15 @@ export const BONUS_OFFERS = [
         label: 'Sorcier',
         src: '/characters/lvl5/sorceler.png',
         requiredLevel: 5,
-        stats: {atk: 4, hp: 1},
+        stats: SORCERER_STATS,
         price: 500,
-        upkeep: 20,
+        // Aucun surcoût : il paie l'entretien plein de son niveau (32 or/tour).
         challenge: {
             metric: CHALLENGE_METRICS.NO_SORCERER_ON_BOARD,
             goal: 1,
             describe: (c, g) => (c >= g ? 'Aucun sorcier sur le terrain.' : 'Qu’aucun sorcier ne soit sur le terrain.'),
         },
-        effect: `Envoûte les rois, démonistes et conquérants ennemis (${unitStatsText('pig')}, sans effet) ; sans cible, invoque un dragon (${unitStatsText('dragon')}).`,
+        effect: `Transforme rois, démonistes et conquérants en animaux insignifiants, sans cible, il invoque un puissant dragon.`,
     },
     {
         id: 'warlock',
@@ -455,14 +522,15 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl5/demonist.png',
         requiredLevel: 5,
         stats: WARLOCK_STATS,
-        price: 450,
-        upkeep: 30,
+        price: 100,
+        // Aucun surcoût : il paie l'entretien plein de son niveau (32 or/tour),
+        // et chacun de ses squelettes le sien par-dessus.
         challenge: {
             metric: CHALLENGE_METRICS.NO_WARLOCK_ON_BOARD,
             goal: 1,
             describe: (c, g) => (c >= g ? 'Aucun démoniste sur le terrain.' : 'Qu’aucun démoniste ne soit sur le terrain.'),
         },
-        effect: `Passe à ${statsText(WARLOCK_STATS)} et, chaque tour où il n’a pas agi, invoque un squelette allié (${unitStatsText('skeleton2')}) une fois sur deux.`,
+        effect: `Une fois sur deux où il n’a pas agi pendant son tour, invoque un squelette allié (${unitStatsText('skeleton2')}, ${unitUpkeepText('skeleton2')}).`,
     },
     {
         id: 'king',
@@ -470,38 +538,33 @@ export const BONUS_OFFERS = [
         src: '/characters/lvl5/king.png',
         requiredLevel: 5,
         stats: {atk: 1, hp: 2},
-        price: 400,
-        upkeep: 25,
+        price: 2000,
+        upkeep: -32, // annule l'entretien du niveau 5 : le roi ne coûte rien par tour
         challenge: {
             metric: CHALLENGE_METRICS.NO_KING_ON_BOARD,
             goal: 1,
             describe: (c, g) => (c >= g ? 'Aucun roi sur le terrain.' : 'Qu’aucun roi ne soit sur le terrain.'),
         },
-        effect: 'Tant qu’il est en vie, les maisons rapportent 2x plus d’or par tour.',
+        effect: `Tant qu’il est en vie, les maisons ET le territoire rapportent ${KING_INCOME_MULT}× plus d’or par tour.`,
     },
     {
         id: 'conqueror',
         label: 'Conquérant',
         src: '/characters/lvl5/conquerant.png',
         requiredLevel: 5,
-        stats: {atk: 4, hp: 4},
-        price: 550,
-        upkeep: 30,
+        stats: {atk: 16, hp: 16},
+        price: 200,
         challenge: {
             metric: CHALLENGE_METRICS.NO_CONQUEROR_ON_BOARD,
             goal: 1,
             describe: (c, g) => (c >= g ? 'Aucun conquérant sur le terrain.' : 'Qu’aucun conquérant ne soit sur le terrain.'),
         },
-        effect: 'À chaque tour, annexe toutes les cases vides autour de lui (même à l’ennemi).',
+        effect: 'Porte l’affinité Bouclier divin et à chaque tour conquiert les cases vides autour de lui.',
     },
 ];
 
-// Bonus « Roi » : multiplicateur appliqué au SEUL rendement des maisons du
-// joueur, à la fin de son tour, tant qu'un de ses soldats porte ce bonus (est
-// en vie). Le reste du revenu (base, cases, entretiens) n'est pas touché.
-export const KING_HOUSE_INCOME_MULT = 2;
-
-// Bonus « Sorcier » : à la fin du tour de son propriétaire, il ENVOÛTE les
+// Bonus « Sorcier » : à L'INSTANT DE SON ACHAT (une seule fois, jamais rejoué
+// aux tours suivants), il ENVOÛTE les
 // soldats ENNEMIS portant l'un des trois autres bonus de niveau 5. Le soldat
 // touché est remplacé par une créature dérisoire (1/1) qui reste au service de
 // son propriétaire mais perd son bonus et son effet ; seule son AFFINITÉ
@@ -605,6 +668,19 @@ const ownsSkeleton = (world, playerId) => {
 // n'ont pas besoin de `world` et restent donc évaluables partout.
 const SOLDIER_CHALLENGES = {
     [CHALLENGE_METRICS.HAS_AFFINITY]: (soldier) => (soldier?.affinity ? 1 : 0),
+
+    // Défi « Moine » : le seul défi du jeu qui se PERD. Il est rempli tant que
+    // les trois compteurs de violence du soldat sont à zéro — un seul meurtre,
+    // un seul arbre, une seule conquête le referment pour de bon (les compteurs
+    // de `progress` ne redescendent jamais).
+    [CHALLENGE_METRICS.MONK_PURITY]: (soldier) => {
+        const p = soldier?.progress ?? {};
+        const guilty =
+            (p[CHALLENGE_METRICS.ENEMIES_KILLED] ?? 0) > 0 ||
+            (p[CHALLENGE_METRICS.TREES_CHOPPED] ?? 0) > 0 ||
+            (p[CHALLENGE_METRICS.CASES_CONQUERED] ?? 0) > 0;
+        return guilty ? 0 : 1;
+    },
 };
 
 // Évaluateurs des défis d'état qui INSPECTENT LE PLATEAU : (soldier, world,
@@ -776,6 +852,21 @@ export const canBuyBonus = (soldier, bonus, gold, settings, world) =>
 export const bonusUpkeep = (id, settings) =>
     settings?.bonusUpkeep?.[id] ?? BONUS_OFFERS.find((b) => b.id === id)?.upkeep ?? 0;
 
+// Entretien (or/tour) d'un soldat ORDINAIRE de ce niveau, bonus non compris.
+export const soldierLevelUpkeep = (level, settings) => {
+    const lvl = level || 1;
+    return settings?.upkeep?.[`soldier${lvl}`] ?? SOLDIER_UPKEEP[lvl] ?? 0;
+};
+
+// Entretien TOTAL d'un soldat portant ce bonus : celui de son niveau PLUS le
+// surcoût du bonus. C'est le seul chiffre qui compte pour le joueur — le coût
+// du bonus seul (« 2/tour » sur un niveau 1 qui en paie déjà 2) se lisait comme
+// la facture entière alors qu'elle valait le double. Le panneau des bonus
+// affiche donc ceci, et rien d'autre.
+// Convention inchangée : POSITIF = coût prélevé, NÉGATIF = gain.
+export const bonusTotalUpkeep = (bonus, settings) =>
+    soldierLevelUpkeep(bonus?.requiredLevel, settings) + bonusUpkeep(bonus?.id, settings);
+
 // Prix d'achat d'un bonus, configurable par partie (`settings.bonusPrice`) ;
 // retombe sur le prix du bonus (0 = gratuit) sinon.
 export const bonusPriceOf = (bonus, settings) =>
@@ -784,7 +875,7 @@ export const bonusPriceOf = (bonus, settings) =>
 // Entretien (or/tour) d'une unité possédée, source de vérité unique du barème.
 // Tous les postes sont configurables via `settings` (retombent sur les barèmes
 // par défaut sinon) :
-//   - squelette invoqué : `upkeep.skeleton` ;
+//   - squelette invoqué : `upkeep.skeleton` (celui du Démoniste : `upkeep.skeleton2`) ;
 //   - soldat : `upkeep.soldier{niveau}` + entretien de son bonus éventuel ;
 //   - tour : `upkeep.tower` ; maison : rendement `houseIncome` (négatif = gain) ;
 //   - autres bâtiments / arbre : barème `BUILDING_UPKEEP`.
@@ -795,12 +886,19 @@ export const upkeepFor = (unit, settings) => {
         // Unité invoquée / envoûtée : barème propre à son espèce (`units.js`).
         // Seul le squelette en a un, surchargeable par partie.
         if (isSummonedUnit(unit)) {
-            if (isSkeleton(unit)) return settings?.upkeep?.skeleton ?? unitUpkeep(unit);
+            // Le squelette ordinaire est réglable par partie ; celui du Démoniste
+            // (`skeleton2`, plus robuste) a son propre barème, d'où la lecture par
+            // ESPÈCE exacte plutôt que par marqueur.
+            if (isSkeleton(unit)) {
+                const kindId = unitKind(unit)?.id ?? 'skeleton';
+                return settings?.upkeep?.[kindId] ?? unitUpkeep(unit);
+            }
             return unitUpkeep(unit);
         }
-        const lvl = unit.level || 1;
-        const base = settings?.upkeep?.[`soldier${lvl}`] ?? SOLDIER_UPKEEP[lvl] ?? 0;
-        return base + (unit.bonus ? bonusUpkeep(unit.bonus, settings) : 0);
+        return (
+            soldierLevelUpkeep(unit.level, settings) +
+            (unit.bonus ? bonusUpkeep(unit.bonus, settings) : 0)
+        );
     }
     if (unit.type === 'house') {
         // Maison : entretien négatif = revenu (rendement configurable).

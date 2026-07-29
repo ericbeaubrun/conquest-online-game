@@ -1,0 +1,145 @@
+// Barre d'actions du soldat sélectionné (voir `game/ActionBar.jsx`), posée dans
+// `.game-content` sur le BORD GAUCHE de l'écran (les boutons de zoom occupent
+// déjà le bord droit). Même grammaire visuelle qu'eux (coins carrés, biseau
+// 8-bit, aucun flou), mais le fond prend la couleur du joueur.
+@use 'tokens' as *;
+
+.action-bar {
+  position: absolute;
+  left: 12px;
+  // Même hauteur que les contrôles du plateau (voir `HexBoard.scss`) : assez
+  // haut pour que le panneau du bas ne masque plus les boutons.
+  bottom: 200px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+
+  // Comportements dépliés vers le haut : même colonne, même gouttière.
+  &__menu {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  &__btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 42px;
+    padding: 0 10px;
+    border: 2px solid #000;
+    border-radius: 0;
+    background: var(--action-color, #14171d);
+    color: #fff;
+    font-family: $pixel-font;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.92;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -2px -2px 0 rgba(0, 0, 0, 0.55),
+      2px 2px 0 #000;
+
+    &:hover {
+      opacity: 1;
+    }
+
+    &:active {
+      transform: translate(2px, 2px);
+      box-shadow: inset -1px -1px 0 rgba(255, 255, 255, 0.12), inset 2px 2px 0 rgba(0, 0, 0, 0.55);
+    }
+
+    // Actif (panneau ouvert, comportement en cours) : le bouton reste enfoncé
+    // et s'éclaire d'un liseré doré.
+    &--on {
+      opacity: 1;
+      outline: 2px solid var(--accent-gold, #e8b44a);
+      outline-offset: -4px;
+    }
+  }
+
+  // Boutons principaux (Auto-play, Améliorations) : icône seule au repos, le
+  // libellé se déplie au survol. On anime `max-width` (et non `display`) pour
+  // obtenir une transition ; `overflow: hidden` masque le texte replié.
+  &__btn--icon {
+    padding: 0;
+    // Pas de `gap` : il s'appliquerait même au libellé replié (largeur nulle) et
+    // le bouton au repos ne serait plus carré.
+    gap: 0;
+    justify-content: flex-start;
+
+    img,
+    .action-bar__glyph {
+      width: 22px;
+      height: 22px;
+      // Gouttière fixe de part et d'autre de l'icône : le bouton replié est
+      // carré (42px), quel que soit le libellé.
+      margin: 0 10px;
+      flex: none;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .action-bar__label,
+    .action-bar__arrow {
+      max-width: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-width 0.18s ease, opacity 0.18s ease, margin 0.18s ease;
+    }
+
+    .action-bar__arrow {
+      margin-right: 0;
+    }
+
+    &:hover,
+    &:focus-visible {
+      .action-bar__label {
+        max-width: 160px;
+        opacity: 1;
+        margin-right: 10px;
+      }
+
+      .action-bar__arrow {
+        max-width: 20px;
+        opacity: 1;
+        margin-right: 10px;
+      }
+    }
+  }
+
+  // Icône « dessinée au texte » (le « ? » de l'aide) : centrée dans le même
+  // gabarit de 22px que les vraies icônes.
+  &__glyph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  // Fonctionnalité pas encore branchée : le bouton existe mais s'annonce comme
+  // inactif (le wiki d'aide reste à écrire).
+  &__btn--soon {
+    opacity: 0.6;
+    cursor: default;
+
+    &:hover {
+      opacity: 0.75;
+    }
+  }
+
+  &__label {
+    white-space: nowrap;
+  }
+
+  // Chevron du bouton « Auto-play » : un cran plus petit que le libellé.
+  &__arrow {
+    font-size: 9px;
+    line-height: 1;
+  }
+}

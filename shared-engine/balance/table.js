@@ -36,7 +36,7 @@ import {
     BUILDING_STATS,
 } from '../engine/rules.js';
 import {DEFAULT_SETTINGS, resolveSettings} from '../engine/settings.js';
-import {ITEMS, AFFINITY_ITEMS, ITEM_COST} from '../data/items.js';
+import {ITEMS, AFFINITY_ITEMS, SACRIFICE_POTION_ITEM, ITEM_COST} from '../data/items.js';
 import {
     BONUS_OFFERS,
     upkeepFor,
@@ -44,11 +44,12 @@ import {
     bonusUpkeep,
     purchasedSoldierStats,
     soldierCostForLevel,
-    KING_HOUSE_INCOME_MULT,
+    KING_INCOME_MULT,
     LUMBERJACK_REWARD_MULT,
     ADVENTURER_CASE_REWARD,
     THIEF_ENEMY_CASE_REWARD,
-    RUNNER_MOVE_MULT,
+    NINJA_MOVE_MULT,
+    MONK_IDLE_REWARD,
     WARRIOR_KILL_REWARD,
     MAGICIAN_GOLD_REWARD,
     VAMPIRE_DRAIN,
@@ -102,7 +103,7 @@ function economySection(s) {
         {label: 'Rendement d’une maison / tour', value: s.houseIncome, tunable: 'houseIncome'},
         {label: 'Or par arbre abattu (base)', value: s.treeReward, tunable: 'treeReward'},
         {label: 'Entretien d’un arbre sur son territoire', value: s.treeUpkeep, tunable: 'treeUpkeep'},
-        {label: 'Multiplicateur maisons (bonus Roi)', value: `×${KING_HOUSE_INCOME_MULT}`, tunable: null},
+        {label: 'Multiplicateur maisons + territoire (bonus Roi)', value: `×${KING_INCOME_MULT}`, tunable: null},
         {label: 'Mode de victoire', value: s.victoryMode, tunable: 'victoryMode'},
         {label: 'Seuil de domination (%)', value: s.dominationPercent, tunable: 'dominationPercent'},
         {label: 'Objectif économique (or)', value: s.economyGoal, tunable: 'economyGoal'},
@@ -125,9 +126,10 @@ function economySection(s) {
 // « amortissement » ne vaut que pour ce qui RAPPORTE (la maison) : nombre de
 // tours au bout duquel l'achat est remboursé.
 function shopSection(s) {
-    const rows = [...ITEMS, ...AFFINITY_ITEMS].map((item) => {
+    const rows = [...ITEMS, ...AFFINITY_ITEMS, SACRIFICE_POTION_ITEM].map((item) => {
         const cost = s.itemCost?.[item.id] ?? item.cost;
-        // Les affinités ne sont pas des unités posées : aucun entretien.
+        // Les affinités et la potion de sacrifice ne sont pas des unités posées :
+        // aucun entretien.
         const upkeep = item.id in BUILDING_STATS || item.id === 'soldier'
             ? upkeepFor({type: item.id, level: 1}, s)
             : 0;
@@ -391,7 +393,7 @@ function spawnSection(s) {
 function constantSection() {
     const rows = [
         {label: 'Déplacement maximum / tour', value: MAX_MOVE, source: 'rules.js', tunable: null},
-        {label: 'Déplacement du Coureur', value: MAX_MOVE * RUNNER_MOVE_MULT, source: 'soldier.js', tunable: null},
+        {label: 'Déplacement du Ninja', value: MAX_MOVE * NINJA_MOVE_MULT, source: 'soldier.js', tunable: null},
         {label: 'Niveau de fusion maximum', value: MERGE_MAX, source: 'rules.js', tunable: null},
         {label: 'Plafond de PV d’un soldat', value: SOLDIER_HP_MAX, source: 'rules.js', tunable: null},
         {label: 'Plafond d’attaque d’un soldat', value: SOLDIER_ATK_MAX, source: 'rules.js', tunable: null},
@@ -405,6 +407,7 @@ function constantSection() {
         {label: 'Prêtre : PV donnés / PV payés', value: `${PRIEST_HP_GIFT} / ${PRIEST_HP_COST}`, source: 'soldier.js', tunable: null},
         {label: 'Arbres requis par le défi Druide', value: DRUID_TREES_REQUIRED, source: 'soldier.js', tunable: null},
         {label: 'Tours d’inaction du défi Paladin', value: PALADIN_IDLE_TURNS, source: 'soldier.js', tunable: null},
+        {label: 'Prime d’inaction du Moine / tour', value: MONK_IDLE_REWARD, source: 'soldier.js', tunable: null},
     ];
     return {
         id: 'constants',

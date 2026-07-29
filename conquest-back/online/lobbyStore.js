@@ -25,7 +25,8 @@ import {
     serializeState,
     deserializeState,
     randomSeed,
-    getMapById,
+    restoreTurnStart,
+    getPlayableMapById,
     playersForMap,
     PALETTE_VALUES,
     colorName,
@@ -39,16 +40,13 @@ const MAX_NAME_LEN = 16;
 
 const sanitizeName = (name) => (typeof name === 'string' ? name.trim().slice(0, MAX_NAME_LEN) : '');
 
-// Couleurs déjà UTILISÉES dans le lobby : celles des membres (joueurs humains) ET
-// celles des sièges bot. Source unique pour garantir qu'aucun joueur/bot ne
-// partage une couleur. `exceptMember` / `exceptSeat` excluent l'entité en cours
-// d'édition (pour ne pas la considérer comme « en conflit avec elle-même »).
-function usedColors(entry, { exceptMember = null, exceptSeat = null } = {}) {
+// Couleurs déjà UTILISÉES dans le lobby : celles des membres (joueurs humains).
+// Source unique pour garantir qu'aucun joueur ne partage une couleur.
+// `exceptMember` exclut l'entité en cours d'édition (pour ne pas la considérer
+// comme « en conflit avec elle-même »).
+function usedColors(entry, { exceptMember = null } = {}) {
     const used = new Set();
     for (const [id, m] of entry.members) if (id !== exceptMember) used.add(m.color);
-    for (const seat of entry.seats) {
-        if (seat.kind === 'bot' && seat.playerId !== exceptSeat) used.add(seat.color);
-    }
     return used;
 }
 
@@ -125,6 +123,11 @@ async function persist(entry) {
                 seed: entry.seed,
                 seats: entry.seats,
                 state: entry.state ? serializeState(entry.state) : null,
+                // Point de retour du tour en cours : persisté avec l'état, sans
+                // quoi un redémarrage du serveur (ou la reprise d'une partie
+                // sauvegardée) priverait le joueur actif de son retour arrière
+                // jusqu'à la fin de son tour.
+                turnStart: entry.turnStart ? serializeState(entry.turnStart) : null,
                 autosave: entry.autosave,
                 savePassword: entry.savePassword,
                 emptiedAt: entry.emptiedAt,
@@ -147,6 +150,9 @@ function entryFromDoc(doc) {
         // chargement, donc aucune assignation de siège n'est valide.
         seats: (doc.seats || []).map((s) => ({ ...s, assignedMemberId: null })),
         state: doc.state ? deserializeState(doc.state) : null,
+        // Parties enregistrées avant l'ajout du retour arrière : pas d'instantané
+        // (le bouton restera sans effet jusqu'au prochain changement de main).
+        turnStart: doc.turnStart ? deserializeState(doc.turnStart) : null,
         members: new Map(), // memberId -> { name, color }
         hostMemberId: null,
         autosave: doc.autosave !== false, // défaut : activé
@@ -157,9 +163,9 @@ function entryFromDoc(doc) {
 
 // --- Création ---
 export async function createLobby({ mapId, settings = {}, name } = {}) {
-    const map = getMapById(mapId); // repli sur la 1re carte si mapId inconnu
+    const map = getPlayableMapById(mapId); // exclut cartes de démo et ids inconnus
     // Sièges dérivés de la carte : autant que de points de départ, avec les noms
-    // et couleurs par défaut. Tous « humains » pour l'instant (bots à venir).
+    // et couleurs par défaut. Tous « humains ».
     const seats = playersForMap(map).map((p) => ({
         playerId: p.id,
         name: p.name,
@@ -177,6 +183,7 @@ export async function createLobby({ mapId, settings = {}, name } = {}) {
         seed: randomSeed(),
         seats,
         state: null,
+        turnStart: null, // point de retour du tour courant (posé au démarrage)
         members: new Map(), // memberId -> { name, color }
         hostMemberId: null,
         // Sauvegarde automatique : si activée, une partie EN COURS dont tous les
@@ -263,7 +270,7 @@ export function configureLobby(entry, { mapId, settings, autosave, savePassword 
     if (entry.status !== 'waiting') return entry; // partie déjà démarrée : figé
 
     if (mapId && mapId !== entry.mapId) {
-        const map = getMapById(mapId);
+        const map = getPlayableMapById(mapId);
         // On PRÉSERVE l'ordre des membres assignés : on relit les occupants des
         // anciens sièges (dans l'ordre), on reconstruit les sièges de la nouvelle
         // carte, puis on ré-assigne ces membres aux nouveaux sièges humains dans le
@@ -367,7 +374,7 @@ export function setMemberIdentity(entry, socketId, { name, color } = {}) {
         }
     }
     if (color != null && PALETTE_VALUES.includes(color) && color !== member.color) {
-        // Couleur libre uniquement (aucun autre membre NI bot ne l'utilise).
+        // Couleur libre uniquement (aucun autre membre ne l'utilise).
         if (!usedColors(entry, { exceptMember: socketId }).has(color)) {
             member.color = color;
             changed = true;
@@ -426,23 +433,23 @@ export function checkSavePassword(entry, password) {
     return String(password ?? '') === entry.savePassword;
 }
 
+// Nombre de sièges « pourvus » : occupés par un humain OU marqués bot. C'est
+// le nombre de joueurs qui participeront réellement (seuil de démarrage).
+export function filledCount(entry) {
+    return entry.seats.filter((s) => s.assignedMemberId || s.kind === 'bot').length;
+}
+
 // Bascule un siège LIBRE entre « humain (ouvert) » et « bot ». Interdit sur un
-// siège occupé par un joueur (on ne kicke personne) et hors salle d'attente.
-// Un siège 'bot' n'accueille plus d'humain (voir claimSeat) et sera joué par
-// l'IA du serveur. Renvoie true si le type a changé.
+// siège déjà occupé par un membre, et une fois la partie démarrée. Réservé à
+// l'hôte (contrôlé par l'appelant). Renvoie true si changé.
 export function setSeatKind(entry, playerId, kind) {
     if (entry.status !== 'waiting') return false;
     if (kind !== 'human' && kind !== 'bot') return false;
     const seat = entry.seats.find((s) => s.playerId === playerId);
-    if (!seat || seat.assignedMemberId) return false; // occupé par un humain : figé
-    if (seat.kind === kind) return false;
+    if (!seat || seat.assignedMemberId || seat.kind === kind) return false;
     seat.kind = kind;
-    // En devenant bot, on lui garantit une couleur LIBRE (sa couleur par défaut de
-    // position pourrait être déjà prise par un joueur/bot) et une difficulté.
-    if (kind === 'bot') {
-        seat.color = firstFreeColor(entry, seat.color, { exceptSeat: seat.playerId });
-        seat.botDifficulty = seat.botDifficulty || 'normal';
-    }
+    // En devenant bot, on lui garantit une difficulté par défaut.
+    if (kind === 'bot') seat.botDifficulty = seat.botDifficulty || 'normal';
     schedulePersist(entry, { immediate: true });
     return true;
 }
@@ -459,25 +466,6 @@ export function setBotDifficulty(entry, playerId, difficulty) {
     return true;
 }
 
-// Change la couleur d'un siège BOT (réservé à l'hôte). La couleur doit être de la
-// palette et n'être utilisée par aucun autre joueur/bot. Renvoie true si changé.
-export function setBotColor(entry, playerId, color) {
-    if (entry.status !== 'waiting') return false;
-    const seat = entry.seats.find((s) => s.playerId === playerId);
-    if (!seat || seat.kind !== 'bot') return false;
-    if (!PALETTE_VALUES.includes(color) || color === seat.color) return false;
-    if (usedColors(entry, { exceptSeat: playerId }).has(color)) return false;
-    seat.color = color;
-    schedulePersist(entry, { immediate: true });
-    return true;
-}
-
-// Nombre de sièges « pourvus » : occupés par un humain OU marqués bot. C'est le
-// nombre de joueurs qui participeront réellement (seuil de démarrage).
-export function filledCount(entry) {
-    return entry.seats.filter((s) => s.assignedMemberId || s.kind === 'bot').length;
-}
-
 // Réordonne : échange l'occupant du siège `playerId` avec le siège voisin
 // (`up` = précédent, `down` = suivant), même si celui-ci est libre. Réservé à la
 // salle d'attente. Renvoie true si l'échange a eu lieu.
@@ -488,16 +476,17 @@ export function reorderSeat(entry, playerId, direction) {
     if (i < 0 || j < 0 || j >= entry.seats.length) return false;
     const a = entry.seats[i];
     const b = entry.seats[j];
-    // On échange TOUT l'occupant (membre humain OU type bot) : ainsi déplacer un
-    // joueur ou un bot vers un autre numéro de spawn « transporte » son identité,
-    // et le siège d'origine hérite de ce qu'il y avait à la place.
+    // On échange TOUT l'occupant du siège : ainsi déplacer un joueur vers un
+    // autre numéro de spawn « transporte » son identité, et le siège d'origine
+    // hérite de ce qu'il y avait à la place.
     [a.assignedMemberId, b.assignedMemberId] = [b.assignedMemberId, a.assignedMemberId];
+    // Le type de siège (humain/bot) et sa difficulté voyagent avec l'occupant
+    // qu'ils caractérisent.
     [a.kind, b.kind] = [b.kind, a.kind];
-    // La couleur ET la difficulté suivent l'occupant : ainsi tout ce qui
-    // caractérise un bot voyage avec lui (pour un humain, couleur/difficulté de
-    // siège sont neutres, sa vraie couleur étant portée par son membre).
-    [a.color, b.color] = [b.color, a.color];
     [a.botDifficulty, b.botDifficulty] = [b.botDifficulty, a.botDifficulty];
+    // La couleur suit l'occupant (pour un humain, elle reste de toute façon
+    // neutre — sa vraie couleur est portée par son membre).
+    [a.color, b.color] = [b.color, a.color];
     schedulePersist(entry, { immediate: true });
     return true;
 }
@@ -515,7 +504,7 @@ export function seatSummary(entry) {
             kind: s.kind,
             botDifficulty: isBot ? s.botDifficulty || 'normal' : null,
             assignedMemberId: s.assignedMemberId || null,
-            taken: !!s.assignedMemberId,
+            taken: !!s.assignedMemberId || isBot,
             // Occupant : nom/couleur du membre, sinon « Bot » (siège bot), sinon
             // valeurs par défaut de la position (siège humain libre).
             name: m?.name ?? (isBot ? 'Bot' : s.name),
@@ -532,21 +521,22 @@ export async function startLobby(entry) {
         {
             // Nom et couleur de CHAQUE joueur = ceux du membre qui occupe le siège
             // (repli sur les valeurs par défaut de la position si elle est vide).
-            // SEULES les places pourvues (humain ou bot) deviennent des joueurs :
-            // les places libres restent des spawns neutres (partie non pleine). On
-            // conserve `spawnIndex` = position du siège pour placer chacun au bon
-            // spawn malgré les trous.
+            // SEULES les places pourvues deviennent des joueurs : les places
+            // libres restent des spawns neutres (partie non pleine). On conserve
+            // `spawnIndex` = position du siège pour placer chacun au bon spawn
+            // malgré les trous.
             players: entry.seats
                 .map((s, idx) => {
                     const m = s.assignedMemberId ? entry.members.get(s.assignedMemberId) : null;
-                    const isBot = s.kind === 'bot';
-                    if (!m && !isBot) return null; // place libre : pas de joueur
+                    // SEULES les places pourvues (humain ou bot) deviennent des
+                    // joueurs : les places libres restent des spawns neutres.
+                    if (!m && s.kind !== 'bot') return null;
                     return {
                         id: s.playerId,
                         name: m?.name ?? 'Bot',
                         color: m?.color ?? s.color,
                         kind: s.kind,
-                        botDifficulty: isBot ? s.botDifficulty || 'normal' : null,
+                        botDifficulty: s.kind === 'bot' ? s.botDifficulty || 'normal' : null,
                         spawnIndex: idx,
                     };
                 })
@@ -555,6 +545,8 @@ export async function startLobby(entry) {
         },
         entry.seed
     );
+    // Premier tour : son point de retour est l'état initial lui-même.
+    entry.turnStart = entry.state;
     entry.status = 'playing';
     await persist(entry);
     return entry;
@@ -569,9 +561,33 @@ export function applyAction(entry, action) {
     if (!entry.state) return null;
     const next = gameReducer(entry.state, action);
     if (next === entry.state) return null;
+    // POINT DE RETOUR du tour : l'état figé au moment où la main change. Ce seul
+    // endroit suffit à le tenir à jour — toutes les actions passent par ici.
+    // L'état étant immuable, ça ne coûte qu'une référence (voir `resetTurn`).
+    if (next.activePlayerId !== entry.state.activePlayerId) entry.turnStart = next;
     entry.state = next;
     const gameOver = next.status === 'over' && entry.status !== 'over';
     if (gameOver) entry.status = 'over';
     schedulePersist(entry, { immediate: gameOver });
+    return next;
+}
+
+// --- Retour au début du tour courant (demande du joueur actif) ---
+// Restitue l'instantané pris quand la main lui est revenue. L'instantané vit ICI
+// et jamais chez le client : un état fourni par un client serait un plateau
+// arbitraire, donc une triche en trois lignes de console.
+//
+// L'opération est ABSOLUE et idempotente (elle vise un état fixe, pas « le
+// dernier coup ») : deux demandes consécutives, ou une demande croisant un coup
+// encore en vol, donnent le même résultat. `restoreTurnStart` refuse d'elle-même
+// de franchir une frontière de tour (instantané périmé, partie terminée).
+//
+// Renvoie le nouvel état, ou null s'il n'y avait rien à restituer.
+export function resetTurn(entry) {
+    if (!entry.state || !entry.turnStart) return null;
+    const next = restoreTurnStart(entry.state, entry.turnStart);
+    if (next === entry.state) return null;
+    entry.state = next;
+    schedulePersist(entry);
     return next;
 }

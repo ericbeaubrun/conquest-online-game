@@ -6,9 +6,9 @@ import {isSkeleton} from '../data/units.js';
 
 export const MAX_MOVE = 2; // pas de déplacement maximum d'un soldat par tour
 export const MERGE_MAX = 5; // niveau maximum d'un soldat fusionné
-export const BASE_INCOME = 15; // or gagné par tour avant le bonus de territoire
-export const STARTING_GOLD = 0; // or de départ de chaque joueur
-export const HOUSE_INCOME = 10; // or/tour rapporté par chaque maison possédée
+export const BASE_INCOME = 10; // or gagné par tour avant le bonus de territoire
+export const STARTING_GOLD = 75; // or de départ de chaque joueur
+export const HOUSE_INCOME = 5; // or/tour rapporté par chaque maison possédée
 
 // Entretien (or/tour) prélevé sur le revenu pour chaque unité possédée. Un coût
 // POSITIF réduit le revenu ; une valeur NÉGATIVE le renforce (les maisons
@@ -16,7 +16,8 @@ export const HOUSE_INCOME = 10; // or/tour rapporté par chaque maison possédé
 // des panneaux. Le coût d'un soldat s'ajoute à celui de son bonus éventuel
 // (voir `upkeepFor` / `bonusUpkeep` dans soldier.js).
 export const SOLDIER_UPKEEP = {1: 2, 2: 4, 3: 8, 4: 16, 5: 32}; // par niveau de soldat
-export const SKELETON_UPKEEP = 1; // squelette invoqué (Mort-vivant / Démoniste)
+export const SKELETON_UPKEEP = 1; // squelette invoqué (Mort-vivant)
+export const WARLOCK_SKELETON_UPKEEP = 8; // squelette du Démoniste (espèce `skeleton2`)
 // Une tour est plus FAIBLE qu'un soldat du même prix (4/4 ou 8/1 contre 4/8
 // pour un lvl 3) et ne se déplace pas : son entretien doit donc rester bien
 // en-dessous du sien, sans quoi elle n'est jamais le bon achat.
@@ -42,10 +43,12 @@ export const TREE_TURN_RAMP = 20; // montée en intensité jusqu'à ce tour
 export const TREE_SPAWN_CHANCE = 0.5; // proba de base par tentative (mise à l'échelle)
 
 // Statistiques de soldat : valeur de départ (niveau 1) et plafond atteignable.
-// Les plafonds sont calés sur le barème ci-dessous : 16 est l'attaque la plus
-// haute du jeu (soldat lvl 5, dragon), 32 les PV les plus hauts (Prêtre).
+// 16 est la plus haute valeur du barème, atteinte à la fois en attaque (soldat
+// lvl 5, dragon, Conquérant) et en PV (Prêtre, Alchimiste, Chevalier noir,
+// Conquérant) : PV et attaque partagent donc le même plafond, qu'aucun gain —
+// fusion, coffre, soin — ne peut jamais franchir.
 export const SOLDIER_HP_DEFAULT = 2;
-export const SOLDIER_HP_MAX = 32;
+export const SOLDIER_HP_MAX = 16;
 export const SOLDIER_ATK_DEFAULT = 1;
 export const SOLDIER_ATK_MAX = 16;
 
@@ -74,10 +77,13 @@ export const SOLDIER_LEVEL_STATS = {
 // arbres élémentaires, butin de coffre, don du « Magicien ».
 export const AFFINITY_IDS = ['fire', 'ice', 'lightning'];
 
-// Le BOUCLIER est une affinité à part : il ne s'achète pas et ne se trouve pas,
-// il est conféré au soldat qui équipe le bonus « Paladin » (voir
-// `reduceBuyBonus`). D'où son absence d'`AFFINITY_IDS` — sans quoi il finirait
-// en boutique et dans les tirages aléatoires.
+// Le BOUCLIER est une affinité à part : en plus d'être achetable en boutique
+// et trouvable en coffre, il est conféré au soldat qui équipe le bonus
+// « Paladin » (voir `reduceBuyBonus`). Il reste hors d'`AFFINITY_IDS` — la
+// liste des éléments qui s'annulent entre eux ou sortent des tirages
+// aléatoires (arbres) — car ses règles de combat et de fusion sont propres
+// (voir `mergeAffinity` / `canFight`) ; il est ajouté à part aux items de
+// boutique achetables (`AFFINITY_ITEMS` dans `data/items.js`).
 //
 // Là où les éléments s'annulent entre eux, le bouclier protège son porteur des
 // combats qui n'en valent pas la peine : il ne peut ni attaquer ni être attaqué
@@ -127,6 +133,20 @@ export function canMerge(from, to) {
     return (to.level || 1) === lvl && lvl < MERGE_MAX;
 }
 
+// Avancement des défis : chaque métrique conserve la valeur la PLUS AVANCÉE
+// des deux soldats, quel que soit le sens de la fusion (`fromId`/`toId` dans
+// `reduceMerge`) — un soldat qui a ouvert un coffre ne doit pas perdre ce
+// crédit parce qu'il a fusionné DANS un soldat qui ne l'a pas ouvert.
+function mergedProgress(from, to) {
+    const a = from?.progress ?? {};
+    const b = to?.progress ?? {};
+    const merged = {};
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+        merged[key] = Math.max(a[key] ?? 0, b[key] ?? 0);
+    }
+    return merged;
+}
+
 export function mergedSoldier(from, to) {
     const level = Math.min((to.level || 1) + 1, MERGE_MAX);
     // Les statistiques s'additionnent, puis sont ramenées au barème du niveau
@@ -140,6 +160,7 @@ export function mergedSoldier(from, to) {
         hp: Math.min((to.hp || 0) + (from.hp || 0), ceiling.hp, SOLDIER_HP_MAX),
         atk: Math.min((to.atk || 0) + (from.atk || 0), ceiling.atk, SOLDIER_ATK_MAX),
         affinity: mergeAffinity(from.affinity, to.affinity),
+        progress: mergedProgress(from, to),
     };
 }
 
@@ -180,8 +201,8 @@ export function combatResult(attacker, defender) {
 export const BUILDING_STATS = {
     base: {hp: 64, hpMax: 64},
     house: {hp: 2, hpMax: 2},
-    attackTower: {hp: 4, hpMax: 4, atk: 4, atkMax: 4},
-    defenseTower: {hp: 8, hpMax: 8, atk: 1, atkMax: 1},
+    attackTower: {hp: 2, hpMax: 2, atk: 10, atkMax: 10},
+    defenseTower: {hp: 10, hpMax: 10, atk: 2, atkMax: 2},
 };
 
 // Plafonds de PV / d'attaque d'une unité quelconque (soldat ou bâtiment),

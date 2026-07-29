@@ -36,7 +36,7 @@ const unlockedBonusCount = (soldier, settings, canBuy, world) => {
         .length;
 };
 
-const SoldierPanel = ({soldier, color, canBuy = false, gold = 0, onBuyBonus, onSetBehavior, selectionId, settings, bonusesEnabled = true, world, onClose}) => {
+const SoldierPanel = ({soldier, color, canBuy = false, gold = 0, onBuyBonus, onSetBehavior, selectionId, settings, bonusesEnabled = true, world, onClose, bonusOpen: bonusOpenProp, onToggleBonus}) => {
     const level = soldier.level || 1;
     // Pas de boutique de bonus pour une unité invoquée (squelette, arbre-druide),
     // ni quand les bonus sont désactivés en configuration : le portrait n'ouvre
@@ -50,9 +50,14 @@ const SoldierPanel = ({soldier, color, canBuy = false, gold = 0, onBuyBonus, onS
     const upgradable = noBonusShop ? 0 : unlockedBonusCount(soldier, settings, canBuy, world);
 
     // Boutique repliée par défaut, et refermée à chaque changement de soldat.
-    const [bonusOpen, setBonusOpen] = useState(false);
+    // L'ouverture peut être PILOTÉE de l'extérieur (barre d'actions) : dans ce
+    // cas l'état local n'est plus utilisé.
+    const [localOpen, setLocalOpen] = useState(false);
+    const controlled = typeof onToggleBonus === 'function';
+    const bonusOpen = controlled ? !!bonusOpenProp : localOpen;
+    const setBonusOpen = controlled ? onToggleBonus : setLocalOpen;
     useEffect(() => {
-        setBonusOpen(false);
+        setLocalOpen(false);
     }, [selectionId, noBonusShop]);
 
     return (
@@ -162,10 +167,10 @@ const SoldierPanel = ({soldier, color, canBuy = false, gold = 0, onBuyBonus, onS
                             </div>
                             <div className="soldier-spec">
                                 <span className="soldier-spec__label">Comportement</span>
-                                {/* Soldat du joueur actif pendant son tour : un seul
-                                    sélecteur (« Choisir » = aucun comportement) au lieu
-                                    d'une rangée de boutons, bien plus compact.
-                                    Sinon, simple libellé informatif. */}
+                                {/* Le choix se fait principalement dans la barre
+                                    d'actions posée au-dessus des contrôles du plateau
+                                    (`ActionBar`) ; ce sélecteur reste disponible ici en
+                                    secours. Sinon, simple libellé informatif. */}
                                 {onSetBehavior ? (
                                     <select
                                         className={`behavior-select ${soldier.behavior ? 'behavior-select--active' : ''}`}

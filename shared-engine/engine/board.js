@@ -10,6 +10,7 @@ import {hexId, getNeighbors} from '../data/hex.js';
 import {BLOCKED_TERRAIN} from '../data/terrain.js';
 import {resolveSettings} from './settings.js';
 import {makeRng, randomSeed} from './rng.js';
+import {makeBonusSoldier} from './factories.js';
 
 // Le modèle logique ne dépend que de l'identifiant de carte : on le mémoïse
 // une fois pour toutes (le reducer comme le rendu le réutilisent).
@@ -83,6 +84,29 @@ function resolvePlayers(map, setup) {
     return playersForMap(map);
 }
 
+// Renfort de départ des bots, PAR DIFFICULTÉ : le principal levier qui les
+// distingue est un bonus déjà équipé au premier tour, pas une IA différente
+// (le socle de décision — `engine/bot/` — reste identique à tous les
+// paliers). 'easy' ne reçoit rien (le plancher reste la seule recherche) ;
+// 'normal' démarre avec un Guerrier (soldat lvl 2, 2/2, prime au combat) ;
+// 'hard' démarre avec un Roi (soldat lvl 5, 1/2 — fragile, mais double le
+// rendement de son territoire et de ses maisons dès le tour 1).
+const STARTING_BONUS = {normal: 'warrior', hard: 'king'};
+
+// Case de départ du renfort d'un bot : la première case libre (praticable, hors
+// base) du voisinage de son spawn — donc déjà sur SON territoire (voir
+// `buildInitialOwnership`, qui attribue spawn + voisins). `null` si le spawn
+// est entièrement bloqué (carte exotique).
+function startingBonusCell(mapId, spawn) {
+    const {cellMap, baseIds} = getLogicalBoard(mapId);
+    for (const n of getNeighbors(spawn.q, spawn.r)) {
+        const id = hexId(n.q, n.r);
+        const cell = cellMap.get(id);
+        if (cell && !cell.blocked && !baseIds.has(id)) return id;
+    }
+    return null;
+}
+
 // État de jeu initial pour une carte. C'est la *seule* source de vérité de la
 // partie : tour, joueur actif, possession, items posés, soldats ayant joué, or.
 // `setup` (optionnel) porte la configuration de la page hors-ligne. `seed`
@@ -101,6 +125,22 @@ export function createInitialState(mapId = DEFAULT_MAP_ID, setup = null, seed = 
     const rng = makeRng(seed);
     // Premier joueur : le joueur 1, ou un joueur tiré au sort si demandé.
     const firstIdx = settings.randomFirstPlayer ? rng.int(players.length) : 0;
+
+    // Renfort de départ des bots (voir STARTING_BONUS) : posé après le calcul du
+    // territoire de départ, sur une case déjà possédée par le bot concerné.
+    const placements = new Map();
+    let uidSeq = 0;
+    players.forEach((player, idx) => {
+        const bonusId = player.kind === 'bot' ? STARTING_BONUS[player.botDifficulty] : null;
+        if (!bonusId) return;
+        const spawn = map.spawns[player.spawnIndex ?? idx];
+        const cellId = spawn && startingBonusCell(mapId, spawn);
+        if (!cellId) return;
+        uidSeq += 1;
+        const soldier = makeBonusSoldier(player.id, `s${uidSeq}`, bonusId, settings);
+        if (soldier) placements.set(cellId, soldier);
+    });
+
     return {
         mapId,
         players,
@@ -115,7 +155,7 @@ export function createInitialState(mapId = DEFAULT_MAP_ID, setup = null, seed = 
         turn: 1,
         activePlayerId: players[firstIdx].id,
         ownership: buildInitialOwnership(mapId, players),
-        placements: new Map(),
+        placements,
         // Points de vie courants des bases attaquées (id de case -> PV restants).
         // Absente = base intacte (PV = BUILDING_STATS.base.hp). Une base tombée à
         // 0 rejoint `destroyedBases` : elle disparaît et sa case redevient normale.
@@ -123,10 +163,10 @@ export function createInitialState(mapId = DEFAULT_MAP_ID, setup = null, seed = 
         destroyedBases: new Set(),
         movedSoldiers: new Set(),
         gold: Object.fromEntries(players.map((p) => [p.id, settings.startingGold])),
-        uidSeq: 0, // compteur d'identifiants de soldats (déterministe, sérialisable)
+        uidSeq, // compteur d'identifiants de soldats (déterministe, sérialisable)
         // Journal d'évènements de jeu (achats, combats, morts, effets de bonus…) :
         // alimenté PAR LE REDUCER au fil des actions, il voyage dans l'état (donc
-        // sur le fil en online, bots compris) et sert à afficher des notifications
+        // sur le fil en online) et sert à afficher des notifications
         // « toast » côté front. `eventSeq` numérote les évènements de façon
         // monotone : le front n'affiche que ceux dont la `seq` dépasse la dernière
         // vue. Le journal est plafonné (voir `emit` dans reducer.js).

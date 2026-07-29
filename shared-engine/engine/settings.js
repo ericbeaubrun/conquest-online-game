@@ -12,9 +12,11 @@ import {
     SOLDIER_UPKEEP,
     TOWER_UPKEEP,
     SKELETON_UPKEEP,
+    WARLOCK_SKELETON_UPKEEP,
     SOLDIER_HP_DEFAULT,
     SOLDIER_ATK_DEFAULT,
     BASE_INCOME,
+    STARTING_GOLD,
     HOUSE_INCOME,
     TREE_REWARD,
 } from './rules.js';
@@ -23,7 +25,7 @@ import {BONUS_OFFERS} from '../data/soldier.js';
 // --- Seuils par défaut des conditions de victoire (repli si non fournis) ---
 export const DOMINATION_PERCENT = 60; // % du territoire jouable à contrôler
 // Objectif de la « course à l'or ». Doit rester hors de portée d'une simple
-// accumulation passive : à 15 or/tour de base, 200 tombaient en dix tours.
+// accumulation passive : à 10 or/tour de base, 200 tombaient en vingt tours.
 export const ECONOMY_GOAL = 2000; // or à atteindre en mode « course à l'or »
 
 // Cartes { id -> valeur } dérivées des barèmes de base, éditables par partie.
@@ -40,9 +42,9 @@ export const DEFAULT_SETTINGS = {
     // barèmes de rules.js plutôt que recopiés : c'est ce qui évite qu'une valeur
     // change d'un côté sans l'autre (voir la section « divergences » de
     // `balance/table.js`).
-    // Or de départ : ≈ 4 soldats, OU une maison et un soldat. L'ouverture est un
-    // vrai choix entre armée et économie.
-    startingGold: 120,
+    // Or de départ : 3 soldats, OU une maison et demie. L'ouverture est un vrai
+    // choix entre armée et économie.
+    startingGold: STARTING_GOLD,
     baseIncome: BASE_INCOME,
     houseIncome: HOUSE_INCOME,
     itemCost: {...ITEM_COST}, // prix de la boutique par item
@@ -55,6 +57,7 @@ export const DEFAULT_SETTINGS = {
         soldier5: SOLDIER_UPKEEP[5],
         tower: TOWER_UPKEEP,
         skeleton: SKELETON_UPKEEP,
+        skeleton2: WARLOCK_SKELETON_UPKEEP,
     },
     // Monde
     treesEnabled: true,

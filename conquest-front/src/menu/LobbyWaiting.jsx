@@ -18,28 +18,37 @@ const difficultyLabel = (id) => BOT_DIFFICULTIES.find((d) => d.id === id)?.label
 // Réglages complets : défauts du moteur garnis des valeurs venues du serveur.
 const fullSettings = (raw) => ({ ...defaultSettings(), ...(raw || {}) });
 
-const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, onSetSeatKind, onSetBotColor, onSetBotDifficulty, onStart, onQuit }) => {
+const LobbyWaiting = ({
+    lobby,
+    memberId,
+    onConfigure,
+    onReorder,
+    onSeatKind,
+    onSetBotDifficulty,
+    onSetIdentity,
+    onStart,
+    onQuit,
+}) => {
     const seats = lobby?.seats || [];
     const isHost = lobby?.hostMemberId != null && lobby.hostMemberId === memberId;
     const mySeat = seats.find((s) => s.assignedMemberId === memberId);
 
-    // Une place est « pourvue » si un humain l'occupe OU si c'est un bot.
-    const isFilled = (s) => s.taken || s.kind === "bot";
+    const isFilled = (s) => s.taken;
     const filledCount = seats.filter(isFilled).length;
-    // Démarrage possible dès 2 participants (humains et/ou bots) — le lobby n'a
-    // pas besoin d'être plein, les places libres restent des spawns neutres.
+    // Démarrage possible dès 2 participants — le lobby n'a pas besoin d'être
+    // plein, les places libres restent des spawns neutres.
     const canStart = filledCount >= 2;
 
     // Couleurs des spawns pour l'aperçu : couleur du membre/défaut, atténuée si
-    // la place est libre (ni humain, ni bot).
+    // la place est libre.
     const spawnInfo = useMemo(
         () => seats.map((s) => ({ color: s.color, filled: isFilled(s) })),
         [seats]
     );
 
-    // Couleurs déjà utilisées (joueurs ET bots) : interdites pour toute autre
-    // sélection. Le ColorPicker exclut lui-même la couleur courante (`!== value`),
-    // donc on peut passer l'ensemble complet à chaque sélecteur.
+    // Couleurs déjà utilisées : interdites pour toute autre sélection. Le
+    // ColorPicker exclut lui-même la couleur courante (`!== value`), donc on
+    // peut passer l'ensemble complet à chaque sélecteur.
     const usedColors = useMemo(
         () => new Set(seats.filter(isFilled).map((s) => s.color)),
         [seats]
@@ -141,7 +150,6 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                         {seats.map((s, i) => {
                             const you = s.assignedMemberId === memberId;
                             const isBot = s.kind === "bot";
-                            const isOpen = !s.taken && !isBot; // place humaine libre
                             const filled = s.taken || isBot;
                             // L'hôte peut réordonner toute place POURVUE (joueur ou bot).
                             const canReorder = isHost && filled;
@@ -156,11 +164,7 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                                         <ColorPicker
                                             value={s.color}
                                             used={usedColors}
-                                            onChange={
-                                                you
-                                                    ? changeColor
-                                                    : (color) => onSetBotColor?.(s.playerId, color)
-                                            }
+                                            onChange={changeColor}
                                         />
                                     ) : (
                                         <span
@@ -169,10 +173,10 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                                         />
                                     )}
 
-                                    {/* Colonne du nom : champ éditable pour SON siège ;
-                                        pour l'hôte sur une place NON occupée, la bascule
-                                        Ouvert/Bot prend la place (plus de libellé « libre »)
-                                        ; sinon le nom / « Bot » / « Libre ». */}
+                                    {/* Colonne du nom : champ éditable pour SON siège ; pour
+                                        l'hôte sur une place NON occupée, la bascule Joueur/Bot
+                                        (et la difficulté) prend la place ; sinon le nom /
+                                        « Bot (difficulté) » / « Libre ». */}
                                     {you ? (
                                         <input
                                             className="seat__input"
@@ -182,7 +186,7 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                                             placeholder="Ton nom"
                                             onChange={(e) => changeName(e.target.value)}
                                         />
-                                    ) : isHost && !s.taken ? (
+                                    ) : isHost && !s.assignedMemberId ? (
                                         <div className="seat__slotctrl">
                                             <Segmented
                                                 size="sm"
@@ -191,9 +195,8 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                                                     { value: "bot", label: "Bot" },
                                                 ]}
                                                 value={s.kind}
-                                                onChange={(kind) => onSetSeatKind?.(s.playerId, kind)}
+                                                onChange={(kind) => onSeatKind?.(s.playerId, kind)}
                                             />
-                                            {/* Difficulté du bot, juste à droite de la bascule. */}
                                             {isBot && (
                                                 <Segmented
                                                     size="sm"
@@ -201,9 +204,9 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                                                         value: d.id,
                                                         label: d.label,
                                                     }))}
-                                                    value={s.botDifficulty}
-                                                    onChange={(diff) =>
-                                                        onSetBotDifficulty?.(s.playerId, diff)
+                                                    value={s.botDifficulty || "normal"}
+                                                    onChange={(botDifficulty) =>
+                                                        onSetBotDifficulty?.(s.playerId, botDifficulty)
                                                     }
                                                 />
                                             )}
@@ -227,9 +230,9 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
 
                                     <span className="seat__ctrls">
                                         {/* Statut à droite : « occupé » (vert) pour une place
-                                            pourvue (joueur ayant rejoint OU bot), sinon le libellé
-                                            d'attente pour une place Joueur restée libre. */}
-                                        {(s.taken || isBot) ? (
+                                            pourvue (joueur ayant rejoint OU bot), sinon le
+                                            libellé d'attente pour une place restée libre. */}
+                                        {filled ? (
                                             <span className="seat__status seat__status--on">
                                                 occupé
                                             </span>
@@ -273,9 +276,8 @@ const LobbyWaiting = ({ lobby, memberId, onConfigure, onReorder, onSetIdentity, 
                     )}
                     {isHost && !canStart && (
                         <p className="lobby-hint">
-                            Il faut au moins 2 participants (joueurs et/ou bots) pour démarrer.
-                            Ajoute des bots sur les places libres ou attends des joueurs — les
-                            places restées libres seront des positions neutres.
+                            Il faut au moins 2 participants pour démarrer. Attends d’autres
+                            joueurs — les places restées libres seront des positions neutres.
                         </p>
                     )}
                 </section>

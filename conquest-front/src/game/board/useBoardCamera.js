@@ -22,7 +22,7 @@ import {CLICK_THRESHOLD, MIN_VIEW_RATIO} from './constants.js';
 // puis on repasse en rendu natif une fois le joueur immobile.
 const WHEEL_COMMIT_DELAY = 180;
 
-export function useBoardCamera({base, onTap, onRightClick}) {
+export function useBoardCamera({base, onTap, onRightClick, enabled = true}) {
     const svgRef = useRef(null);
     // `<g>` racine portant tout le contenu du plateau : c'est lui qu'on
     // translate/scale pendant les gestes.
@@ -133,6 +133,7 @@ export function useBoardCamera({base, onTap, onRightClick}) {
     // --- Molette : zoom vers le curseur ---
     const wheelCommit = useRef(null);
     useEffect(() => {
+        if (!enabled) return undefined;
         const svg = svgRef.current;
         const onWheel = (e) => {
             e.preventDefault();
@@ -150,7 +151,7 @@ export function useBoardCamera({base, onTap, onRightClick}) {
             svg.removeEventListener('wheel', onWheel);
             clearTimeout(wheelCommit.current);
         };
-    }, [clientToSvg, zoomFrom, applyLive, commit, setComposited]);
+    }, [enabled, clientToSvg, zoomFrom, applyLive, commit, setComposited]);
 
     // --- Pointeurs : glisser (pan) + pincer (pinch) + tap (jouer une case) ---
     const pointers = useRef(new Map()); // pointerId -> {x, y}
@@ -159,7 +160,20 @@ export function useBoardCamera({base, onTap, onRightClick}) {
     // Un geste est en cours : l'appelant s'en sert pour taire les aperçus au survol.
     const isGesturing = useCallback(() => pointers.current.size > 0, []);
 
-    const handlers = useMemo(() => ({
+    const handlers = useMemo(() => {
+        // Mode embarqué (mini-démo de l'accueil) : aucune capture de molette,
+        // aucun pan/zoom. Un simple clic reste un tap de plateau et le défilement
+        // tactile vertical continue d'appartenir à la page.
+        if (!enabled) {
+            return {
+                onClick: (e) => onTap?.(e.clientX, e.clientY),
+                onContextMenu: (e) => {
+                    e.preventDefault();
+                    onRightClick?.();
+                },
+            };
+        }
+        return {
         onPointerDown: (e) => {
             if (e.button === 2) {
                 onRightClick?.();
@@ -242,7 +256,8 @@ export function useBoardCamera({base, onTap, onRightClick}) {
                 moved.current = true; // reste d'un pincement : pas un tap
             }
         },
-    }), [clampView, clientToSvg, zoomFrom, onTap, onRightClick, applyLive, commit, setComposited]);
+        };
+    }, [enabled, clampView, clientToSvg, zoomFrom, onTap, onRightClick, applyLive, commit, setComposited]);
 
     // --- Boutons de zoom (autour du centre de la vue) et recentrage ---
     const zoomBy = useCallback(

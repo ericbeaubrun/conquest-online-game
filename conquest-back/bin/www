@@ -9,7 +9,7 @@ import createDebug from 'debug';
 import { Server as SocketIOServer } from 'socket.io';
 import app from '../app.js';
 import { attachGameServer } from '../online/gameSocket.js';
-import { connectDb, MONGODB_URI } from '../online/db.js';
+import { connectDb, MONGODB_URI_SAFE, maskCredentials } from '../online/db.js';
 
 const debug = createDebug('conquest-game-server:server');
 
@@ -38,10 +38,12 @@ attachGameServer(io);
 try {
     await connectDb();
 } catch (err) {
-    console.error(`\n❌ Impossible de se connecter à MongoDB (${MONGODB_URI}).`);
+    console.error(`\n❌ Impossible de se connecter à MongoDB (${MONGODB_URI_SAFE}).`);
     console.error('   Démarre un serveur MongoDB puis relance, par ex. :');
     console.error('     docker run -d -p 27017:27017 --name conquest-mongo mongo:7');
-    console.error('   ou définis MONGODB_URI vers ton instance.\n   Détail : ' + (err.message || err));
+    // Le détail vient du driver, qui recrache volontiers l'URI COMPLÈTE reçue :
+    // on l'expurge comme la nôtre avant de l'écrire dans les logs.
+    console.error('   ou définis MONGODB_URI vers ton instance.\n   Détail : ' + maskCredentials(err.message || err));
     process.exit(1);
 }
 

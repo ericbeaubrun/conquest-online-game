@@ -5,6 +5,7 @@
 
 import {SOLDIER_HP_DEFAULT, SOLDIER_ATK_DEFAULT} from './rules.js';
 import {unitKindById} from '../data/units.js';
+import {BONUS_OFFERS, purchasedSoldierStats} from '../data/soldier.js';
 
 // Fabrique un soldat neuf avec ses caractéristiques par défaut. Centralisé ici
 // pour que toute création de soldat parte du même modèle (stats + specs).
@@ -26,6 +27,35 @@ export function makeSoldier(playerId, uid, settings) {
     };
 }
 
+// Fabrique un soldat qui NAÎT déjà équipé d'un bonus (renfort de départ des
+// bots de haute difficulté — voir `STARTING_BONUS` dans `board.js`). Reprend
+// exactement la règle d'équipement en boutique (`reduceBuyBonus` dans
+// reducer.js) : le soldat part directement au niveau requis par le bonus, et
+// ses PV/attaque sont ceux du bonus — ils REMPLACENT le barème de niveau,
+// comme à l'achat. `null` si le bonus est inconnu.
+//
+// Ne gère PAS les bonus qui accordent une affinité (Paladin, Conquérant :
+// bouclier) — aucun des paliers de difficulté actuels ne s'en sert ; à étendre
+// si un futur palier en a besoin (voir `reduceBuyBonus` pour la règle exacte).
+export function makeBonusSoldier(playerId, uid, bonusId, settings) {
+    const bonus = BONUS_OFFERS.find((b) => b.id === bonusId);
+    if (!bonus) return null;
+    const level = bonus.requiredLevel;
+    const base = purchasedSoldierStats(level, settings);
+    return {
+        type: 'soldier',
+        playerId,
+        uid,
+        level,
+        hp: bonus.stats ? bonus.stats.hp : base.hp,
+        atk: bonus.stats ? bonus.stats.atk : base.atk,
+        affinity: null,
+        bonus: bonusId,
+        behavior: null,
+        progress: {},
+    };
+}
+
 // Fabrique une unité INVOQUÉE d'après son espèce au catalogue (`data/units.js`) :
 // squelette (« Mort-vivant », « Démoniste »), arbre-druide (« Druide »), dragon
 // (« Sorcier »). Toutes sont des soldats alliés à part entière — elles se
@@ -42,6 +72,7 @@ export function makeUnit(kindId, playerId, uid, affinity = null) {
     return {
         type: 'soldier',
         unit: kind.unit ?? kind.id,
+        kindId: kind.id, // entrée exacte du catalogue (les deux squelettes se ressemblent)
         playerId,
         uid,
         level: kind.level ?? 1,
@@ -64,6 +95,7 @@ export function makeCursed(victim, kind) {
     return {
         ...victim,
         unit: kind.unit ?? kind.id,
+        kindId: kind.id,
         level: kind.level ?? 1,
         hp: kind.hp,
         atk: kind.atk,

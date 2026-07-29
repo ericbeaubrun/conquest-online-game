@@ -13,7 +13,9 @@
     "start": "npm start -w conquest-back",
     "lint": "npm run lint -w conquest-front",
     "test": "node --test \"shared-engine/test/*.test.js\"",
-    "balance": "node shared-engine/balance/report.js"
+    "balance": "node shared-engine/balance/report.js",
+    "bonus": "node shared-engine/balance/bonuses.js",
+    "botstats": "node shared-engine/balance/botReport.js"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "4.28.0"
