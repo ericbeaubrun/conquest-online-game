@@ -1,7 +1,6 @@
-/* eslint-disable react/prop-types */
-
 import {useState} from 'react';
 import HexBoard from '../game/HexBoard.jsx';
+import {getLogicalBoard} from '@conquest/shared-engine/engine/board.js';
 import {gameReducer} from '@conquest/shared-engine/engine/reducer.js';
 import {
     ATTACK_SOLDIER,
@@ -17,16 +16,18 @@ import {
 } from '@conquest/shared-engine/demo/fusionScenario.js';
 import './demo.scss';
 
-const CONQUEST_GOAL = 5;
+const CONQUEST_GOAL = 3;
 
 const OBJECTIVES = [
-    {id: 'conquer', label: 'Conquérir 5 cases', detail: 'Étendre votre territoire'},
+    {id: 'conquer', label: 'Conquérir 3 cases', detail: 'Étendre votre territoire'},
     {id: 'merge', label: 'Fusionner 2 soldats', detail: 'Créer une unité supérieure'},
     {id: 'chest', label: 'Ouvrir un coffre', detail: 'Révéler un butin aléatoire'},
     {id: 'tree', label: 'Détruire un arbre', detail: 'Récolter son or'},
     {id: 'attack', label: 'Attaquer un ennemi', detail: 'Engager un combat'},
     {id: 'kill', label: 'Éliminer sans mourir', detail: 'Survivre à votre victoire'},
     {id: 'base', label: 'Détruire la base', detail: 'Faire tomber la forteresse orange'},
+    {id: 'allCells', label: 'Conquérir toutes les cases', detail: 'Prendre le contrôle de toute la carte'},
+    {id: 'allEnemies', label: 'Tuer tous les ennemis', detail: 'Éliminer toutes les forces adverses'},
 ];
 
 const createProgress = () => ({
@@ -39,57 +40,42 @@ const createProgress = () => ({
     baseDestroyed: false,
 });
 
-const objectiveState = (progress) => ({
-    conquer: progress.conqueredIds.length >= CONQUEST_GOAL,
-    merge: progress.merged,
-    chest: progress.chestOpened,
-    tree: progress.treeDestroyed,
-    attack: progress.enemyAttacked,
-    kill: progress.enemyKilledAlive,
-    base: progress.baseDestroyed,
-});
+const objectiveState = (progress, game) => {
+    const board = getLogicalBoard(game.mapId);
+    const allCellsConquered = board.cells.every(
+        (cell) => game.ownership.get(cell.id) === 'p1',
+    );
+    const allEnemiesKilled = [...game.placements.values()].every(
+        (placed) => placed.playerId !== 'p2',
+    );
 
-const completedCount = (progress) =>
-    Object.values(objectiveState(progress)).filter(Boolean).length;
+    return {
+        conquer: progress.conqueredIds.length >= CONQUEST_GOAL,
+        merge: progress.merged,
+        chest: progress.chestOpened,
+        tree: progress.treeDestroyed,
+        attack: progress.enemyAttacked,
+        kill: progress.enemyKilledAlive,
+        base: progress.baseDestroyed,
+        allCells: allCellsConquered,
+        allEnemies: allEnemiesKilled,
+    };
+};
+
+const completedCount = (progress, game) =>
+    Object.values(objectiveState(progress, game)).filter(Boolean).length;
 
 const soldierByUid = (game, uid) =>
     [...game.placements.values()].find(
         (placed) => placed.type === 'soldier' && placed.uid === uid,
     );
 
-const actionMessage = (action, progress, conqueredThisAction) => {
-    switch (action.type) {
-        case MOVE_SOLDIER:
-            return conqueredThisAction
-                ? `Territoire étendu : ${Math.min(progress.conqueredIds.length, CONQUEST_GOAL)}/${CONQUEST_GOAL} cases conquises.`
-                : 'Unité repositionnée sur votre territoire.';
-        case MERGE_SOLDIER:
-            return 'Fusion réussie : votre nouvelle unité cumule la puissance des deux soldats.';
-        case OPEN_CHEST:
-            return 'Coffre ouvert ! Son butin est maintenant visible sur le plateau.';
-        case CHOP_TREE:
-            return 'Arbre détruit : la case est conquise et sa récompense ajoutée à votre trésor.';
-        case ATTACK_SOLDIER:
-            return progress.baseDestroyed
-                ? 'La base ennemie s’effondre. La forteresse orange est tombée !'
-                : progress.enemyKilledAlive
-                    ? 'Victoire : votre soldat a éliminé sa cible et survécu.'
-                    : 'Combat engagé. Les deux unités ont appliqué leurs dégâts.';
-        default:
-            return 'Action réussie.';
-    }
-};
-
-const FusionDemo = ({onPlay}) => {
+const FusionDemo = () => {
     const [game, setGame] = useState(createFusionDemoState);
     const [progress, setProgress] = useState(createProgress);
     const [selection, setSelection] = useState(null);
-    const [hint, setHint] = useState(
-        'Explorez librement : sélectionnez une unité bleue pour afficher toutes ses actions possibles.',
-    );
-
-    const done = objectiveState(progress);
-    const completed = completedCount(progress);
+    const done = objectiveState(progress, game);
+    const completed = completedCount(progress, game);
     const allCompleted = completed === OBJECTIVES.length;
 
     const handleDispatch = (action) => {
@@ -99,9 +85,6 @@ const FusionDemo = ({onPlay}) => {
         const next = gameReducer(game, action);
 
         if (next === game) {
-            setHint(
-                'Action impossible : cette unité a peut-être déjà joué ce tour, ou la cible est hors de portée.',
-            );
             return;
         }
 
@@ -142,26 +125,11 @@ const FusionDemo = ({onPlay}) => {
         }
 
         setProgress(updated);
-        setHint(actionMessage(action, updated, conqueredThisAction));
         setGame(next);
     };
 
     const handleSelect = (nextSelection) => {
         setSelection(nextSelection);
-        if (!nextSelection) return;
-
-        const placed = game.placements.get(nextSelection.id);
-        if (placed?.type === 'soldier' && placed.playerId === 'p1') {
-            setHint(
-                'Unité sélectionnée : les cases éclairées indiquent déplacements, conquêtes et actions possibles.',
-            );
-        } else if (placed?.type === 'tree') {
-            setHint('Pour abattre cet arbre, sélectionnez d’abord un soldat bleu à portée.');
-        } else if (placed?.type === 'chest' || placed?.type === 'loot') {
-            setHint('Sélectionnez un soldat bleu, puis le coffre ou son butin.');
-        } else if (placed?.playerId === 'p2') {
-            setHint('Cible ennemie repérée. Sélectionnez un soldat bleu capable de l’atteindre.');
-        }
     };
 
     const nextRound = () => {
@@ -173,20 +141,12 @@ const FusionDemo = ({onPlay}) => {
         }
         setGame(next);
         setSelection(null);
-        setHint(
-            next.status === 'playing'
-                ? `Tour ${next.turn} : toutes vos unités peuvent agir de nouveau.`
-                : 'La bataille est terminée. Recommencez pour explorer d’autres possibilités.',
-        );
     };
 
     const resetChallenge = () => {
         setGame(createFusionDemoState());
         setProgress(createProgress());
         setSelection(null);
-        setHint(
-            'Terrain réinitialisé. Les sept objectifs peuvent être tentés dans l’ordre de votre choix.',
-        );
     };
 
     return (
@@ -198,19 +158,10 @@ const FusionDemo = ({onPlay}) => {
                         <span>TERRAIN D’ENTRAÎNEMENT INTERACTIF</span>
                         <h2 id="demo-title">Explorez. Testez. Conquérez.</h2>
                     </div>
-                    <p>
-                        Sept objectifs, aucun ordre imposé. Expérimentez les
-                        mécaniques du vrai jeu et recommencez quand vous le souhaitez.
-                    </p>
                 </header>
 
                 <div className="demo-player demo-player--sandbox">
                     <div className="demo-player__story">
-                        <div className="demo-player__scenario">
-                            <span>SCÉNARIO LIBRE</span>
-                            <strong>Le siège de la Brèche</strong>
-                        </div>
-
                         <div className="demo-player__copy" key={allCompleted ? 'done' : 'play'}>
                             <span>{allCompleted ? 'MAÎTRISE ACCOMPLIE' : 'VOS MISSIONS'}</span>
                             <h3>
@@ -218,11 +169,6 @@ const FusionDemo = ({onPlay}) => {
                                     ? 'Le front vous appartient'
                                     : `${completed} / ${OBJECTIVES.length} objectifs`}
                             </h3>
-                            <p>
-                                {allCompleted
-                                    ? 'Vous avez exploré toutes les mécaniques de ce terrain. Vous êtes prêt pour une vraie conquête.'
-                                    : 'Tentez ce qui vous attire. Un objectif manqué ne bloque jamais les autres.'}
-                            </p>
                         </div>
 
                         <ol className="demo-player__objectives" aria-label="Objectifs du terrain d’entraînement">
@@ -244,54 +190,36 @@ const FusionDemo = ({onPlay}) => {
                             })}
                         </ol>
 
-                        <div className="demo-player__stats" aria-live="polite">
-                            <div>
-                                <span>CONQUÊTES</span>
-                                <strong>{Math.min(progress.conqueredIds.length, CONQUEST_GOAL)} / {CONQUEST_GOAL}</strong>
-                            </div>
-                            <div>
-                                <span>OBJECTIFS</span>
-                                <strong>{completed} / {OBJECTIVES.length}</strong>
-                            </div>
-                            <div>
-                                <span>TOUR</span>
-                                <strong>{game.turn}</strong>
-                            </div>
-                        </div>
-
-                        <p className={`demo-player__hint${allCompleted ? ' demo-player__hint--success' : ''}`} aria-live="polite">
-                            <span aria-hidden="true">{allCompleted ? '★' : '?'}</span>
-                            {hint}
-                        </p>
-
-                        <div className="demo-player__challenge-actions">
-                            <button
-                                type="button"
-                                className="demo-player__next-turn"
-                                onClick={nextRound}
-                                disabled={game.status !== 'playing'}
-                            >
-                                <span aria-hidden="true">»</span>
-                                Nouveau tour
-                            </button>
-                            <button
-                                type="button"
-                                className="demo-player__reset"
-                                onClick={resetChallenge}
-                            >
-                                <span aria-hidden="true">↻</span>
-                                Recommencer
-                            </button>
-                        </div>
                     </div>
 
                     <div className={`demo-player__board${allCompleted ? ' demo-player__board--success' : ''}`}>
                         <div className="demo-player__boardtop">
-                            <div>
-                                <span className="demo-player__live" />
-                                À VOUS DE JOUER · TOUR {game.turn}
+                            <div className="demo-player__legend">
+                                <span><i className="demo-player__ally" /> Alliés</span>
+                                <span><i className="demo-player__enemy" /> Ennemi</span>
+                                <span><img src="/characters/chest.png" alt="" /> Coffre</span>
+                                <span><img src="/trees/forestTree.png" alt="" /> Ressource</span>
+                                <span><img src="/base.png" alt="" /> Base à détruire</span>
                             </div>
-                            <span>LA BRÈCHE · 49 CASES</span>
+                            <div className="demo-player__challenge-actions">
+                                <button
+                                    type="button"
+                                    className="demo-player__reset"
+                                    onClick={resetChallenge}
+                                >
+                                    <span aria-hidden="true">↻</span>
+                                    Recommencer
+                                </button>
+                                <button
+                                    type="button"
+                                    className="demo-player__next-turn"
+                                    onClick={nextRound}
+                                    disabled={game.status !== 'playing'}
+                                >
+                                    <span aria-hidden="true">»</span>
+                                    Tour suivant
+                                </button>
+                            </div>
                         </div>
                         <div className="demo-player__viewport">
                             <HexBoard
@@ -311,29 +239,13 @@ const FusionDemo = ({onPlay}) => {
                                 <div className="demo-player__success" role="status">
                                     <span aria-hidden="true">✓</span>
                                     <strong>FRONT MAÎTRISÉ</strong>
-                                    <small>7 objectifs accomplis</small>
+                                    <small>{OBJECTIVES.length} objectifs accomplis</small>
                                 </div>
                             )}
-                        </div>
-                        <div className="demo-player__legend">
-                            <span><i className="demo-player__ally" /> Vos forces</span>
-                            <span><i className="demo-player__enemy" /> La garde</span>
-                            <span><img src="/characters/chest.png" alt="" /> Coffre</span>
-                            <span><img src="/base.png" alt="" /> Base</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="demo-showcase__cta">
-                    <p>
-                        Une stratégie différente naît à chaque partie.
-                        <span> Écrivez maintenant la vôtre.</span>
-                    </p>
-                    <button type="button" className="menu-btn menu-btn--demo" onClick={onPlay}>
-                        LANCER UNE VRAIE PARTIE
-                        <span aria-hidden="true">→</span>
-                    </button>
-                </div>
             </div>
         </section>
     );

@@ -136,7 +136,7 @@ const soldierEntries = Object.entries(SOLDIER_LEVEL_STATS).map(([level, stats]) 
     eyebrow: 'Rang militaire',
     image: SOLDIER_SKINS[level],
     level: Number(level),
-    glow: GLOW_COLORS.white,
+    glow: '#9aa3b2',
     description:
         Number(level) < 5
             ? `Deux soldats de niveau ${level} peuvent fusionner pour atteindre le rang suivant.`
@@ -261,6 +261,48 @@ const potionEntries = [
         ],
         badge: 'POTION',
     },
+    // Potions à venir : présentes au codex uniquement, pas encore implémentées en jeu.
+    {
+        id: 'potion-dragon',
+        title: 'Essence de dragon',
+        eyebrow: 'Potion',
+        image: '/potion4.png',
+        glow: '#4f9fe0',
+        description: 'Transforme le soldat allié ciblé en dragon.',
+        details: [
+            {label: 'Cible', value: 'Soldat allié'},
+            {label: 'Effet', value: 'Transformation en dragon'},
+        ],
+        badge: 'À VENIR',
+    },
+    {
+        id: 'potion-soin',
+        title: 'Fiole de soin',
+        eyebrow: 'Potion',
+        image: '/potionSoin.png',
+        glow: '#d85f6a',
+        description: 'Rend 5 PV au soldat allié ciblé.',
+        details: [
+            {label: 'Cible', value: 'Soldat allié'},
+            {label: 'Effet', value: '+5 PV'},
+        ],
+        badge: 'À VENIR',
+    },
+    ...LOOT_KINDS
+        .filter((loot) => loot.id === 'potion' || loot.id === 'potion2')
+        .map((loot) => ({
+            id: `potion-treasure-${loot.id}`,
+            title: loot.label,
+            eyebrow: 'Potion de trésor',
+            image: loot.src,
+            glow: loot.id === 'potion' ? '#55c878' : '#a767d8',
+            description: lootEffect(loot),
+            details: [
+                {label: 'Apparition', value: lootAppearancePercentage(loot)},
+                {label: 'Ramassage', value: '1 déplacement'},
+            ],
+            badge: 'BUTIN',
+        })),
 ];
 
 const treeEntries = TREE_KINDS.map((tree) => ({
@@ -308,8 +350,12 @@ const treasureEntries = [
         title: loot.label,
         eyebrow: 'Butin de coffre',
         image: loot.src,
-        glow: AFFINITY_GLOWS[loot.affinity]
-            ?? (loot.gold ? '#edbd52' : loot.hp ? '#d85f6a' : loot.atk ? '#e27851' : '#8f78cc'),
+        glow: loot.id === 'potion'
+            ? '#55c878'
+            : loot.id === 'potion2'
+                ? '#a767d8'
+                : AFFINITY_GLOWS[loot.affinity]
+                    ?? (loot.gold ? '#edbd52' : loot.hp ? '#d85f6a' : loot.atk ? '#e27851' : '#8f78cc'),
         description: lootEffect(loot),
         economy: loot.gold ? {reward: loot.gold} : undefined,
         details: [

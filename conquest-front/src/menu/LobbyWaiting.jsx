@@ -9,7 +9,7 @@
 // Les réglages avancés sont EXACTEMENT ceux de l'offline (composant partagé).
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import MapCarousel from "./MapCarousel.jsx";
+import MapSelector from "./MapSelector.jsx";
 import { AdvancedSettings, ColorPicker, Segmented } from "./SetupControls.jsx";
 import { defaultSettings, BOT_DIFFICULTIES } from "./setupConfig.js";
 
@@ -27,7 +27,7 @@ const LobbyWaiting = ({
     onSetBotDifficulty,
     onSetIdentity,
     onStart,
-    onQuit,
+    onBack,
 }) => {
     const seats = lobby?.seats || [];
     const isHost = lobby?.hostMemberId != null && lobby.hostMemberId === memberId;
@@ -112,14 +112,18 @@ const LobbyWaiting = ({
     };
 
     return (
-        <div className="setup-screen">
+        <div className="setup-screen setup-screen--online">
             <header className="setup-topbar">
-                <button className="menu-btn menu-btn--ghost" onClick={onQuit}>
-                    ← Quitter
+                <button type="button" className="menu-btn menu-btn--ghost" onClick={onBack}>
+                    Retour
                 </button>
-                <h1 className="setup-topbar__title">Salle d’attente</h1>
+                <div className="setup-topbar__heading">
+                    <span className="setup-topbar__eyebrow">Salon multijoueur</span>
+                    <h1 className="setup-topbar__title">Salle d’attente</h1>
+                </div>
                 <span className="lobby-codechip" title="Code à partager">
-                    {lobby?.code}
+                    <small>CODE DE PARTIE</small>
+                    <strong>{lobby?.code}</strong>
                 </span>
             </header>
 
@@ -127,7 +131,7 @@ const LobbyWaiting = ({
                 {/* --- Section CARTE --- */}
                 <section className="setup-section">
                     <h2 className="setup-section__title">Carte</h2>
-                    <MapCarousel
+                    <MapSelector
                         mapId={lobby?.mapId}
                         onSelect={selectMap}
                         disabled={!isHost}
@@ -155,8 +159,6 @@ const LobbyWaiting = ({
                             const canReorder = isHost && filled;
                             return (
                                 <div className="player-row player-row--seat" key={s.playerId}>
-                                    <span className="player-row__num">{i + 1}</span>
-
                                     {/* Couleur : éditable pour MON siège, et pour un
                                         BOT si je suis l'hôte ; sinon simple pastille
                                         (atténuée quand la place est libre). */}
@@ -164,13 +166,16 @@ const LobbyWaiting = ({
                                         <ColorPicker
                                             value={s.color}
                                             used={usedColors}
+                                            label={i + 1}
                                             onChange={changeColor}
                                         />
                                     ) : (
                                         <span
                                             className={`seat__swatch ${filled ? "" : "seat__swatch--free"}`}
                                             style={filled ? { backgroundColor: s.color } : undefined}
-                                        />
+                                        >
+                                            {i + 1}
+                                        </span>
                                     )}
 
                                     {/* Colonne du nom : champ éditable pour SON siège ; pour
@@ -334,7 +339,7 @@ const LobbyWaiting = ({
                 </section>
 
                 {/* --- Section RÉGLAGES (partagée avec l'offline) --- */}
-                <section className="setup-section">
+                <section className="setup-section setup-section--advanced">
                     <button
                         type="button"
                         className={`setup-section__toggle ${advancedOpen ? "setup-section__toggle--open" : ""}`}
@@ -362,7 +367,9 @@ const LobbyWaiting = ({
             {/* Bandeau de lancement */}
             <footer className="setup-launchbar">
                 <span className="setup-launchbar__summary">
-                    Partage le code <strong>{lobby?.code}</strong> · {filledCount}/{seats.length} places pourvues
+                    <span>Partage le code</span>
+                    <strong className="lobby-shared-code">{lobby?.code}</strong>
+                    <span>· {filledCount}/{seats.length} places pourvues</span>
                 </span>
                 {isHost ? (
                     <button
@@ -370,7 +377,7 @@ const LobbyWaiting = ({
                         onClick={onStart}
                         disabled={!canStart}
                     >
-                        {canStart ? "Démarrer ▶" : "2 participants minimum…"}
+                        {canStart ? "LANCER" : "2 participants minimum…"}
                     </button>
                 ) : (
                     <span className="setup-launchbar__summary">

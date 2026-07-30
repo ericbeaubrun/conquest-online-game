@@ -34,5 +34,7 @@ export function deserializeState(raw) {
         destroyedBases: new Set(raw.destroyedBases || []),
         // Parties persistées avant l'ajout des statistiques : historique vide.
         statsHistory: raw.statsHistory || [],
+        // Parties persistées avant le suivi du Chevalier noir : aucun achat connu.
+        blackKnightBoughtBy: raw.blackKnightBoughtBy || {},
     };
 }

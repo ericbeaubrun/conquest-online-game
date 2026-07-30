@@ -84,6 +84,16 @@ export function useOnlineSession() {
             setError('seat-taken');
             setSeatOptions(opts || []);
         });
+        socket.on('lobby:left', () => {
+            setLobby(null);
+            setMemberId(null);
+            setSeatOptions(null);
+            setGameState(null);
+            serverStateRef.current = null;
+            turnStartRef.current = null;
+            setTurnDirty(false);
+            socket.emit('lobby:list');
+        });
         socket.on('lobby:update', ({ code, status, mapId, settings, hostMemberId, seats, autosave, savePassword }) => {
             setLobby((prev) =>
                 prev && prev.code === code
@@ -128,6 +138,19 @@ export function useOnlineSession() {
         socketRef.current?.emit('lobby:create', { mapId, settings, name, color });
     }, []);
     const refreshList = useCallback(() => socketRef.current?.emit('lobby:list'), []);
+    const leaveLobby = useCallback(() => {
+        setError(null);
+        // Le retour vers la liste doit être immédiat : le nettoyage du salon et
+        // sa persistance peuvent prendre un peu de temps côté serveur.
+        setLobby(null);
+        setMemberId(null);
+        setSeatOptions(null);
+        setGameState(null);
+        serverStateRef.current = null;
+        turnStartRef.current = null;
+        setTurnDirty(false);
+        socketRef.current?.emit('lobby:leave');
+    }, []);
     // Configuration de la partie en attente (hôte) : carte et/ou réglages.
     const configureLobby = useCallback((patch) => {
         setError(null);
@@ -231,5 +254,5 @@ export function useOnlineSession() {
         };
     }, [gameState, dispatch, localPlayerId, resetTurn, turnDirty]);
 
-    return { phase, error, lobbies, lobby, memberId, localPlayerId, gameState, session, seatOptions, chooseSeat, spectate, createLobby, refreshList, joinLobby, setIdentity, configureLobby, reorderSeat, setSeatKind, setBotDifficulty, startLobby };
+    return { phase, error, lobbies, lobby, memberId, localPlayerId, gameState, session, seatOptions, chooseSeat, spectate, createLobby, refreshList, leaveLobby, joinLobby, setIdentity, configureLobby, reorderSeat, setSeatKind, setBotDifficulty, startLobby };
 }

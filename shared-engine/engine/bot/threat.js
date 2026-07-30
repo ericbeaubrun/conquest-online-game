@@ -3,7 +3,8 @@
 // de l'offensive (`offense.js`).
 
 import {getLogicalBoard} from '../board.js';
-import {MERGE_MAX, canMerge, mergedSoldier, combatResult, canFight} from '../rules.js';
+import {MERGE_MAX, MAX_MOVE, canMerge, mergedSoldier, combatResult, canFight} from '../rules.js';
+import {hexDistance} from '../../data/hex.js';
 import {soldierCostForLevel} from '../../data/soldier.js';
 import {
     reachableFor,
@@ -161,4 +162,36 @@ export function inEnemyRange(state, cellId, ownerId) {
 export function isThreatened(state, D, X) {
     const w = worstIncomingAttack(state, D, X);
     return !!w && w.killsD && w.theirLoss < w.ourLoss;
+}
+
+// Une case est-elle DANGEREUSE pour une unité FRAGILE qu'on veut préserver
+// (roi, magicien, soutiens) ? Beaucoup plus prudent qu'`inEnemyRange` : on
+// considère non seulement les soldats ennemis existants, mais aussi le fait que
+// l'ennemi peut ACHETER un soldat et l'amener au contact (une unité précieuse
+// est souvent fragile et vaut cher — c'est exactement ce que fait la chasse aux
+// cibles de haute valeur). La case est dangereuse si un soldat ennemi peut
+// l'attaquer ce tour, OU si une case ennemie LIBRE d'où l'ennemi pourrait poser
+// puis amener un soldat (portée `MAX_MOVE + 1`, distance à vol d'oiseau,
+// pessimiste) existe et que cet ennemi a de quoi acheter un soldat.
+//
+// Vit ici, et non dans `precious.js` où elle est née : `bonuses/magician.js`
+// s'en sert AVANT l'équipement (un niveau 3 qui prend le bonus tombe à 1/4 PV —
+// la sûreté de sa case doit être jugée sur ce futur profil, pas sur celui du
+// gros soldat qu'il était), et `precious.js` importe déjà ce module.
+export function preciousCellUnsafe(state, cell, ownerId) {
+    if (inEnemyRange(state, cell, ownerId)) return true;
+    const board = getLogicalBoard(state.mapId);
+    const from = board.cellMap.get(cell);
+    if (!from) return true;
+    const cost = soldierCostForLevel(1, state.settings);
+    for (const c of board.cells) {
+        if (c.blocked) continue;
+        const owner = state.ownership.get(c.id);
+        if (!owner || owner === ownerId) continue; // pas une case ennemie
+        if (state.placements.has(c.id)) continue; // occupée : le soldat dessus est déjà couvert
+        if (board.baseIds.has(c.id) && !state.destroyedBases?.has(c.id)) continue; // base
+        if (hexDistance(from, c) > MAX_MOVE + 1) continue; // hors de portée d'un achat+déplacement
+        if ((state.gold?.[owner] || 0) >= cost) return true; // cet ennemi peut acheter et frapper
+    }
+    return false;
 }

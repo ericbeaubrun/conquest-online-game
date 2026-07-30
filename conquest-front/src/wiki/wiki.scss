@@ -1,32 +1,21 @@
 @use '../styles/tokens' as *;
 
-$wiki-gold: #f3c65d;
+$wiki-gold: #a55d40;
 $wiki-ink: #0c0e12;
 $wiki-panel: #151922;
 $wiki-line: #343b49;
 $wiki-muted: #929bab;
+$wiki-coin: #f2c45b;
 
 .wiki {
     position: relative;
     flex: 0 0 auto;
-    padding: clamp(72px, 7vw, 104px) clamp(18px, 3vw, 32px);
+    padding: clamp(112px, 12vw, 176px) clamp(18px, 3vw, 32px);
     overflow: hidden;
-    background:
-        radial-gradient(circle at 8% 22%, rgba(65, 121, 96, 0.16), transparent 28%),
-        radial-gradient(circle at 88% 72%, rgba(199, 143, 58, 0.12), transparent 30%),
-        var(--home-wiki-bg, #0f1218);
+    background: transparent;
 
     &::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        opacity: 0.22;
-        background-image:
-            linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-        background-size: 32px 32px;
-        mask-image: linear-gradient(to bottom, black, transparent 80%);
+        display: none;
     }
 
     &__heading,
@@ -39,12 +28,8 @@ $wiki-muted: #929bab;
     }
 
     &__heading {
-        display: grid;
         max-width: 1180px;
-        grid-template-columns: minmax(0, 1fr) minmax(280px, 400px);
-        align-items: end;
-        gap: 40px;
-        margin-bottom: 40px;
+        margin-bottom: clamp(58px, 6vw, 84px);
 
         h2 {
             margin: 6px 0 0;
@@ -56,25 +41,10 @@ $wiki-muted: #929bab;
             text-shadow: 3px 3px 0 #000;
         }
 
-        p {
-            margin: 0 0 2px;
-            color: $wiki-muted;
-            font-size: 20px;
-            line-height: 1.25;
-
-            strong {
-                display: block;
-                margin-bottom: 5px;
-                color: $wiki-gold;
-                font-size: 16px;
-                font-weight: 400;
-                letter-spacing: 0.16em;
-            }
-        }
     }
 
     &__kicker {
-        color: #6ab88c;
+        color: #ffd766;
         font-size: 15px;
         letter-spacing: 0.22em;
     }
@@ -85,7 +55,7 @@ $wiki-muted: #929bab;
         flex-wrap: wrap;
         justify-content: center;
         gap: 8px;
-        margin-bottom: 32px;
+        margin-bottom: clamp(48px, 5vw, 68px);
         padding: 4px 4px 11px;
         overflow-x: auto;
         scrollbar-width: none;
@@ -131,13 +101,14 @@ $wiki-muted: #929bab;
         }
 
         &--active {
-            color: #111;
-            background: $wiki-gold;
+            color: #0c0e12;
+            background: #ffd766;
             border-color: #000;
             box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.72);
 
             small {
-                color: $wiki-gold;
+                color: #ffd766;
+                background: #0c0e12;
             }
         }
     }
@@ -148,10 +119,6 @@ $wiki-muted: #929bab;
     // de la sélection, au lieu d'isoler une seule grande carte.
     --wiki-card-width: clamp(280px, 25vw, 315px);
     outline: none;
-
-    &:focus-visible {
-        box-shadow: 0 0 0 2px $wiki-gold;
-    }
 
     &__stage {
         position: relative;
@@ -167,11 +134,11 @@ $wiki-muted: #929bab;
         padding: 0;
         place-items: center;
         transform: translateY(-50%);
-        color: $wiki-gold;
+        color: #7f9fc2;
         background: #171b24;
         border: 3px solid #050609;
         box-shadow:
-            0 0 0 2px #343b48,
+            0 0 0 2px #526f90,
             4px 5px 0 rgba(0, 0, 0, 0.7);
         font-family: $pixel-font;
         font-size: 27px;
@@ -191,14 +158,14 @@ $wiki-muted: #929bab;
 
         &:hover:not(:disabled) {
             color: #fff;
-            background: #272d38;
+            background: #526f90;
             transform: translateY(calc(-50% - 2px));
         }
 
         &:active:not(:disabled) {
             transform: translate(2px, calc(-50% + 2px));
             box-shadow:
-                0 0 0 2px #343b48,
+                0 0 0 2px #526f90,
                 1px 2px 0 rgba(0, 0, 0, 0.7);
         }
 
@@ -239,25 +206,29 @@ $wiki-muted: #929bab;
         scroll-snap-align: center;
     }
 
-    &__progress {
-        width: min(360px, 72%);
-        height: 3px;
+    &__pagination {
+        display: flex;
+        justify-content: center;
+        gap: 9px;
         margin-inline: auto;
-        background: #202530;
-        overflow: hidden;
+    }
 
-        span {
-            display: block;
-            height: 100%;
-            background: linear-gradient(90deg, #5aab82, $wiki-gold);
-            transition: width 260ms ease;
+    &__dot {
+        width: 8px;
+        height: 8px;
+        background: #343b49;
+        border: 1px solid #090a0d;
+
+        &--active {
+            background: #ffd766;
+            border-color: #ffd766;
         }
     }
 }
 
 .wiki-card {
-    --wiki-accent: #436e5a;
-    --wiki-glow: #61b889;
+    --wiki-accent: #526f90;
+    --wiki-glow: #6f91b6;
     position: relative;
     display: flex;
     width: 100%;
@@ -376,7 +347,7 @@ $wiki-muted: #929bab;
     }
 
     &__eyebrow {
-        color: #66bd8f;
+        color: #7f9fc2;
         font-size: 14px;
         letter-spacing: 0.15em;
         text-transform: uppercase;
@@ -541,7 +512,7 @@ $wiki-muted: #929bab;
         }
 
         strong {
-            color: $wiki-gold;
+            color: $wiki-coin;
             font-size: 20px;
             font-weight: 400;
             line-height: 1;

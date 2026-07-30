@@ -120,7 +120,7 @@ export function harvestProximity(cell, objs) {
 // voir `approachCell` dans reducer.js). Sans ce calcul on croirait à tort qu'une
 // récolte lointaine ne déplace jamais le soldat — dangereux pour une unité qui
 // doit rester hors de portée (voir `preciousCellUnsafe`).
-function harvestApproachCell(board, reach, fromId, toId) {
+export function harvestApproachCell(board, reach, fromId, toId) {
     const target = board.cellMap.get(toId);
     if (!target) return fromId;
     let bestId = null;

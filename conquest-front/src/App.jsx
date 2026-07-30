@@ -67,7 +67,6 @@ function App() {
             onPlayOffline={() => setScreen('offline')}
             onPlayOnline={() => setScreen('online')}
             // Connexion / inscription : écran à venir.
-            onLogin={() => {}}
         />
     )
 }

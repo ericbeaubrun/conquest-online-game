@@ -1,20 +1,16 @@
 @use '../styles/tokens' as *;
 
 $demo-gold: #f2c45b;
-$demo-blue: #3f6f9f;
-$demo-orange: #b85c36;
+$demo-blue: #526f90;
+$demo-orange: #a55d40;
 $demo-muted: #929baa;
 
 .demo-showcase {
     position: relative;
     flex: 0 0 auto;
-    padding: clamp(72px, 7vw, 104px) clamp(18px, 3vw, 32px);
+    padding: clamp(112px, 12vw, 176px) clamp(18px, 3vw, 32px);
     overflow: hidden;
-    background:
-        linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-        var(--home-demo-bg, #0a0d12);
-    background-size: 32px 32px;
+    background: transparent;
 
     &__glow {
         position: absolute;
@@ -35,14 +31,10 @@ $demo-muted: #929baa;
     }
 
     &__heading {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(280px, 400px);
-        align-items: end;
-        gap: 40px;
-        margin-bottom: 40px;
+        margin-bottom: clamp(58px, 6vw, 84px);
 
         > div > span {
-            color: $demo-blue;
+            color: #ffd766;
             font-size: 15px;
             letter-spacing: 0.22em;
         }
@@ -57,33 +49,8 @@ $demo-muted: #929baa;
             text-shadow: 3px 3px 0 #000;
         }
 
-        p {
-            margin: 0 0 2px;
-            color: $demo-muted;
-            font-size: 20px;
-            line-height: 1.25;
-        }
     }
 
-    &__cta {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 28px;
-        margin-top: 32px;
-        padding-top: 28px;
-        border-top: 2px solid #242a34;
-
-        p {
-            margin: 0;
-            color: $demo-muted;
-            font-size: 22px;
-
-            span {
-                color: #eef0f0;
-            }
-        }
-    }
 }
 
 .demo-player {
@@ -100,13 +67,13 @@ $demo-muted: #929baa;
         transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 
     &--sandbox {
-        min-height: 720px;
+        min-height: 620px;
         grid-template-columns: minmax(350px, 0.9fr) minmax(520px, 1.45fr);
     }
 
     &--sandbox &__copy {
-        min-height: 145px;
-        padding-block: 26px 20px;
+        min-height: 0;
+        padding-block: 8px 20px;
     }
 
     &--sandbox &__objectives {
@@ -155,7 +122,7 @@ $demo-muted: #929baa;
         animation: demo-copy-in 320ms ease both;
 
         > span {
-            color: $demo-blue;
+            color: #ffd766;
             font-size: 14px;
             letter-spacing: 0.16em;
         }
@@ -292,40 +259,6 @@ $demo-muted: #929baa;
         }
     }
 
-    &__hint {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        min-height: 46px;
-        margin: auto 0 13px;
-        padding: 8px 10px;
-        color: #aeb6c1;
-        background: rgba(242, 196, 91, 0.06);
-        border-left: 3px solid $demo-gold;
-        font-size: 16px;
-        line-height: 1.05;
-
-        span {
-            display: grid;
-            width: 22px;
-            height: 22px;
-            flex: 0 0 auto;
-            place-items: center;
-            color: #111;
-            background: $demo-gold;
-        }
-
-        &--success {
-            color: #c6e9d2;
-            background: rgba(63, 111, 159, 0.09);
-            border-color: $demo-blue;
-
-            span {
-                background: $demo-blue;
-            }
-        }
-    }
-
     &__reset {
         align-self: flex-start;
         display: flex;
@@ -375,7 +308,7 @@ $demo-muted: #929baa;
         gap: 8px;
         padding: 8px 13px;
         color: #10140f;
-        background: $demo-blue;
+        background: #ffd766;
         border: 2px solid #030604;
         box-shadow: 3px 3px 0 #000;
         font-family: $pixel-font;
@@ -391,7 +324,7 @@ $demo-muted: #929baa;
         }
 
         &:hover:not(:disabled) {
-            background: #5c8dbd;
+            background: #ffe38a;
             box-shadow: 5px 6px 0 #000;
             transform: translateY(-2px);
         }
@@ -412,7 +345,7 @@ $demo-muted: #929baa;
         position: relative;
         display: grid;
         min-width: 0;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: auto 1fr;
         background: #0a0d12;
 
         &--merged .demo-player__viewport::after {
@@ -442,11 +375,9 @@ $demo-muted: #929baa;
     &__boardtop {
         border-bottom: 2px solid #030406;
 
-        > div {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            color: $demo-blue;
+        .demo-player__legend {
+            padding: 0;
+            border: 0;
         }
     }
 
@@ -533,7 +464,6 @@ $demo-muted: #929baa;
     &__legend {
         justify-content: flex-start;
         gap: 20px;
-        border-top: 2px solid #030406;
         letter-spacing: 0.04em;
 
         span {
@@ -561,43 +491,6 @@ $demo-muted: #929baa;
 
     &__enemy {
         background: $demo-orange;
-    }
-}
-
-.menu-btn--demo {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    color: #101214;
-    background: $demo-gold;
-    font-size: 21px;
-    transition:
-        background 180ms ease,
-        box-shadow 180ms ease,
-        transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-
-    &:hover {
-        background: #ffda79;
-        box-shadow: 7px 8px 0 #000;
-        transform: translateY(-3px);
-    }
-
-    &:active {
-        box-shadow: 1px 1px 0 #000;
-        transform: translate(3px, 3px);
-    }
-
-    span {
-        font-size: 25px;
-    }
-}
-
-@media (hover: hover) {
-    .demo-player:hover {
-        box-shadow:
-            0 0 0 3px #3a4352,
-            12px 14px 0 rgba(0, 0, 0, 0.48);
-        transform: translateY(-2px);
     }
 }
 
@@ -664,11 +557,6 @@ $demo-muted: #929baa;
 @media (max-width: 600px) {
     .demo-showcase {
         padding-inline: 18px;
-
-        &__cta {
-            align-items: stretch;
-            flex-direction: column;
-        }
     }
 
     .demo-player {
@@ -686,20 +574,21 @@ $demo-muted: #929baa;
             min-height: 390px;
         }
 
-        &__boardtop > span:last-child {
-            display: none;
-        }
-
         &__legend {
             gap: 12px;
             font-size: 12px;
         }
+
+        &__boardtop {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        &__challenge-actions {
+            align-self: flex-end;
+        }
     }
 
-    .menu-btn--demo {
-        justify-content: center;
-        width: 100%;
-    }
 }
 
 @media (prefers-reduced-motion: reduce) {

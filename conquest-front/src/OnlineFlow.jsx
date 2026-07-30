@@ -1,8 +1,8 @@
 // Flux du mode EN LIGNE. Possède la session online (UNE connexion socket, du
 // lobby jusqu'au jeu) et choisit l'écran à afficher selon la phase :
 //   connexion → navigation des parties → salle d'attente → partie.
-// Quitter (onExit) démonte ce composant : la socket se ferme et le siège est
-// libéré côté serveur.
+// Quitter le mode en ligne (onExit) démonte ce composant. Depuis la salle
+// d'attente, le bouton Retour libère seulement le siège et revient à la liste.
 
 import GameLayout from "./GameLayout.jsx";
 import LobbyBrowser from "./menu/LobbyBrowser.jsx";
@@ -58,7 +58,7 @@ const OnlineFlow = ({ onExit }) => {
                 onSetBotDifficulty={s.setBotDifficulty}
                 onSetIdentity={s.setIdentity}
                 onStart={s.startLobby}
-                onQuit={onExit}
+                onBack={s.leaveLobby}
             />
         );
 

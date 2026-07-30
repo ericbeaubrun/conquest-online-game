@@ -8,7 +8,6 @@ import {
     FUSION_DEMO_ENEMY_BASE_ID,
     FUSION_DEMO_EXPLORER_ID,
     FUSION_DEMO_RAIDER_ID,
-    FUSION_DEMO_SKELETON_ID,
     FUSION_DEMO_SOURCE_ID,
     FUSION_DEMO_TARGET_ID,
     FUSION_DEMO_TREE_ID,
@@ -16,7 +15,6 @@ import {
 } from '../demo/fusionScenario.js';
 import {gameReducer} from '../engine/reducer.js';
 import {
-    attackSoldier,
     chopTree,
     endTurn,
     mergeSoldier,
@@ -29,7 +27,7 @@ import {computeReachable} from '../engine/selectors.js';
 test('la mini-carte de démo reste hors du catalogue des parties', () => {
     assert.equal(MAPS.some((map) => map.id === FUSION_DEMO_MAP_ID), false);
     assert.equal(getMapById(FUSION_DEMO_MAP_ID).id, FUSION_DEMO_MAP_ID);
-    assert.equal(getMapById(FUSION_DEMO_MAP_ID).cells.length, 49);
+    assert.equal(getMapById(FUSION_DEMO_MAP_ID).cells.length, 24);
     assert.notEqual(getPlayableMapById(FUSION_DEMO_MAP_ID).id, FUSION_DEMO_MAP_ID);
 });
 
@@ -53,23 +51,46 @@ test('la démonstration applique une vraie fusion du reducer', () => {
     );
 });
 
-test('le mini-défi se termine par un vrai combat contre le squelette', () => {
+test('le scénario contient uniquement les forces demandées', () => {
     const initial = createFusionDemoState();
-    const victorious = gameReducer(
-        initial,
-        attackSoldier(FUSION_DEMO_RAIDER_ID, FUSION_DEMO_SKELETON_ID),
-    );
+    const units = [...initial.placements.values()]
+        .filter((placed) => placed.type === 'soldier');
+    const allied = units.filter((unit) => unit.playerId === 'p1');
+    const enemies = units.filter((unit) => unit.playerId === 'p2');
 
-    assert.notEqual(victorious, initial);
+    assert.equal(allied.filter((unit) => unit.level === 1).length, 4);
+    assert.equal(allied.filter((unit) => unit.level === 3).length, 1);
+    assert.equal(enemies.filter((unit) => unit.kindId === 'goblin').length, 2);
+    assert.equal(enemies.filter((unit) => unit.kindId === 'skeleton').length, 1);
+    assert.equal(enemies.filter((unit) => unit.bonus === 'warlock').length, 1);
+    assert.equal(enemies.filter((unit) => unit.kindId === 'skeleton2').length, 2);
     assert.equal(
-        victorious.placements.get(FUSION_DEMO_SKELETON_ID)?.playerId,
-        'p1',
+        [...initial.placements.values()]
+            .filter((placed) => placed.type === 'defenseTower').length,
+        1,
     );
-    assert.equal(victorious.placements.get(FUSION_DEMO_SKELETON_ID)?.hp, 7);
-    assert.equal(victorious.ownership.get(FUSION_DEMO_SKELETON_ID), 'p1');
+    assert.deepEqual(
+        enemies
+            .filter((unit) => unit.kindId === 'skeleton')
+            .map(({atk, hp}) => ({atk, hp})),
+        [{atk: 1, hp: 1}],
+    );
+    assert.deepEqual(
+        enemies
+            .filter((unit) => unit.kindId === 'skeleton2')
+            .map(({atk, hp}) => ({atk, hp})),
+        [{atk: 2, hp: 3}, {atk: 2, hp: 3}],
+    );
+    assert.equal(initial.baseHp[FUSION_DEMO_ENEMY_BASE_ID], 4);
+    const board = getLogicalBoard(initial.mapId);
+    assert.equal(
+        [...initial.placements.keys()].every((id) => board.cellMap.has(id)),
+        true,
+    );
+    assert.equal(initial.placements.has(FUSION_DEMO_ENEMY_BASE_ID), false);
 });
 
-test('coffre, arbre, conquête et base sont tous réellement jouables', () => {
+test('coffre, arbre et conquête sont immédiatement jouables', () => {
     const initial = createFusionDemoState();
     const chest = gameReducer(
         initial,
@@ -79,20 +100,14 @@ test('coffre, arbre, conquête et base sont tous réellement jouables', () => {
         initial,
         chopTree(FUSION_DEMO_EXPLORER_ID, FUSION_DEMO_TREE_ID),
     );
-    const conquest = gameReducer(initial, moveSoldier(FUSION_DEMO_TARGET_ID, '2,0'));
-    const base = gameReducer(
-        initial,
-        attackSoldier(FUSION_DEMO_RAIDER_ID, FUSION_DEMO_ENEMY_BASE_ID),
-    );
+    const conquest = gameReducer(initial, moveSoldier(FUSION_DEMO_RAIDER_ID, '1,0'));
 
     assert.notEqual(chest, initial);
     assert.notEqual(chest.placements.get(FUSION_DEMO_CHEST_ID)?.type, 'chest');
     assert.notEqual(tree, initial);
     assert.equal(tree.placements.get(FUSION_DEMO_TREE_ID)?.type, 'soldier');
     assert.notEqual(conquest, initial);
-    assert.equal(conquest.ownership.get('2,0'), 'p1');
-    assert.notEqual(base, initial);
-    assert.equal(base.destroyedBases.has(FUSION_DEMO_ENEMY_BASE_ID), true);
+    assert.equal(conquest.ownership.get('1,0'), 'p1');
 });
 
 test('le terrain libre permet bien de conquérir cinq cases', () => {

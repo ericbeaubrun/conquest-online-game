@@ -86,12 +86,15 @@ const LoadGame = ({ onBack, onLoadSave }) => {
     const freeSlots = Math.max(0, MAX_SAVE_SLOTS - saves.length);
 
     return (
-        <div className="setup-screen">
+        <div className="setup-screen setup-screen--local">
             <header className="setup-topbar">
                 <button className="menu-btn menu-btn--ghost" onClick={onBack}>
-                    ← Retour
+                    Retour
                 </button>
-                <h1 className="setup-topbar__title">Charger une partie</h1>
+                <div className="setup-topbar__heading">
+                    <span className="setup-topbar__eyebrow">Partie locale</span>
+                    <h1 className="setup-topbar__title">Charger une partie</h1>
+                </div>
                 <span className="setup-topbar__spacer" />
             </header>
 

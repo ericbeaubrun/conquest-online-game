@@ -8,6 +8,7 @@
 //     'lobby:create' { mapId?, settings?, name?, color? }  crée une partie, l'émetteur devient hôte
 //     'lobby:list'                                   demande la liste des parties ouvertes
 //     'lobby:join'   { code, name?, color? }         rejoint une partie (siège libre) ou l'observe
+//     'lobby:leave'                                  quitte la salle et retourne à la liste
 //     'lobby:identity' { name?, color? }             modifie SON nom / SA couleur
 //     'lobby:configure' { code, mapId?, settings? }  (hôte) règle carte/paramètres avant le démarrage
 //     'lobby:reorder' { code, playerId, direction }  (hôte) échange une position avec sa voisine (up/down)
@@ -19,6 +20,7 @@
 //   serveur -> client
 //     'lobby:list'    [ résumés ]
 //     'lobby:joined'  { code, memberId, playerId|null, lobby } (à l'émetteur qui rejoint)
+//     'lobby:left'    confirmation de sortie de la salle (à l'émetteur)
 //     'lobby:update'  { code, status, mapId, settings, hostMemberId, seats } (à toute la salle)
 //     'lobby:error'   { reason }
 //     'game:state'    <état sérialisé>               (à toute la salle)
@@ -191,6 +193,40 @@ function isBotSeat(entry, playerId) {
 // diffusions déjà empilées, ni les autres parties.
 const yieldToLoop = () => new Promise((resolve) => setImmediate(resolve));
 
+// Fait sortir un socket de sa salle, sans fermer sa connexion. Cette même
+// opération est utilisée à la déconnexion et au retour volontaire vers la liste
+// des parties : le siège est donc toujours libéré proprement.
+async function leaveCurrentLobby(io, socket, { leaveRoom = false } = {}) {
+    const code = socket.data.code;
+    if (!code) return;
+
+    const entry = await getLobby(code);
+    if (entry) {
+        releaseSeat(entry, socket.id);
+        // Départ de l'hôte : priorité à un joueur encore assis, puis à un membre
+        // restant qui observe la salle.
+        if (socket.id === entry.hostMemberId) {
+            const seated = entry.seats.find((s) => s.assignedMemberId)?.assignedMemberId;
+            entry.hostMemberId = seated || entry.members.keys().next().value || null;
+        }
+
+        if (entry.members.size === 0) {
+            if (entry.status === 'playing' && entry.autosave) {
+                await saveLobby(entry);
+            } else if (entry.status === 'waiting' || entry.status === 'playing') {
+                await deleteLobby(entry);
+            }
+        } else {
+            syncSocketSeats(io, entry);
+            broadcastLobby(io, entry);
+        }
+    }
+
+    if (leaveRoom) socket.leave(code);
+    socket.data.code = null;
+    socket.data.playerId = null;
+}
+
 // Fait jouer les BOTS tant que c'est à leur tour. `runBotTurn` joue ses coups
 // via `applyAction` (qui renvoie le nouvel état), puis on termine son tour
 // nous-mêmes. On rediffuse à chaque tour pour que
@@ -246,6 +282,16 @@ export function attachGameServer(io) {
                 socket.emit('lobby:list', await listLobbies());
             } catch (e) {
                 socket.emit('lobby:error', { reason: 'list-failed', message: String(e.message || e) });
+            }
+        });
+
+        // --- Retour à la liste : quitte la salle tout en gardant la socket ---
+        socket.on('lobby:leave', async () => {
+            try {
+                await leaveCurrentLobby(io, socket, { leaveRoom: true });
+                socket.emit('lobby:left');
+            } catch (e) {
+                socket.emit('lobby:error', { reason: 'leave-failed', message: String(e.message || e) });
             }
         });
 
@@ -435,36 +481,7 @@ export function attachGameServer(io) {
         // --- Déconnexion : libère le siège et informe la salle ---
         socket.on('disconnect', async () => {
             try {
-                if (socket.data.code) {
-                    const entry = await getLobby(socket.data.code);
-                    if (entry) {
-                        releaseSeat(entry, socket.id);
-                        // Départ de l'hôte : on migre le rôle vers un membre restant,
-                        // en PRIORISANT un joueur assis (repli : le plus ancien membre,
-                        // sinon plus d'hôte). NB : on lit les CLÉS de la Map (socketId),
-                        // pas les valeurs (l'identité { name, color }).
-                        if (socket.id === entry.hostMemberId) {
-                            const seated = entry.seats.find((s) => s.assignedMemberId)?.assignedMemberId;
-                            entry.hostMemberId = seated || entry.members.keys().next().value || null;
-                        }
-                        // Plus aucun membre présent : selon le statut, on nettoie.
-                        //  - EN ATTENTE : supprimée (personne pour la reprendre).
-                        //  - EN COURS + autosave : SAUVEGARDÉE (statut 'saved', on note
-                        //    l'heure du départ) pour pouvoir la reprendre plus tard.
-                        //  - EN COURS sans autosave : supprimée, comme une salle vidée.
-                        // Sinon (il reste des membres), on rediffuse l'état à la salle.
-                        if (entry.members.size === 0) {
-                            if (entry.status === 'playing' && entry.autosave) {
-                                await saveLobby(entry);
-                            } else if (entry.status === 'waiting' || entry.status === 'playing') {
-                                await deleteLobby(entry);
-                            }
-                        } else {
-                            syncSocketSeats(io, entry);
-                            broadcastLobby(io, entry);
-                        }
-                    }
-                }
+                await leaveCurrentLobby(io, socket);
             } catch {
                 /* déconnexion : rien de critique si le nettoyage échoue */
             }

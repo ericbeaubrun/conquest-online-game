@@ -68,7 +68,7 @@ const WikiCarousel = ({category}) => {
                     disabled={activeIndex === 0}
                     aria-label="Carte précédente"
                 >
-                    <span aria-hidden="true">←</span>
+                    <span aria-hidden="true">‹</span>
                 </button>
 
                 <div
@@ -90,14 +90,17 @@ const WikiCarousel = ({category}) => {
                     disabled={activeIndex === entries.length - 1}
                     aria-label="Carte suivante"
                 >
-                    <span aria-hidden="true">→</span>
+                    <span aria-hidden="true">›</span>
                 </button>
             </div>
 
-            <div className="wiki-carousel__progress" aria-hidden="true">
-                <span
-                    style={{width: `${((activeIndex + 1) / entries.length) * 100}%`}}
-                />
+            <div className="wiki-carousel__pagination" aria-hidden="true">
+                {entries.map((entry, index) => (
+                    <span
+                        className={index === activeIndex ? 'wiki-carousel__dot wiki-carousel__dot--active' : 'wiki-carousel__dot'}
+                        key={entry.id}
+                    />
+                ))}
             </div>
         </div>
     );

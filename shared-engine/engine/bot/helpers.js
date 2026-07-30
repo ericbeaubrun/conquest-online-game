@@ -69,7 +69,25 @@ export function soldiersOf(state, predicate) {
 const PROTECTED_BONUSES = new Set([
     'king', 'warrior', 'farmer', 'magician', 'alchemist', 'priest', 'druid', 'warlock',
 ]);
-export const isProtectedUnit = (u) => !!u && u.type === 'soldier' && PROTECTED_BONUSES.has(u.bonus);
+// (le Démoniste — id `warlock` — y figurait déjà avant même d'avoir sa propre
+// routine d'équipement : sa case, sans riposte possible à 1 d'attaque, exigeait
+// la même prudence que les autres soutiens fragiles.)
+
+// Niveau 4 « EN MÉDITATION » : le défi du Paladin demande DEUX tours consécutifs
+// terminés sans agir, et le compteur (`progress.paladinIdleTurns`, tenu par
+// `trackPaladinChallenge`) est déjà à 1 — un premier tour d'inaction lui est
+// tombé dessus par hasard. Le laisser tranquille UN tour de plus suffit alors à
+// débloquer le bonus, alors que le faire jouer remet le compteur à zéro et
+// gâche l'occasion. On le gèle donc à ce moment précis, et à ce moment
+// seulement : le coût est borné à un tour d'un seul soldat, et il disparaît dès
+// que le compteur atteint son but (le soldat redevient jouable, prêt à être
+// équipé — voir `bonuses/paladin.js`).
+export const isMeditatingLvl4 = (u) =>
+    !!u && u.type === 'soldier' && !u.bonus && !u.unit && (u.level || 1) === 4 &&
+    (u.progress?.paladinIdleTurns || 0) === 1;
+
+export const isProtectedUnit = (u) =>
+    !!u && u.type === 'soldier' && (PROTECTED_BONUSES.has(u.bonus) || isMeditatingLvl4(u));
 
 // État hypothétique où notre soldat a été déplacé de `fromId` vers `toId` (pour
 // évaluer la menace sur une case de destination). La case de destination nous

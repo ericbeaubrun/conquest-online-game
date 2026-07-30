@@ -84,6 +84,12 @@ export const CHALLENGE_METRICS = {
     HAS_AFFINITY: 'hasAffinity', // le soldat porte une affinité (lu sur `soldier.affinity`)
     HOUSES_OWNED: 'housesOwned', // maisons possédées par le joueur
     TOWER_KINDS_OWNED: 'towerKindsOwned', // types de tours possédés (attaque et/ou défense) : 0, 1 ou 2
+    // Défi « Alchimiste » : être l'UNIQUE allié de SON PROPRE niveau — s'ouvre
+    // et se referme aussitôt qu'un autre allié du MÊME niveau apparaît ou
+    // disparaît (fusion, achat, mort), jamais figé une fois rempli. Générique
+    // (lu sur `soldier.level`, pas figé à un niveau précis) : n'importe quel
+    // bonus peut s'en servir pour son propre palier.
+    NO_OTHER_SAME_LEVEL_ALLY: 'noOtherSameLevelAlly', // aucun AUTRE allié du même niveau
     NO_CONQUEROR_ON_BOARD: 'noConquerorOnBoard', // aucun soldat « Conquérant » sur le plateau, tous joueurs confondus
     NO_KING_ON_BOARD: 'noKingOnBoard', // aucun soldat « Roi » sur le plateau, tous joueurs confondus
     NO_WARLOCK_ON_BOARD: 'noWarlockOnBoard', // aucun soldat « Démoniste » sur le plateau, tous joueurs confondus
@@ -424,9 +430,9 @@ export const BONUS_OFFERS = [
         price: 40,
         upkeep: -8, // annule l'entretien du niveau 3 : l'alchimiste paie en PV, pas en or
         challenge: {
-            metric: CHALLENGE_METRICS.CHESTS_OPENED,
+            metric: CHALLENGE_METRICS.NO_OTHER_SAME_LEVEL_ALLY,
             goal: 1,
-            describe: (c, g) => `Ouvrir ${c}/${g} coffre.`,
+            describe: (c, g) => (c >= g ? 'Unique niveau 3 allié.' : 'N’avoir aucun autre niveau 3 allié.'),
         },
         effect: `Chaque tour, donne +${ALCHEMIST_ATK_BUFF} atk à TOUS les alliés adjacents, au prix de ${ALCHEMIST_HP_COST} PV par allié.`,
     },
@@ -693,6 +699,22 @@ const STATE_CHALLENGES = {
         countOwned(world, soldier.playerId, 'tree') === 0 ? 1 : 0,
     [CHALLENGE_METRICS.HOUSES_OWNED]: (soldier, world) =>
         countOwned(world, soldier.playerId, 'house'),
+
+    // Défi « Alchimiste » : aucun AUTRE allié du MÊME niveau que le porteur sur
+    // le plateau. Le soldat qui porte le défi s'exclut lui-même par IDENTITÉ
+    // (`p === soldier`, et non par case) — `bonusProgress` reçoit toujours
+    // l'objet tiré tel quel de `world.placements`, donc la comparaison est
+    // fiable partout où le défi est évalué (reducer comme bot). Générique sur
+    // le niveau (`soldier.level`, pas une valeur figée) : réutilisable par
+    // n'importe quel palier, pas seulement celui de l'Alchimiste.
+    [CHALLENGE_METRICS.NO_OTHER_SAME_LEVEL_ALLY]: (soldier, world) => {
+        const level = soldier.level || 1;
+        for (const p of world.placements.values()) {
+            if (p === soldier) continue;
+            if (p.type === 'soldier' && p.playerId === soldier.playerId && (p.level || 1) === level) return 0;
+        }
+        return 1;
+    },
 
     // Défi « Viking » : posséder UNE tour d'attaque ET UNE tour de défense. On
     // compte les TYPES détenus (0, 1 ou 2), pas les tours : dix tours d'attaque

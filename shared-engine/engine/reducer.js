@@ -764,8 +764,15 @@ function reduceBuyBonus(state, {cellId, bonusId}) {
     const placements = new Map(state.placements);
     placements.set(cellId, equipped);
     const gold = {...state.gold, [state.activePlayerId]: purse - price};
+    // Chevalier noir : marque le joueur comme en ayant déjà acheté un, MÊME si
+    // celui-ci meurt ensuite — `placements` seul ne garde aucune trace d'un
+    // porteur disparu (voir `blackKnightBoughtBy` dans board.js).
+    const blackKnightBoughtBy =
+        bonusId === 'blackKnight'
+            ? {...state.blackKnightBoughtBy, [state.activePlayerId]: true}
+            : state.blackKnightBoughtBy;
     return emit(
-        {...state, placements, gold},
+        {...state, placements, gold, blackKnightBoughtBy},
         {kind: 'buyBonus', playerId: state.activePlayerId, bonusId, cost: price, atk: soldier.atk, level: soldier.level}
     );
 }

@@ -27,7 +27,7 @@ export const Segmented = ({ options, value, onChange, size, disabled, className 
 );
 
 // --- Sélecteur de couleur (pastille + menu de la palette) ---
-export const ColorPicker = ({ value, used, onChange, disabled }) => {
+export const ColorPicker = ({ value, used, onChange, disabled, label }) => {
     const [open, setOpen] = useState(false);
     return (
         <div className="color-picker">
@@ -37,9 +37,11 @@ export const ColorPicker = ({ value, used, onChange, disabled }) => {
                 style={{ backgroundColor: value }}
                 onClick={() => setOpen((o) => !o)}
                 disabled={disabled}
-                aria-label="Changer la couleur"
+                aria-label={label ? `Changer la couleur du joueur ${label}` : 'Changer la couleur'}
                 title="Changer la couleur"
-            />
+            >
+                {label}
+            </button>
             {open && !disabled && (
                 <>
                     {/* Zone de fermeture au clic extérieur */}

@@ -27,12 +27,15 @@ const LobbyBrowser = ({ lobbies = [], error, onCreate, onJoin, onRefresh, onBack
     };
 
     return (
-        <div className="setup-screen">
+        <div className="setup-screen setup-screen--online">
             <header className="setup-topbar">
                 <button className="menu-btn menu-btn--ghost" onClick={onBack}>
-                    ← Retour
+                    Retour
                 </button>
-                <h1 className="setup-topbar__title">Jouer en ligne</h1>
+                <div className="setup-topbar__heading">
+                    <span className="setup-topbar__eyebrow">Multijoueur</span>
+                    <h1 className="setup-topbar__title">Jouer en ligne</h1>
+                </div>
                 <span className="setup-topbar__spacer" />
             </header>
 
@@ -118,7 +121,7 @@ const SectionHeader = ({ open, onToggle, title, count, onRefresh }) => (
             title="Actualiser"
             aria-label="Actualiser la liste"
         >
-            ⟳
+            <img src="/characters/reset-iconpng.png" alt="" />
         </button>
         <span className="lobby-toggle__count">{count}</span>
     </div>

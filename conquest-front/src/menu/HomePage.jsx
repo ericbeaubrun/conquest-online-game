@@ -5,8 +5,10 @@ import RulesSection from './RulesSection.jsx';
 
 const HERO_PARTICLES = Array.from({length: 18});
 
-const HomePage = ({ onPlayOffline, onPlayOnline, onLogin }) => {
+const HomePage = ({ onPlayOffline, onPlayOnline }) => {
     const [activeFaction, setActiveFaction] = useState(null);
+    const [isHeroVisible, setIsHeroVisible] = useState(true);
+    const heroRef = useRef(null);
     const heroMotion = useRef({
         currentX: 0,
         currentY: 0,
@@ -42,6 +44,19 @@ const HomePage = ({ onPlayOffline, onPlayOnline, onLogin }) => {
         };
     }, []);
 
+    useEffect(() => {
+        const hero = heroRef.current;
+        if (!hero) return undefined;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => setIsHeroVisible(entry.isIntersecting),
+            {threshold: 0.08},
+        );
+
+        observer.observe(hero);
+        return () => observer.disconnect();
+    }, []);
+
     const applyHeroMotion = (element, x, y) => {
         const heroStyle = element.style;
         heroStyle.setProperty('--hero-particles-x', `${(-x * 14).toFixed(2)}px`);
@@ -49,17 +64,17 @@ const HomePage = ({ onPlayOffline, onPlayOnline, onLogin }) => {
 
         if (guardianMotion.current) {
             guardianMotion.current.style.transform = `
-                translate3d(${(x * 52).toFixed(2)}px, ${(y * 34).toFixed(2)}px, 0)
-                rotateX(${(-y * 9).toFixed(2)}deg)
-                rotateY(${(x * 12).toFixed(2)}deg)
+                translate3d(${(x * 76).toFixed(2)}px, ${(y * 50).toFixed(2)}px, 0)
+                rotateX(${(-y * 12).toFixed(2)}deg)
+                rotateY(${(x * 16).toFixed(2)}deg)
             `;
         }
 
         if (conquerorMotion.current) {
             conquerorMotion.current.style.transform = `
-                translate3d(${(x * 68).toFixed(2)}px, ${(y * 44).toFixed(2)}px, 0)
-                rotateX(${(-y * 10).toFixed(2)}deg)
-                rotateY(${(x * 15).toFixed(2)}deg)
+                translate3d(${(x * 98).toFixed(2)}px, ${(y * 64).toFixed(2)}px, 0)
+                rotateX(${(-y * 14).toFixed(2)}deg)
+                rotateY(${(x * 19).toFixed(2)}deg)
             `;
         }
     };
@@ -122,27 +137,29 @@ const HomePage = ({ onPlayOffline, onPlayOnline, onLogin }) => {
 
     return (
         <div className="home-screen">
-            <header className="home-topbar">
+            <header className={`home-topbar${isHeroVisible ? ' home-topbar--hero' : ''}`}>
                 <div className="home-topbar__inner">
-                    <a className="home-topbar__brand" href="#home">
-                        CONQUEST
+                    <a
+                        className="home-topbar__brand"
+                        href="https://github.com/ericbeaubrun/conquest-online-game"
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Voir le dépôt GitHub de Conquest"
+                    >
+                        <img src="/github.svg" alt="" />
                     </a>
                     <nav className="home-topbar__nav" aria-label="Navigation principale">
+                        <a href="#home">Jouer</a>
+                        <a href="#context-title">À propos</a>
                         <a href="#rules-title">Règles</a>
-                        <a href="#demo-title">Démo</a>
-                        <a href="#wiki-title">Codex</a>
+                        <a href="#demo-title">Démonstration</a>
+                        <a href="#wiki-title">Contenu</a>
                     </nav>
-                    <button
-                        type="button"
-                        className="menu-btn menu-btn--ghost"
-                        onClick={onLogin}
-                    >
-                        Se connecter
-                    </button>
                 </div>
             </header>
 
             <main
+                ref={heroRef}
                 className={`home-hero${activeFaction ? ` home-hero--${activeFaction}-active` : ''}`}
                 id="home"
                 onMouseMove={handleHeroMouseMove}
@@ -196,11 +213,11 @@ const HomePage = ({ onPlayOffline, onPlayOnline, onLogin }) => {
                             STRATÉGIE · TOUR PAR TOUR
                             <i aria-hidden="true" />
                         </span>
-                        <h1 className="home-hero__title" aria-label="Conquest">
-                            {'CONQUEST'.split('').map((letter, index) => (
+                        <h1 className="home-hero__title" aria-label="Conquete">
+                            {'CONQUETE'.split('').map((letter, index) => (
                                 <span
                                     aria-hidden="true"
-                                    key={letter}
+                                    key={`${letter}-${index}`}
                                     style={{'--letter-index': index}}
                                 >
                                     {letter}
@@ -245,64 +262,48 @@ const HomePage = ({ onPlayOffline, onPlayOnline, onLogin }) => {
                 </a>
             </main>
 
-            <div
-                className="home-section-bridge home-section-bridge--hero-context"
-                aria-hidden="true"
-            />
-            <section className="home-context" aria-labelledby="context-title">
-                <ul className="home-context__features" aria-label="Caractéristiques principales">
-                    <li><span aria-hidden="true">◆</span> 2–8 joueurs</li>
-                    <li><span aria-hidden="true">◆</span> En ligne et hors ligne</li>
-                    <li><span aria-hidden="true">◆</span> Stratégie sans compromis</li>
-                </ul>
-                <div className="home-context__inner">
-                    <header className="home-context__heading">
-                        <span>AUX ORIGINES DE CONQUEST</span>
-                        <h2 id="context-title">Un royaume à reconquérir</h2>
-                    </header>
-                    <p>
-                        Conquest prend place dans un royaume fragmenté, où chaque
-                        frontière est devenue une promesse de pouvoir. À la tête de
-                        votre cité, vous devrez étendre vos terres, renforcer votre
-                        économie et faire progresser vos troupes. Les alliances n’y
-                        durent qu’un temps, car chaque hexagone conquis rapproche un
-                        joueur du trône. Une seule stratégie restera debout lorsque la
-                        dernière base ennemie tombera.
-                    </p>
-                </div>
-            </section>
-            <div
-                className="home-section-bridge home-section-bridge--context-rules"
-                aria-hidden="true"
-            />
-            <RulesSection />
-            <div
-                className="home-section-bridge home-section-bridge--rules-demo"
-                aria-hidden="true"
-            />
-            <FusionDemo onPlay={onPlayOffline} />
-            <div
-                className="home-section-bridge home-section-bridge--demo-wiki"
-                aria-hidden="true"
-            />
-            <WikiSection />
-
-            <footer className="home-footer">
-                <div className="home-footer__inner">
-                    <div>
-                        <strong className="home-footer__brand">CONQUEST</strong>
-                        <span className="home-footer__tagline">
-                            Stratégie au tour par tour.
-                        </span>
+            <div className="home-content">
+                <section className="home-context" aria-labelledby="context-title">
+                    <div className="home-context__inner">
+                        <header className="home-context__heading">
+                            <span>AUX ORIGINES DE CONQUEST</span>
+                            <h2 id="context-title">Un royaume à reconquérir</h2>
+                            <figure className="home-context__sorcier" aria-hidden="true">
+                                <img src="/characters/lvl5/sorceler.png" alt="" />
+                            </figure>
+                        </header>
+                        <p>
+                            Conquest prend place dans un royaume fragmenté, où chaque
+                            frontière est devenue une promesse de pouvoir. À la tête de
+                            votre cité, vous devrez étendre vos terres, renforcer votre
+                            économie et faire progresser vos troupes. Les alliances n’y
+                            durent qu’un temps, car chaque hexagone conquis rapproche un
+                            joueur du trône. Une seule stratégie restera debout lorsque la
+                            dernière base ennemie tombera.
+                        </p>
                     </div>
-                    <span className="home-footer__copyright">
-                        © {new Date().getFullYear()} Conquest
-                    </span>
-                    <a className="home-footer__back" href="#home">
-                        Retour en haut <span aria-hidden="true">↑</span>
-                    </a>
-                </div>
-            </footer>
+                </section>
+                <RulesSection />
+                <FusionDemo />
+                <WikiSection />
+
+                <footer className="home-footer">
+                    <div className="home-footer__inner">
+                        <div>
+                            <strong className="home-footer__brand">CONQUEST</strong>
+                            <span className="home-footer__tagline">
+                                Stratégie au tour par tour.
+                            </span>
+                        </div>
+                        <span className="home-footer__copyright">
+                            © {new Date().getFullYear()} Conquest
+                        </span>
+                        <a className="home-footer__back" href="#home">
+                            Retour en haut <span aria-hidden="true">↑</span>
+                        </a>
+                    </div>
+                </footer>
+            </div>
         </div>
     );
 };

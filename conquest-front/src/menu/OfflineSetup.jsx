@@ -16,17 +16,19 @@ import {
     defaultSettings,
 } from './setupConfig.js';
 import { ColorPicker, AdvancedSettings, Segmented } from './SetupControls.jsx';
+import MapSelector from './MapSelector.jsx';
+
+const OFFLINE_MAP_IDS = MAPS.map((map) => map.id);
 
 // --- Ligne d'un joueur ---
 const PlayerRow = ({ index, player, usedColors, canRemove, onChange, onRemove }) => {
     const isBot = player.kind === 'bot';
     return (
         <div className="player-row">
-            <span className="player-row__num">{index + 1}</span>
-
             <ColorPicker
                 value={player.color}
                 used={usedColors}
+                label={index + 1}
                 onChange={(color) => onChange({ ...player, color })}
             />
 
@@ -117,15 +119,28 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch, onOpenLoad }) => {
     const launch = () => onLaunch({ mapId, players, settings });
 
     const selectedMap = MAPS.find((m) => m.id === mapId);
+    // Même lecture que la salle d'attente en ligne : les positions déjà
+    // attribuées portent la couleur du joueur, les autres restent atténuées.
+    const spawnInfo = useMemo(
+        () =>
+            (selectedMap?.spawns || []).map((_, index) => ({
+                color: players[index]?.color,
+                filled: index < players.length,
+            })),
+        [players, selectedMap]
+    );
 
     return (
-        <div className="setup-screen">
+        <div className="setup-screen setup-screen--local">
             {/* En-tête */}
             <header className="setup-topbar">
                 <button className="menu-btn menu-btn--ghost" onClick={onBack}>
-                    ← Retour
+                    Retour
                 </button>
-                <h1 className="setup-topbar__title">Partie hors-ligne</h1>
+                <div className="setup-topbar__heading">
+                    <span className="setup-topbar__eyebrow">Configuration locale</span>
+                    <h1 className="setup-topbar__title">Partie hors-ligne</h1>
+                </div>
                 <span className="setup-topbar__spacer" />
             </header>
 
@@ -145,20 +160,12 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch, onOpenLoad }) => {
                 {/* --- Section CARTE --- */}
                 <section className="setup-section">
                     <h2 className="setup-section__title">Carte</h2>
-                    <div className="map-grid">
-                        {MAPS.map((m) => (
-                            <button
-                                key={m.id}
-                                type="button"
-                                className={`map-card ${m.id === mapId ? 'map-card--active' : ''}`}
-                                onClick={() => selectMap(m.id)}
-                            >
-                                <span className="map-card__name">{m.name}</span>
-                                <span className="map-card__desc">{m.description}</span>
-                                <span className="map-card__cap">{m.spawns.length} joueurs max</span>
-                            </button>
-                        ))}
-                    </div>
+                    <MapSelector
+                        mapIds={OFFLINE_MAP_IDS}
+                        mapId={mapId}
+                        onSelect={selectMap}
+                        spawnInfo={spawnInfo}
+                    />
                 </section>
 
                 {/* --- Section JOUEURS --- */}
@@ -195,7 +202,7 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch, onOpenLoad }) => {
                 </section>
 
                 {/* --- Section RÉGLAGES (partagée avec la salle d'attente en ligne) --- */}
-                <section className="setup-section">
+                <section className="setup-section setup-section--advanced">
                     <button
                         type="button"
                         className={`setup-section__toggle ${advancedOpen ? "setup-section__toggle--open" : ""}`}
@@ -217,7 +224,7 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch, onOpenLoad }) => {
                     {selectedMap?.name} · {players.length} joueurs
                 </span>
                 <button className="menu-btn menu-btn--play menu-btn--launch" onClick={launch}>
-                    Lancer la partie ▶
+                    LANCER
                 </button>
             </footer>
         </div>
