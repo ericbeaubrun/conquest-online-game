@@ -1,6 +1,13 @@
 // Menu latéral : graphiques statistiques de la partie et actions de partie.
-import {useEffect, useState} from 'react';
+import {useEffect, useState, useSyncExternalStore} from 'react';
 import {STAT_CHARTS} from './stats/chartList.js';
+import {
+    BOT_DELAY_STEPS,
+    botDelayLabel,
+    getBotDelay,
+    setBotDelay,
+    subscribeBotDelay,
+} from './session/botSpeed.js';
 
 const SideMenu = ({
                        open,
@@ -20,7 +27,20 @@ const SideMenu = ({
                        onToggleActionBar,
                        showToasts,
                        onToggleToasts,
+                       showBotSpeed,
                    }) => {
+    // Vitesse des bots : magasin de module, partagé avec la session hors-ligne
+    // qui joue leurs coups (cf. session/botSpeed.js). La jauge se déplace par
+    // paliers — un curseur continu en millisecondes n'apporterait rien.
+    const botDelay = useSyncExternalStore(subscribeBotDelay, getBotDelay, getBotDelay);
+    // Repli sur le palier le plus proche : la valeur mémorisée peut venir d'une
+    // version antérieure de la liste des paliers.
+    const botDelayIndex = BOT_DELAY_STEPS.reduce(
+        (best, ms, i) =>
+            Math.abs(ms - botDelay) < Math.abs(BOT_DELAY_STEPS[best] - botDelay) ? i : best,
+        0
+    );
+
     // Accusé de réception éphémère : à chaque nouvelle sauvegarde (`savedAt`
     // change), on affiche « Sauvegardé ✓ » sur le bouton pendant 2 s.
     const [justSaved, setJustSaved] = useState(false);
@@ -80,6 +100,29 @@ const SideMenu = ({
             >
                 Notifications
             </button>
+            {/* Rythme des bots : hors-ligne seulement — en ligne les bots
+                jouent côté serveur, un client ne règle pas leur cadence. */}
+            {showBotSpeed && (
+                <div className="side-menu__slider">
+                    <label className="side-menu__slider-label" htmlFor="bot-speed">
+                        Vitesse des bots
+                        <span className="side-menu__slider-value">{botDelayLabel(botDelay)}</span>
+                    </label>
+                    <input
+                        id="bot-speed"
+                        type="range"
+                        min="0"
+                        max={BOT_DELAY_STEPS.length - 1}
+                        step="1"
+                        value={botDelayIndex}
+                        onChange={(e) => setBotDelay(BOT_DELAY_STEPS[Number(e.target.value)])}
+                        title="Temps d'attente entre deux coups du bot — augmentez-le pour suivre chaque coup"
+                    />
+                    <span className="side-menu__slider-hint">
+                        Pause entre chaque coup du bot. Prend effet à son prochain tour.
+                    </span>
+                </div>
+            )}
         </div>
         <div className="menu-section">
             <span className="menu-section__title">Partie</span>

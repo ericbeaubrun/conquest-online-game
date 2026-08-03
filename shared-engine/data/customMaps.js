@@ -10,6 +10,10 @@
 // Symboles : . herbe  T forêt  ^ montagne  _ sable  ~ eau  et 1 2 3 4 pour
 // les points de départ des joueurs. La forme dessinée = la forme à l'écran.
 //
+// RANGÉES VIDES en haut/bas du dessin : elles ne posent aucune case mais
+// agrandissent le cadre de la carte (marge de décor) — voir `margin` dans
+// mapDSL.js.
+//
 // COULEURS : `palette: { grass, forest, mountain, sand, water, background }`
 // donne à la carte son ambiance propre. Toutes les clés sont facultatives —
 // celles qu'on omet gardent la couleur par défaut de terrain.js.
@@ -17,126 +21,97 @@
 import {defineAsciiMap} from './mapDSL.js';
 
 export const CUSTOM_MAPS = [
-    // Un couloir avec une rivière centrale et deux forêts défensives (2 joueurs).
+
+    // La plus petite carte du jeu : 31 cases et une montagne pile au milieu,
+    // qui oblige à choisir son côté dès le premier tour.
     defineAsciiMap({
-        id: 'passage',
-        name: 'Le Passage',
+        id: 'escarmouche',
+        name: 'Escarmouche',
         art: `
-            1 . . . ~ . . . 2
-            . . T . ~ . T . .
-            . . . . ~ . . . .
-            . T . . . . . T .
-            . . . . ~ . . . .
+              .   .   .   .
+            . . . . . . . . .
+            1 . . . ^ . . . 2
+            . . . . . . . . .
+
         `,
     }),
 
-    // Carte en croix pour 4 joueurs : les coins vides (espaces) creusent la
-    // forme, un lac de montagnes garde le centre. Dessin = rendu.
-    // Ambiance volcanique : la palette propre à la carte suffit à la
-    // caractériser, sans toucher au moteur ni au rendu.
+    // Grande plaine rase, sans le moindre obstacle : un duel est-ouest où tout
+    // se joue au placement, puisque rien ne couvre ni ne ralentit personne.
     defineAsciiMap({
-        id: 'croix',
-        name: 'La Croix',
-        palette: {
-            grass: '#8a7a4e',
-            forest: '#5c5230',
-            mountain: '#6b4136',
-            water: '#c1502e',
-            background: '#1a1110',
-        },
+        id: 'plaine',
+        name: 'Plaine',
         art: `
-                . 1 .
-                . . .
-            . . . ^ . . .
-            3 . ^ ~ ^ . 4
-            . . . ^ . . .
-                . . .
-                . 2 .
+
+              .   .   .   .   .   .   .
+            . . . . . . . . . . . . . . .
+            . . . . . . . . . . . . . . .
+            . . . . . . . . . . . . . . .
+            1 . . . . . . . . . . . . . 2
+            . . . . . . . . . . . . . . .
+            . . . . . . . . . . . . . . .
+            . . . . . . . . . . . . . . .
+
+
         `,
     }),
 
+    // Bandes de forêt, de sable et de vide empilées d'ouest en est, tranchées
+    // par une colonne de montagnes : on progresse couche par couche.
     defineAsciiMap({
-        id: 'ma-carte',
-        name: 'Ma carte',
+        id: 'lignes',
+        name: 'Lignes',
         art: `
-            . . . . 1     T T T   T T T     3 . . . .
-            . . . .     T T T T   T T T T     . . . .
-            . . . .       T T T   T T T       . . . .
-            . . . .   T   T T ^   ^ T T   T   . . . .
-            . . . . . T T T ^ ^ ^ ^ ^ T T T . . . . .
-            . . . . . T T T ^ ^ ^ ^ ^ T T T . . . . .
-            . . . . . T T T ^ ^ ^ ^ ^ T T T . . . . .
-            . . . .       T T T   T T T       . . . .
-            . . . .     T T T T   T T T T     . . . .
-            . . . . 2     T T T   T T T     4 . . . .
+
+              .   T   T   T   T   T   T   T   T   T   T   T   T   .
+            . . T   T   T   T   T   T   ^   T   T   T   T   T   T . .
+            . .   _   _   _   _   _   _   _   _   _   _   _   _   . .
+            . . _   _   _   _   _   _   ^   _   _   _   _   _   _ . .
+            1 .                                                   . 2
+            . . _ _ _ _ _ _ _ _ _ _ _ _ ^ _ _ _ _ _ _ _ _ _ _ _ _ . .
+            . .                                                   . .
+            . . T T T T T T T T T T T T ^ T T T T T T T T T T T T . .
+
+
         `,
     }),
 
+
+    // Deux ailes de plaine reliées par un seul cœur boisé : à 4 joueurs, chacun
+    // tient un quart d'aile et le passage central est le seul point de contact.
     defineAsciiMap({
-        id: 'ma-simple',
-        name: 'Simple',
-        palette: {
-            background: '#313030',
-            grass: '#6da04b',
-            forest: '#538b46',
-        },
+        id: 'papillon',
+        name: 'Papillon',
         art: `
-              . .   T T T T   T T T T   . .
-            . . . . T T T T T T T T T . . . .
-            . . . . T T T T T T T T T . . . .
-            1 . . . T T T T   T T T T . . . 2
-            . . . . T T T T T T T T T . . . .
-            . . .   T T T T T T T T T   . . .
-                .   T   T       T   T   .
+
+
+
+                  1 . . . . . . .   . . . . . . . 3
+                  . . . . . . . .   . . . . . . . .
+                  . . . . . . . .   . . . . . . . .
+                  . . . . . . . .   . . . . . . . .
+                  . . . . . . . .   . . . . . . . .
+                  . . . . . . . .   . . . . . . . .
+                  . . . . . . . T T T . . . . . . .
+                  . . . . . . T T T T T . . . . . .
+                              T T T T T
+                  . . . . . . T T T T T . . . . . .
+                  . . . . . . . . T . . . . . . . .
+                  . . . . . . . .   . . . . . . . .
+                  . . . . . . . .   . . . . . . . .
+                  . . . . . . . .   . . . . . . . .
+                  . . . . . . . .   . . . . . . . .
+                  . . . . . . . .   . . . . . . . .
+                  4 . . . . . . .   . . . . . . . 2
+
+
+
         `,
     }),
 
-    defineAsciiMap({
-        id: 'dark-map',
-        name: 'Dark map',
-        palette: {
-            background: '#1b1c1d',
-            grass: '#8b9188',
-        },
-        art: `
-                . . . .   . . .   .   . .     . . . .
-              . . . . .     . .   . . . .   . . . . . .
-              . . . . . .     . . . . .     . . . . . . .
-              . . . . . . . . . . . . . . .     . . . . .
-              . .     . . . . . .     . . . .   . . . . . .
-            1 . . .   . . . . . . . . . . . .   . . . . . .
-            . . . . . . .   . . . . . . .       . . . . . .
-            . . . . .   .     . .   . . . . . . . . . . . 2
-                . . .     . . . .     . . . . . . . .   .
-                . .   . . . . . . .   . . . . . . .   . .
-              . .     . . . .   .   .   .   . . . . . .
-        `,
-    }),
-    defineAsciiMap({
-        id: 'paradise',
-        name: 'Paradise',
-        palette: {
-            background: '#55baec',
-            grass: '#96e462',
-        },
-        art: `
-                      1   .
-              . . . . . . . . . . .   .
-            . . . . . . . . . . .     . .
-            . . . . . . . . . . .   . . .
-            . . . . . . . . . .   . . . .
-            . . . . . . . . .     . . . .
-              . . . . . . . . . . . . . .
-              . . . . . . . . . . . . . .
-              . . . . . . . . . . . . . .
-              . . .     . . . . . . . . .
-              . . .     . . . . . . . .
-              . . . .   . . . . . . . .
-                . .   . . . . . . . . .
-                .     . . . . . . . .
-                      . . . . . . . .
-                    . . . . .   2
-        `,
-    }),
+
+
+
+
 
 ];

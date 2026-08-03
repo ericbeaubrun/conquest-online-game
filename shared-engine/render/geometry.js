@@ -4,7 +4,7 @@
 // `engine/board.js`.
 
 import { getLogicalBoard } from '../engine/board.js';
-import { HEX_SIZE, hexToPixel, hexPointsAttr, computeBounds } from '../data/hex.js';
+import { HEX_SIZE, hexToPixel, hexPointsAttr, computeBounds, hexHeight } from '../data/hex.js';
 
 export const PADDING = HEX_SIZE * 0.8;
 
@@ -22,11 +22,16 @@ export function buildGeometry(mapId) {
     const cellMap = new Map(cells.map((c) => [c.id, c]));
 
     const b = computeBounds(map.cells);
+    // Marge de la carte : des rangées vides (sans case) au-dessus et au-dessous
+    // du plateau. Elles n'existent que dans le CADRE — le décor de fond s'y
+    // étend, les cases s'arrêtent avant. Voir `margin` dans maps.js/mapDSL.js.
+    const marginTop = (map.margin?.top || 0) * hexHeight();
+    const marginBottom = (map.margin?.bottom || 0) * hexHeight();
     const base = {
         x: b.minX - PADDING,
-        y: b.minY - PADDING,
+        y: b.minY - PADDING - marginTop,
         w: b.width + PADDING * 2,
-        h: b.height + PADDING * 2,
+        h: b.height + PADDING * 2 + marginTop + marginBottom,
     };
     const baseCells = [...baseIds].map((id) => cellMap.get(id)).filter(Boolean);
 

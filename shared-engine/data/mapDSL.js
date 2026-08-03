@@ -66,8 +66,20 @@ export function parseAsciiMap(art, legend = LEGEND) {
     // On retire les lignes vides de début/fin mais on garde l'indentation
     // interne (utile pour aligner visuellement les rangées décalées).
     const lines = art.replace(/\t/g, ' ').split('\n');
-    while (lines.length && lines[0].trim() === '') lines.shift();
-    while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+
+    // Les rangées vides du dessin sont VOLONTAIRES : elles n'ajoutent aucune
+    // case mais agrandissent le cadre de la carte (marge de décor, cf.
+    // `buildGeometry`). On les compte avant de les retirer. Les toutes
+    // premières/dernières lignes sont l'artefact du littéral `…` (retour à la
+    // ligne après l'anti-quote, indentation avant la fermante) : elles ne
+    // comptent pas.
+    if (lines.length && lines[0].trim() === '') lines.shift();
+    if (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+
+    let top = 0;
+    let bottom = 0;
+    while (lines.length && lines[0].trim() === '') { lines.shift(); top++; }
+    while (lines.length && lines[lines.length - 1].trim() === '') { lines.pop(); bottom++; }
 
     // Décalage commun à retirer : la plus petite indentation parmi les lignes
     // non vides, pour pouvoir écrire l'art indenté dans le code source.
@@ -116,7 +128,7 @@ export function parseAsciiMap(art, legend = LEGEND) {
         throw new Error(`Une carte a besoin d'au moins 2 points de départ (trouvés : ${spawns.length}).`);
     }
 
-    return { cells: clearWaterAroundSpawns(cells, spawns), spawns };
+    return { cells: clearWaterAroundSpawns(cells, spawns), spawns, margin: { top, bottom } };
 }
 
 // Fabrique une carte complète prête pour le registre MAPS à partir d'un dessin.
@@ -125,13 +137,14 @@ export function parseAsciiMap(art, legend = LEGEND) {
 // son fond : { grass, forest, mountain, sand, water, background }. Les clés
 // omises gardent la couleur par défaut (voir terrain.js).
 export function defineAsciiMap({ id, name, description, art, legend, palette }) {
-    const { cells, spawns } = parseAsciiMap(art, legend);
+    const { cells, spawns, margin } = parseAsciiMap(art, legend);
     return {
         id,
         name,
         description: description ?? `${spawns.length} joueurs · ${cells.length} cases`,
         spawns,
         palette,
+        margin,
         cells,
     };
 }

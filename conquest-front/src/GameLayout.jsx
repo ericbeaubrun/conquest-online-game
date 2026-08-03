@@ -256,6 +256,7 @@ const GameLayout = ({session, onExit}) => {
                 onToggleActionBar={() => setShowActionBar((v) => !v)}
                 showToasts={showToasts}
                 onToggleToasts={() => setShowToasts((v) => !v)}
+                showBotSpeed={!online}
             />
 
             {statsChart && (

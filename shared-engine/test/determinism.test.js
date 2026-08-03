@@ -162,7 +162,9 @@ test('une même graine rejoue une partie strictement identique', () => {
 test('partie complète : empreinte de référence', () => {
     const { state, log } = playGame();
     // Garde-fou : si la partie s'arrête au 2e coup, l'empreinte ne prouve rien.
-    assert.ok(log.length > 300, `partie trop courte (${log.length} actions appliquées)`);
+    // Le seuil suit la taille de « Continent » (397 cases) : ~280 actions sur
+    // 40 tours.
+    assert.ok(log.length > 250, `partie trop courte (${log.length} actions appliquées)`);
     assertGolden('partieComplete', fingerprint(state));
     assertGolden('partieCompleteActions', createHash('sha256').update(log.join(',')).digest('hex'));
 });

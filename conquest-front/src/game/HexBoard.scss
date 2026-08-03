@@ -48,6 +48,18 @@ $stroke_width_4: 5;
     transform-origin: 0 0;
   }
 
+  // Décor de la carte (image de fond), première couche du contenu : purement
+  // visuelle, elle ne doit jamais intercepter un clic destiné à une case.
+  //
+  // Elle vit dans le contenu transformé par la caméra, donc elle suit le pan et
+  // le zoom. Le coût reste borné : une seule image, décodée une fois, mise à
+  // l'échelle par le GPU pendant le geste (comme le reste du contenu, qui est
+  // alors composité) et rastérisée à nouveau seulement au commit du viewBox —
+  // jamais 60 fois par seconde. Aucun filtre ni ombre n'est posé dessus.
+  &__backdrop {
+    pointer-events: none;
+  }
+
   // Remplissages des surbrillances : immobiles, donc hors de toute couche
   // animée. Leur contour est tracé par la couche pulsante ci-dessous.
   &__fill > polygon {

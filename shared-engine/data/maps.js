@@ -2,39 +2,19 @@
 // { q, r, type } accompagnée de ses points de départ (spawns). Le nombre de
 // spawns fixe le nombre de joueurs de la carte (entre 2 et 4).
 
-import { region, hexShape, rectShape, buildMap } from './mapShapes.js';
+import { hexShape, buildMap } from './mapShapes.js';
 import { CUSTOM_MAPS } from './customMaps.js';
 import {DEMO_MAPS} from './demoMaps.js';
 import {TEST_MAPS} from './testMaps.js';
 
-// Terrain naturel pour les cartes en forme d'hexagone.
-function landTerrain(q, r) {
-    const n = region(q, r, 3) * 0.55 + region(q, r, 8) * 0.45;
-    if (n < 0.16) return 'water';
-    if (n < 0.26) return 'sand';
-    if (n > 0.85) return 'mountain';
-    if (n > 0.68) return 'forest';
-    return 'grass';
-}
+// Les trois cartes de base sont volontairement en terrain uniforme : aucune
+// eau ni montagne ne vient couper les trajets, seule la taille les distingue.
+const plainTerrain = () => 'grass';
 
-// Terrain « île » : eau sur les bords, plages puis terres vers le centre.
-function islandTerrain(col, row, cols, rows) {
-    const cx = (cols - 1) / 2;
-    const cy = (rows - 1) / 2;
-    const dx = (col - cx) / cx;
-    const dy = (row - cy) / cy;
-    const d = Math.sqrt(dx * dx + dy * dy); // 0 au centre, ~1.4 aux coins
-    const n = region(col, row, 4) * 0.5 + region(col, row, 9) * 0.5;
-    if (d + n * 0.3 > 1.0) return 'water';
-    if (d + n * 0.3 > 0.88) return 'sand';
-    if (n > 0.72) return 'mountain';
-    if (n > 0.55) return 'forest';
-    return 'grass';
-}
-
-// Petite carte d'origine : herbe avec quelques points d'eau fixes.
-const DUEL_WATER = new Set(['-2,-1', '-1,-2', '2,1', '1,2', '0,3', '0,-3']);
-const duelTerrain = (q, r) => (DUEL_WATER.has(`${q},${r}`) ? 'water' : 'grass');
+// Marge commune : trois rangées vides au-dessus et au-dessous du plateau. Elles
+// ne contiennent pas de case — elles agrandissent seulement le cadre de la
+// carte, ce qui laisse respirer le décor de fond (voir `buildGeometry`).
+const MARGIN = {top: 3, bottom: 3};
 
 // --- Registre ---
 export const MAPS = [
@@ -42,7 +22,9 @@ export const MAPS = [
         id: 'duel',
         name: 'Duel',
         description: '2 joueurs · 61 cases',
-        cells: hexShape(4, duelTerrain),
+        // palette: {backgroundImage: '/backgrounds/duel.png'},
+        cells: hexShape(4, plainTerrain),
+        margin: MARGIN,
         spawns: [
             { q: -4, r: 0 },
             { q: 4, r: 0 },
@@ -51,8 +33,9 @@ export const MAPS = [
     buildMap({
         id: 'vallee',
         name: 'Vallée',
-        description: '3 joueurs · 271 cases',
-        cells: hexShape(9, landTerrain),
+        description: '3 joueurs · 217 cases',
+        cells: hexShape(8, plainTerrain),
+        margin: MARGIN,
         spawns: [
             { q: 0, r: -8 },
             { q: 8, r: 0 },
@@ -62,25 +45,14 @@ export const MAPS = [
     buildMap({
         id: 'continent',
         name: 'Continent',
-        description: '4 joueurs · 631 cases',
-        cells: hexShape(14, landTerrain),
+        description: '4 joueurs · 397 cases',
+        cells: hexShape(11, plainTerrain),
+        margin: MARGIN,
         spawns: [
-            { q: 0, r: -12 },
-            { q: 12, r: -6 },
-            { q: 0, r: 12 },
-            { q: -12, r: 6 },
-        ],
-    }),
-    buildMap({
-        id: 'archipel',
-        name: 'Archipel',
-        description: '4 joueurs · 560 cases',
-        cells: rectShape(28, 20, islandTerrain),
-        spawns: [
-            { q: 9, r: 2 },
-            { q: 19, r: -3 },
-            { q: 9, r: 10 },
-            { q: 19, r: 5 },
+            { q: 0, r: -9 },
+            { q: 9, r: -5 },
+            { q: 0, r: 9 },
+            { q: -9, r: 5 },
         ],
     }),
     // Cartes personnalisées dessinées via l'outil ASCII (voir customMaps.js).

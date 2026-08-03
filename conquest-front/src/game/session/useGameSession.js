@@ -6,7 +6,7 @@
 // Le mode ONLINE a sa propre session (`useOnlineSession`, socket.io) de MÊME
 // forme : GameLayout consomme indifféremment l'une ou l'autre (injectée en prop).
 
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useSyncExternalStore } from 'react';
 import { gameReducer } from '@conquest/shared-engine/engine/reducer.js';
 import { createInitialState } from '@conquest/shared-engine/engine/board.js';
 import { deserializeState } from '@conquest/shared-engine/engine/serialize.js';
@@ -15,6 +15,7 @@ import { SET_MAP, RESET_GAME, endTurn } from '@conquest/shared-engine/engine/act
 import { restoreTurnStart } from '@conquest/shared-engine/engine/turnReset.js';
 import { runBotTurn, isBotTurn } from '@conquest/shared-engine/engine/bot/index.js';
 import { startRecording, recordAction, recordResetTurn } from './recorder.js';
+import { getBotDelay, subscribeBotDelay } from './botSpeed.js';
 
 // Règle PURE partagée : ce client peut-il agir ? En hotseat (`localPlayerId ==
 // null`), c'est vrai quand le joueur actif est un humain (jamais pendant le
@@ -43,22 +44,53 @@ export function isLocalPlayerTurn(state, localPlayerId) {
 // (le fameux « le bot joue 2× » quand il commence). L'état du jeu étant immuable,
 // chaque tour est un objet `state` distinct : la comparaison par référence suffit,
 // et un nouvel objet (nouveau tour, nouvelle partie) relance bien le bot.
+//
+// RYTHME : le tour est d'abord CALCULÉ en entier (le miroir suffit, le bot n'a
+// besoin d'aucun rendu), puis les coups sont dispatchés un par un toutes les
+// `botDelay` millisecondes — c'est ce qui rend chaque coup observable (cf.
+// `botSpeed.js`). À délai nul on retombe exactement sur l'ancien comportement :
+// tout est appliqué dans la foulée, sans minuterie.
 function useLocalBotDriver(state, dispatch) {
     const { turn, activePlayerId, status } = state;
     const playedState = useRef(null);
+    // Lu au moment où le tour démarre : changer la jauge en plein tour de bot
+    // n'en modifie pas le rythme, elle vaut pour le tour suivant.
+    const botDelay = useSyncExternalStore(subscribeBotDelay, getBotDelay, getBotDelay);
+    const delayRef = useRef(botDelay);
+    delayRef.current = botDelay;
     useEffect(() => {
         if (status !== 'playing' || !isBotTurn(state)) return;
         if (playedState.current === state) return; // même état déjà joué (double invocation StrictMode)
         playedState.current = state;
         let mirror = state;
+        const moves = [];
         runBotTurn(state, (action) => {
             const next = gameReducer(mirror, action);
             if (next === mirror) return null; // action refusée : rien n'a bougé
             mirror = next;
-            dispatch(action);
+            moves.push(action);
             return next;
         });
-        dispatch(endTurn());
+        moves.push(endTurn());
+
+        const delay = delayRef.current;
+        if (delay <= 0) {
+            moves.forEach(dispatch);
+            return;
+        }
+        let i = 0;
+        let timer = setTimeout(function step() {
+            dispatch(moves[i++]);
+            if (i < moves.length) timer = setTimeout(step, delay);
+        }, delay);
+        return () => {
+            clearTimeout(timer);
+            // La séquence est interrompue avant la fin : on lève la garde pour
+            // que le prochain montage la rejoue depuis le MÊME état (le cas
+            // normal est la double invocation de StrictMode, où le nettoyage
+            // annulerait sinon définitivement le tour du bot).
+            if (i < moves.length) playedState.current = null;
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [turn, activePlayerId, status, dispatch]);
 }

@@ -6,15 +6,19 @@ import { useMemo } from 'react';
 import { getMapById } from '@conquest/shared-engine/data/maps.js';
 import { playersForMap } from '@conquest/shared-engine/data/players.js';
 import { hexId } from '@conquest/shared-engine/data/hex.js';
-import { mapBackground, terrainColors } from '@conquest/shared-engine/data/terrain.js';
+import {
+    mapBackground,
+    mapBackgroundImage,
+    terrainColors,
+} from '@conquest/shared-engine/data/terrain.js';
 import { buildGeometry } from '@conquest/shared-engine/render/geometry.js';
 
 // Cartes proposées en ligne, dans l'ordre du sélecteur.
-export const ONLINE_MAP_IDS = ['duel', 'vallee', 'continent', 'archipel'];
+export const ONLINE_MAP_IDS = ['duel', 'vallee', 'continent'];
 
 // Aperçu statique d'une carte : terrains et points de départ numérotés.
 const MapPreview = ({ mapId, spawnInfo }) => {
-    const { map, geo, players, colors, background } = useMemo(() => {
+    const { map, geo, players, colors, background, backgroundImage } = useMemo(() => {
         const selectedMap = getMapById(mapId);
         return {
             map: selectedMap,
@@ -22,6 +26,7 @@ const MapPreview = ({ mapId, spawnInfo }) => {
             players: playersForMap(selectedMap),
             colors: terrainColors(selectedMap),
             background: mapBackground(selectedMap),
+            backgroundImage: mapBackgroundImage(selectedMap),
         };
     }, [mapId]);
 
@@ -31,12 +36,24 @@ const MapPreview = ({ mapId, spawnInfo }) => {
     return (
         <svg
             className="map-preview__svg"
-            style={{ background }}
+            style={{ backgroundColor: background }}
             viewBox={`${base.x} ${base.y} ${base.w} ${base.h}`}
             preserveAspectRatio="xMidYMid meet"
             role="img"
             aria-label={`Aperçu de la carte ${map.name}`}
         >
+            {/* Décor de la carte, cadré comme dans la partie (même rectangle
+                `base`) : l'aperçu montre exactement l'ambiance du plateau. */}
+            {backgroundImage && (
+                <image
+                    href={backgroundImage}
+                    x={base.x}
+                    y={base.y}
+                    width={base.w}
+                    height={base.h}
+                    preserveAspectRatio="xMidYMid slice"
+                />
+            )}
             {cells.map((cell) => (
                 <polygon
                     key={cell.id}

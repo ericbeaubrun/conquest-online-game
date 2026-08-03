@@ -15,7 +15,11 @@ import {isAffinityItem, isSacrificeItem} from '@conquest/shared-engine/data/item
 import {canReceiveAffinity, canReceiveSacrifice} from '@conquest/shared-engine/data/soldier.js';
 import {buildGeometry} from '@conquest/shared-engine/render/geometry.js';
 import {getMapById} from '@conquest/shared-engine/data/maps.js';
-import {mapBackground, terrainColors} from '@conquest/shared-engine/data/terrain.js';
+import {
+    mapBackground,
+    mapBackgroundImage,
+    terrainColors,
+} from '@conquest/shared-engine/data/terrain.js';
 import {computeReachable} from '@conquest/shared-engine/engine/selectors.js';
 import {
     moveSoldier,
@@ -100,11 +104,16 @@ const HexBoard = ({
     const board = useMemo(() => getLogicalBoard(mapId), [mapId]);
     const {cells, cellMap, base, baseCells} = useMemo(() => buildGeometry(mapId), [mapId]);
 
-    // Palette d'ambiance de la carte : couleurs de terrain et fond du plateau,
-    // paramétrables carte par carte (défauts communs si non définis).
-    const {tileColors, background} = useMemo(() => {
+    // Palette d'ambiance de la carte : couleurs de terrain, fond du plateau et
+    // image de fond éventuelle, paramétrables carte par carte (défauts communs
+    // si non définis).
+    const {tileColors, background, backgroundImage} = useMemo(() => {
         const map = getMapById(mapId);
-        return {tileColors: terrainColors(map), background: mapBackground(map)};
+        return {
+            tileColors: terrainColors(map),
+            background: mapBackground(map),
+            backgroundImage: mapBackgroundImage(map),
+        };
     }, [mapId]);
 
     // Couleur par joueur (stable par carte) pour la couche territoire.
@@ -277,7 +286,16 @@ const HexBoard = ({
     const dimIds = activeSoldier ? activeCellIds : selectedItem ? placeableIds : null;
 
     return (
-        <div className="hex-board" style={{borderColor: colors[activePlayerId], background}}>
+        <div
+            className="hex-board"
+            style={{
+                borderColor: colors[activePlayerId],
+                // Couleur unie du plateau : elle reste seule si la carte n'a pas
+                // d'image, ou si le fichier ne charge pas (l'image est dans le
+                // SVG ci-dessous, elle ne masque rien tant qu'elle n'est pas là).
+                backgroundColor: background,
+            }}
+        >
             <svg
                 ref={svgRef}
                 className={`hex-board__svg${cameraEnabled ? '' : ' hex-board__svg--embedded'}`}
@@ -295,6 +313,21 @@ const HexBoard = ({
                     translate/scale pendant un geste, pour éviter de toucher au
                     `viewBox` (qui re-rastérise tout le plateau). */}
                 <g ref={contentRef} className="hex-board__content">
+                {/* Décor de la carte, posé DANS le repère du monde : couvrant
+                    exactement l'emprise du plateau (`base`), il se déplace et
+                    grossit avec les cases au lieu de rester collé à l'écran.
+                    `slice` remplit ce rectangle sans déformer l'image. */}
+                {backgroundImage && (
+                    <image
+                        className="hex-board__backdrop"
+                        href={backgroundImage}
+                        x={base.x}
+                        y={base.y}
+                        width={base.w}
+                        height={base.h}
+                        preserveAspectRatio="xMidYMid slice"
+                    />
+                )}
                 <Tiles cells={cells} terrainColors={tileColors}/>
                 <Territory cells={cells} ownership={ownership} colors={colors}/>
                 {/* Ces deux couches montent elles-mêmes leurs groupes (remplissage

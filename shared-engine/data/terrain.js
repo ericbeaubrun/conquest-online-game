@@ -31,6 +31,9 @@ export const DEFAULT_BACKGROUND = '#14171d';
 // pour se donner une ambiance propre (carte désertique, nocturne, volcanique…).
 // Les clés absentes retombent sur les couleurs par défaut ci-dessus : une carte
 // n'a jamais besoin de redéclarer toute la palette.
+//
+// `palette.backgroundImage` (facultatif) ajoute par-dessus la couleur de fond
+// une image décorative derrière le plateau — voir `mapBackgroundImage`.
 
 // Couleurs de terrain effectives d'une carte (défauts + surcharges éventuelles).
 export function terrainColors(map) {
@@ -40,6 +43,17 @@ export function terrainColors(map) {
 // Couleur de fond effective d'une carte.
 export function mapBackground(map) {
     return map?.palette?.background || DEFAULT_BACKGROUND;
+}
+
+// Image de fond d'une carte : chemin servi par le front (fichier posé dans
+// `conquest-front/public/`, ex. '/backgrounds/duel.png'), ou `null`.
+//
+// Purement décoratif. Le front la pose DANS le plateau, sous les cases et dans
+// le repère du monde : elle se déplace et grossit avec la carte, comme un
+// décor du terrain et non comme un fond d'écran. La couleur de fond reste
+// dessous et prend seule le relais si le fichier manque ou ne charge pas.
+export function mapBackgroundImage(map) {
+    return map?.palette?.backgroundImage || null;
 }
 
 // Terrains sur lesquels on ne peut pas poser d'unité.
