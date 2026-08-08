@@ -16,30 +16,14 @@ const HomePage = ({ onPlayOffline, onPlayOnline }) => {
         targetY: 0,
         frame: null,
         element: null,
-        reduceMotion: false,
     });
     const guardianMotion = useRef(null);
     const conquerorMotion = useRef(null);
 
     useEffect(() => {
         const motion = heroMotion.current;
-        const media = window.matchMedia('(prefers-reduced-motion: reduce)');
-        const syncPreference = () => {
-            motion.reduceMotion = media.matches;
-            if (media.matches) {
-                motion.currentX = 0;
-                motion.currentY = 0;
-                motion.targetX = 0;
-                motion.targetY = 0;
-                if (motion.element) applyHeroMotion(motion.element, 0, 0);
-            }
-        };
-
-        syncPreference();
-        media.addEventListener('change', syncPreference);
 
         return () => {
-            media.removeEventListener('change', syncPreference);
             if (motion.frame != null) cancelAnimationFrame(motion.frame);
         };
     }, []);
@@ -113,11 +97,8 @@ const HomePage = ({ onPlayOffline, onPlayOnline }) => {
     const handleHeroMouseMove = (event) => {
         const motion = heroMotion.current;
         const bounds = event.currentTarget.getBoundingClientRect();
-        const motionScale = motion.reduceMotion ? 0.22 : 1;
-        motion.targetX =
-            (((event.clientX - bounds.left) / bounds.width) * 2 - 1) * motionScale;
-        motion.targetY =
-            (((event.clientY - bounds.top) / bounds.height) * 2 - 1) * motionScale;
+        motion.targetX = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+        motion.targetY = ((event.clientY - bounds.top) / bounds.height) * 2 - 1;
         motion.element = event.currentTarget;
         requestHeroMotionFrame();
     };

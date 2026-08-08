@@ -457,22 +457,3 @@ $stroke_width_4: 5;
     transform: translateY(6px);
   }
 }
-
-// Préférence « moins d'animations ». On ne coupe QUE le vrai mouvement : les
-// ondes et le rebond du chevron de la case sélectionnée, seuls effets qui
-// déplacent quelque chose à l'écran. Les ondes sont alors masquées plutôt que
-// figées : arrêtées en cours de course, elles laisseraient un anneau fantôme
-// décentré autour de la case. Le contour et le chevron, eux, portent à eux
-// seuls toute l'information. Les battements d'opacité sont conservés — une
-// variation d'opacité ne déplace rien et ne présente pas de risque vestibulaire,
-// alors qu'elle porte ici une information de jeu (quelles cases sont jouables,
-// quels soldats n'ont pas encore agi). Les couper rendait le plateau inerte.
-@media (prefers-reduced-motion: reduce) {
-  .hex__selected-wave {
-    display: none;
-  }
-
-  .hex__selected-cursor {
-    animation: none;
-  }
-}

@@ -691,13 +691,3 @@ $wiki-coin: #f2c45b;
         }
     }
 }
-
-@media (prefers-reduced-motion: reduce) {
-    .wiki *,
-    .wiki *::before,
-    .wiki *::after {
-        scroll-behavior: auto !important;
-        animation: none !important;
-        transition-duration: 0.01ms !important;
-    }
-}

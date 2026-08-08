@@ -191,12 +191,3 @@ $rules-gold: #6385aa;
     }
 
 }
-
-@media (prefers-reduced-motion: reduce) {
-    .home-rules *,
-    .home-rules *::before,
-    .home-rules *::after {
-        scroll-behavior: auto !important;
-        transition-duration: 0.01ms !important;
-    }
-}

@@ -3403,26 +3403,3 @@ $blue: #3f7fd8;
         }
     }
 }
-
-@media (prefers-reduced-motion: reduce) {
-    .home-screen *,
-    .home-screen *::before,
-    .home-screen *::after {
-        scroll-behavior: auto !important;
-        animation: none !important;
-        transition-duration: 0.01ms !important;
-    }
-
-    // Une pulsation colorée conserve la signature du titre sans déplacement.
-    .home-screen .home-hero__title span {
-        animation: home-hero-letter-glow 4.4s ease-in-out infinite !important;
-        animation-delay: calc(var(--letter-index) * 120ms) !important;
-    }
-
-    // La conquête du fond reste lisible comme un déplacement, même lorsque
-    // les animations décoratives sont réduites.
-    .home-screen .home-hero__duality::before {
-        transition-duration: 950ms !important;
-    }
-
-}

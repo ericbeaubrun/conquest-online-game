@@ -590,12 +590,3 @@ $demo-muted: #929baa;
     }
 
 }
-
-@media (prefers-reduced-motion: reduce) {
-    .demo-showcase *,
-    .demo-showcase *::before,
-    .demo-showcase *::after {
-        animation: none !important;
-        transition: none !important;
-    }
-}
