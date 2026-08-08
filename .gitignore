@@ -17,6 +17,4 @@ npm-debug.log*
 /conquest-back/.env
 
 # AI
-CLAUDE.md
-AGENTS.md
 .claude
