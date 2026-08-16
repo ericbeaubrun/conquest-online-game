@@ -45,7 +45,13 @@
 // vérification de tour à partir de `state.activePlayerId`.
 export {gameReducer} from '@conquest/shared-engine/engine/reducer.js';
 export {createInitialState} from '@conquest/shared-engine/engine/board.js';
-export {serializeState, deserializeState} from '@conquest/shared-engine/engine/serialize.js';
+export {
+    serializeState,
+    deserializeState,
+    // Format de DIFFUSION allégé (l'état privé de ce que le client possède
+    // déjà) : réservé au fil socket.io, jamais à la persistance.
+    serializeStateWire,
+} from '@conquest/shared-engine/engine/serialize.js';
 export {randomSeed} from '@conquest/shared-engine/engine/rng.js';
 // Retour au début de tour : restitution PURE d'un instantané, calculée à
 // l'identique par le client (application optimiste) et par le serveur (autorité).

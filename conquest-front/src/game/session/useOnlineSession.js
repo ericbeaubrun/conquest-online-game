@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import { deserializeState } from '@conquest/shared-engine/engine/serialize.js';
+import { deserializeState, mergeStateWire } from '@conquest/shared-engine/engine/serialize.js';
 import { gameReducer } from '@conquest/shared-engine/engine/reducer.js';
 import { restoreTurnStart } from '@conquest/shared-engine/engine/turnReset.js';
 
@@ -47,6 +47,10 @@ export function useOnlineSession() {
     // à reprendre. `null` = aucun choix en attente (salle d'attente, ou déjà placé).
     const [seatOptions, setSeatOptions] = useState(null);
     const serverStateRef = useRef(null); // dernier état reçu du serveur (autorité), pour rollback
+    // Dernier état SÉRIALISÉ complet reçu : base de reconstruction des diffusions
+    // allégées (le serveur omet les champs constants de la partie et l'historique
+    // statistique tant qu'il n'a pas bougé — voir `serializeStateWire`).
+    const wireBaseRef = useRef(null);
     // Point de retour du tour courant, pris sur les états FAISANT AUTORITÉ (jamais
     // sur un état optimiste). Le serveur garde le sien — seul valable — ; celui-ci
     // ne sert qu'à afficher la restitution sans attendre l'aller-retour.
@@ -90,21 +94,31 @@ export function useOnlineSession() {
             setSeatOptions(null);
             setGameState(null);
             serverStateRef.current = null;
+            wireBaseRef.current = null; // plus de partie : la base de reconstruction est caduque
             turnStartRef.current = null;
             setTurnDirty(false);
             socket.emit('lobby:list');
         });
-        socket.on('lobby:update', ({ code, status, mapId, settings, hostMemberId, seats, autosave, savePassword }) => {
+        // `hasPassword` (et non le mot de passe) : le serveur ne renvoie jamais
+        // le secret lui-même, seulement l'information « une protection existe ».
+        socket.on('lobby:update', ({ code, status, mapId, settings, hostMemberId, seats, autosave, hasPassword }) => {
             setLobby((prev) =>
                 prev && prev.code === code
-                    ? { ...prev, status, mapId, settings, hostMemberId, seats, autosave, savePassword }
+                    ? { ...prev, status, mapId, settings, hostMemberId, seats, autosave, hasPassword }
                     : prev
             );
         });
         // État serveur = autorité. Il remplace tout état optimiste local et sert
         // de point de retour en cas de coup refusé.
         socket.on('game:state', (raw) => {
-            const s = deserializeState(raw);
+            // Diffusion allégée : on la recompose avec la base déjà connue. Sans
+            // base utilisable, `mergeStateWire` renvoie null et on IGNORE le
+            // message — un plateau amputé de sa carte ou de ses joueurs serait
+            // pire qu'une diffusion manquée (la suivante rétablira l'affichage).
+            const full = mergeStateWire(raw, wireBaseRef.current);
+            if (!full) return;
+            wireBaseRef.current = full;
+            const s = deserializeState(full);
             serverStateRef.current = s;
             // Nouveau tour (la main a changé) ou nouvelle partie (le compteur de
             // tours est reparti) : cet état devient le point de retour. Sinon on
@@ -147,6 +161,7 @@ export function useOnlineSession() {
         setSeatOptions(null);
         setGameState(null);
         serverStateRef.current = null;
+        wireBaseRef.current = null; // plus de partie : la base de reconstruction est caduque
         turnStartRef.current = null;
         setTurnDirty(false);
         socketRef.current?.emit('lobby:leave');

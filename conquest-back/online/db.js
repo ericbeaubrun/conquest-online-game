@@ -33,6 +33,16 @@ export async function connectDb() {
     db = client.db(DB_NAME);
     // Index pour lister rapidement les parties ouvertes, plus récentes d'abord.
     await db.collection('lobbies').createIndex({status: 1, updatedAt: -1});
+    // Purge automatique des parties INERTES. L'échéance est portée par le
+    // document (`expiresAt`, posée par `lobbyStore` quand une partie devient
+    // 'over' ou 'saved') plutôt que par l'index : MongoDB refuse deux index TTL
+    // sur la même clé ne différant que par leur filtre partiel, on ne pourrait
+    // donc pas donner deux durées distinctes autrement. `expireAfterSeconds: 0`
+    // signifie « expire à la date inscrite ». Un document sans `expiresAt` (ou
+    // à `null`) est ignoré par le TTL : une partie vivante ne s'efface jamais.
+    await db
+        .collection('lobbies')
+        .createIndex({expiresAt: 1}, {expireAfterSeconds: 0, name: 'ttl_expiresAt'});
     // eslint-disable-next-line no-console
     console.log(`MongoDB connecté : ${SAFE_URI} (base « ${DB_NAME} »)`);
     return db;

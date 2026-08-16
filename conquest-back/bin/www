@@ -26,7 +26,31 @@ app.set('port', port);
  */
 
 const server = http.createServer(app);
-const io = new SocketIOServer(server, { cors: { origin: '*' } });
+const io = new SocketIOServer(server, {
+    cors: { origin: '*' },
+    // Compression des messages WebSocket. DÉSACTIVÉE par défaut en socket.io v4,
+    // alors que l'état de jeu diffusé est du JSON très répétitif : mesuré à
+    // −95 % de volume sortant sur une partie complète, et −99 % combinée à
+    // l'allègement du payload (voir `serializeStateWire`).
+    //
+    // Le gain tient à deux choses qu'il ne faut PAS « optimiser » :
+    //  - la fenêtre de 32 Ko par défaut (`windowBits: 15`). La réduire pour
+    //    économiser de la mémoire annule presque tout le bénéfice : un état
+    //    pèse ~36 Ko, donc avec une fenêtre plus petite le message précédent
+    //    sort de portée et ne sert plus de dictionnaire (mesuré : 0,33 Mo
+    //    contre 3,3 Mo par partie).
+    //  - la conservation du contexte entre messages, que ws négocie par défaut.
+    //
+    // Contrepartie assumée : ~256 Ko de contexte zlib PAR CONNEXION. C'est un
+    // coût borné par le nombre de joueurs simultanés (et non par le temps),
+    // contrairement aux fuites corrigées par ailleurs. `threshold` évite de
+    // compresser les petits messages de lobby, où le calcul ne se rentabilise pas.
+    perMessageDeflate: {
+        threshold: 1024,
+        concurrencyLimit: 10,
+        zlibDeflateOptions: { level: 6, chunkSize: 16 * 1024 },
+    },
+});
 attachGameServer(io);
 
 /**

@@ -18,6 +18,7 @@
 //    L'hôte est identifié par son membre, PAS par un siège : il peut donc changer
 //    de position sans perdre ses droits.
 
+import { scrypt, randomBytes, timingSafeEqual } from 'node:crypto';
 import { lobbiesCol } from './db.js';
 import {
     createInitialState,
@@ -58,6 +59,62 @@ function firstFreeColor(entry, preferred, opts) {
     return PALETTE_VALUES.find((c) => !used.has(c)) || preferred || PALETTE_VALUES[0];
 }
 
+// --- Mot de passe de sauvegarde : dérivation scrypt ---
+// Il n'est JAMAIS stocké en clair : la base ne contient qu'une empreinte salée,
+// de sorte qu'une fuite du dump n'expose pas un secret que les joueurs
+// réemploient volontiers ailleurs.
+//
+// On emploie la forme ASYNCHRONE de `crypto.scrypt`, qui s'exécute sur le pool
+// de threads de libuv : la boucle d'évènements reste libre pendant les ~100 ms
+// de dérivation. `scryptSync` gèlerait le serveur entier à chaque saisie —
+// exactement le défaut qu'on s'emploie à corriger ailleurs.
+//
+// Format stocké, auto-descriptif pour permettre de durcir les paramètres plus
+// tard sans invalider l'existant : `scrypt$N$r$p$sel$empreinte` (base64).
+const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
+
+const deriveKey = (password, salt, { N, r, p, keylen }) =>
+    new Promise((resolve, reject) => {
+        // `maxmem` : la valeur par défaut (32 Mio) est juste en dessous de ce que
+        // demande N=16384, r=8 — sans ce relèvement, scrypt échoue.
+        scrypt(password, salt, keylen, { N, r, p, maxmem: 64 * 1024 * 1024 }, (err, key) =>
+            err ? reject(err) : resolve(key)
+        );
+    });
+
+// Empreinte d'un mot de passe. Chaîne vide -> `null` (aucune protection).
+export async function hashSavePassword(password) {
+    const clear = String(password ?? '').slice(0, 64);
+    if (!clear) return null;
+    const salt = randomBytes(16);
+    const key = await deriveKey(clear, salt, SCRYPT);
+    const { N, r, p } = SCRYPT;
+    return `scrypt$${N}$${r}$${p}$${salt.toString('base64')}$${key.toString('base64')}`;
+}
+
+// Comparaison à temps CONSTANT : une comparaison de chaînes ordinaire s'arrête
+// au premier caractère différent et divulgue donc la longueur du préfixe correct.
+function sameBytes(a, b) {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    // `timingSafeEqual` exige des longueurs égales : on les compare d'abord,
+    // ce qui ne révèle que la longueur — jamais le contenu.
+    if (bufA.length !== bufB.length) return false;
+    return timingSafeEqual(bufA, bufB);
+}
+
+// Un mot de passe correspond-il à une empreinte stockée ?
+async function matchesHash(stored, password) {
+    const [tag, N, r, p, salt, key] = String(stored).split('$');
+    if (tag !== 'scrypt') return false;
+    const derived = await deriveKey(
+        String(password ?? ''),
+        Buffer.from(salt, 'base64'),
+        { N: Number(N), r: Number(r), p: Number(p), keylen: Buffer.from(key, 'base64').length }
+    );
+    return sameBytes(derived, Buffer.from(key, 'base64'));
+}
+
 // Cache mémoire : code -> entrée vive.
 const cache = new Map();
 
@@ -84,6 +141,46 @@ async function uniqueCode() {
 // événements à ne pas perdre (fin de partie). La banque ne bloque plus le jeu.
 const PERSIST_DELAY = 1000;
 const persistTimers = new Map(); // code -> timeout en attente
+
+// --- Rétention des parties inertes (date d'expiration portée par le document) ---
+// MongoDB REFUSE deux index TTL sur la même clé qui ne diffèrent que par leur
+// filtre partiel : on ne peut donc pas donner une durée à 'over' et une autre à
+// 'saved' via deux index. On porte donc l'échéance dans le document lui-même
+// (`expiresAt`), avec un unique index TTL à `expireAfterSeconds: 0` (voir
+// `db.js`) : chaque partie décide de sa propre durée de vie, et un document
+// SANS `expiresAt` (partie vivante) n'expire jamais.
+const OVER_TTL_MS = 24 * 60 * 60 * 1000; // partie TERMINÉE : 24 h
+const SAVED_TTL_MS = 30 * 24 * 60 * 60 * 1000; // partie SAUVEGARDÉE : 30 jours
+const expiryFromNow = (ms) => new Date(Date.now() + ms);
+
+// --- Plafond du cache mémoire ---
+// Garde-fou générique, indépendant des statuts : même si un nouveau statut
+// oubliait un jour de libérer son entrée (c'est très exactement ce qui est
+// arrivé à 'over' et 'saved'), la mémoire resterait bornée.
+const MAX_CACHED_LOBBIES = 50;
+
+// Évince les entrées INERTES les plus anciennes tant que le cache dépasse son
+// plafond. On ne touche JAMAIS à une salle peuplée : sa présence (`members`,
+// `hostMemberId`) n'est pas persistée, l'évincer déconnecterait ses joueurs.
+function trimCache() {
+    if (cache.size <= MAX_CACHED_LOBBIES) return;
+    for (const [code, e] of cache) {
+        if (cache.size <= MAX_CACHED_LOBBIES) break;
+        if (e.members.size > 0) continue; // salle vivante : présence non persistée
+        if (persistTimers.has(code)) continue; // écriture en attente : on la laisse au flush
+        cache.delete(code);
+    }
+}
+
+// Écritures de CONFIGURATION de salle d'attente (carte, réglages, identité,
+// ordre des sièges, type/difficulté d'un siège). Elles forçaient toutes
+// `immediate: true`, ce qui court-circuitait la fenêtre de regroupement
+// précisément sur les évènements qu'un client peut répéter le plus vite : une
+// écriture MongoDB par frappe de clavier dans le champ « nom ». Elles passent
+// donc par la coalescence normale — perdre au pire une seconde de réglages
+// d'avant-partie sur un redémarrage n'a aucune conséquence, contrairement à une
+// fin de partie (qui, elle, reste immédiate).
+const persistConfig = (entry) => schedulePersist(entry);
 
 // Écrit maintenant, sans bloquer l'appelant (fire-and-forget + log d'erreur).
 function flushPersist(entry) {
@@ -129,12 +226,39 @@ async function persist(entry) {
                 // jusqu'à la fin de son tour.
                 turnStart: entry.turnStart ? serializeState(entry.turnStart) : null,
                 autosave: entry.autosave,
-                savePassword: entry.savePassword,
+                // Empreinte scrypt uniquement. `savePassword` est remis à null :
+                // c'est ce qui EFFACE le mot de passe en clair des documents
+                // enregistrés avant le hachage, dès leur première réécriture.
+                savePasswordHash: entry.savePasswordHash,
+                savePassword: null,
                 emptiedAt: entry.emptiedAt,
+                // Échéance de purge automatique (index TTL). `null` sur une
+                // partie vivante = conservée indéfiniment.
+                expiresAt: entry.expiresAt,
                 updatedAt: new Date(),
             },
         }
     );
+}
+
+// Retire une entrée du cache MÉMOIRE sans rien supprimer en base : la partie
+// reste intégralement récupérable via `getLobby`, qui la rechargera depuis
+// MongoDB. À appeler dès qu'une salle se vide, quel que soit son statut — sans
+// quoi l'état vif (Map/Set du plateau, ~100 Ko avec son `turnStart`) d'une
+// partie que plus personne ne joue resterait résident jusqu'au redémarrage.
+export async function evictLobby(entry) {
+    // Une écriture différée encore en attente = des changements pas encore en
+    // base : on la force AVANT d'oublier l'entrée, sinon ils seraient perdus.
+    const t = persistTimers.get(entry.code);
+    if (t) {
+        clearTimeout(t);
+        persistTimers.delete(entry.code);
+        await persist(entry).catch((e) => {
+            // eslint-disable-next-line no-console
+            console.error(`[persist] échec pour '${entry.code}':`, e.message || e);
+        });
+    }
+    cache.delete(entry.code);
 }
 
 // Construit une entrée vive à partir d'un document Mongo.
@@ -156,8 +280,17 @@ function entryFromDoc(doc) {
         members: new Map(), // memberId -> { name, color }
         hostMemberId: null,
         autosave: doc.autosave !== false, // défaut : activé
-        savePassword: doc.savePassword || '',
+        savePasswordHash: doc.savePasswordHash || null,
+        // HÉRITAGE : parties enregistrées avant le hachage, dont le mot de passe
+        // est encore en clair en base. On continue de les accepter, et la
+        // première vérification réussie les convertit en empreinte (voir
+        // `checkSavePassword`) — sans quoi ces sauvegardes deviendraient
+        // irrécupérables pour leurs propriétaires.
+        legacyPassword: doc.savePassword || '',
         emptiedAt: doc.emptiedAt || null,
+        // Parties enregistrées avant l'ajout de la purge automatique : sans
+        // échéance (elles en recevront une en devenant 'over' ou 'saved').
+        expiresAt: doc.expiresAt || null,
     };
 }
 
@@ -191,10 +324,15 @@ export async function createLobby({ mapId, settings = {}, name } = {}) {
         // protégée par un mot de passe optionnel. `emptiedAt` = date/heure du dernier
         // départ (quand plus aucun joueur n'est présent).
         autosave: true,
-        savePassword: '',
+        savePasswordHash: null,
+        legacyPassword: '',
         emptiedAt: null,
+        // Échéance de purge : posée seulement quand la partie devient inerte
+        // (terminée ou sauvegardée). Une partie vivante ne s'efface jamais.
+        expiresAt: null,
     };
     cache.set(code, entry);
+    trimCache();
     await lobbiesCol().insertOne({
         _id: code,
         name: entry.name,
@@ -205,8 +343,9 @@ export async function createLobby({ mapId, settings = {}, name } = {}) {
         seats: entry.seats,
         state: null,
         autosave: entry.autosave,
-        savePassword: entry.savePassword,
+        savePasswordHash: entry.savePasswordHash,
         emptiedAt: entry.emptiedAt,
+        expiresAt: entry.expiresAt,
         createdAt: new Date(),
         updatedAt: new Date(),
     });
@@ -221,6 +360,7 @@ export async function getLobby(code) {
     if (!doc) return null;
     const entry = entryFromDoc(doc);
     cache.set(code, entry);
+    trimCache();
     return entry;
 }
 
@@ -256,7 +396,13 @@ export async function listLobbies(limit = 30) {
             // quittée et si elle est protégée. Le mot de passe lui-même n'est JAMAIS
             // exposé dans la liste publique — seul l'indicateur `hasPassword`.
             savedAt: d.emptiedAt || null,
-            hasPassword: !!(d.savePassword && d.savePassword.length),
+            // L'entrée VIVE fait autorité quand elle existe (comme pour les
+            // sièges ci-dessus) : les réglages d'avant-partie étant persistés
+            // de façon différée, lire le document exposerait un indicateur en
+            // retard d'une seconde après que l'hôte a posé une protection.
+            hasPassword: live
+                ? hasSavePassword(live)
+                : !!(d.savePasswordHash || d.savePassword),
         };
     });
 }
@@ -266,7 +412,7 @@ export async function listLobbies(limit = 30) {
 // RE-DÉRIVE les sièges (leur nombre suit la capacité de la carte) : on préserve
 // l'occupation des sièges qui existent encore (p1..pN) et on libère ceux qui
 // disparaissent (leurs occupants redeviennent spectateurs). Persistance immédiate.
-export function configureLobby(entry, { mapId, settings, autosave, savePassword } = {}) {
+export async function configureLobby(entry, { mapId, settings, autosave, savePassword } = {}) {
     if (entry.status !== 'waiting') return entry; // partie déjà démarrée : figé
 
     if (mapId && mapId !== entry.mapId) {
@@ -293,9 +439,19 @@ export function configureLobby(entry, { mapId, settings, autosave, savePassword 
 
     if (settings && typeof settings === 'object') entry.settings = settings;
     if (typeof autosave === 'boolean') entry.autosave = autosave;
-    if (typeof savePassword === 'string') entry.savePassword = savePassword.slice(0, 64);
+    if (typeof savePassword === 'string') {
+        // La dérivation est lente À DESSEIN : deux saisies rapprochées peuvent
+        // donc se terminer dans le désordre. Un jeton de séquence garantit que
+        // seule la DERNIÈRE demande s'applique — sans lui, une frappe ancienne
+        // pourrait écraser le mot de passe finalement voulu.
+        const ticket = (entry.pwSeq = (entry.pwSeq || 0) + 1);
+        const hash = await hashSavePassword(savePassword);
+        if (entry.pwSeq !== ticket) return entry; // dépassée par une saisie plus récente
+        entry.savePasswordHash = hash;
+        entry.legacyPassword = ''; // toute redéfinition évacue l'ancien clair
+    }
 
-    schedulePersist(entry, { immediate: true });
+    persistConfig(entry);
     return entry;
 }
 
@@ -380,7 +536,7 @@ export function setMemberIdentity(entry, socketId, { name, color } = {}) {
             changed = true;
         }
     }
-    if (changed) schedulePersist(entry, { immediate: true });
+    if (changed) persistConfig(entry);
     return changed;
 }
 
@@ -411,6 +567,10 @@ export async function deleteLobby(entry) {
 export async function saveLobby(entry) {
     entry.status = 'saved';
     entry.emptiedAt = new Date();
+    // Une sauvegarde que personne ne reprend ne doit pas rester éternellement en
+    // base : elle s'efface d'elle-même passé SAVED_TTL_MS (voir l'index TTL dans
+    // `db.js`). Toute reprise remet le compteur à zéro (cf. `resumeLobby`).
+    entry.expiresAt = expiryFromNow(SAVED_TTL_MS);
     for (const seat of entry.seats) seat.assignedMemberId = null;
     await persist(entry);
     return entry;
@@ -422,15 +582,35 @@ export function resumeLobby(entry) {
     if (entry.status !== 'saved') return entry;
     entry.status = 'playing';
     entry.emptiedAt = null;
+    // IMPÉRATIF : lever l'échéance de purge, sinon la partie reprise s'effacerait
+    // en pleine session au terme de son ancien délai de sauvegarde.
+    entry.expiresAt = null;
     schedulePersist(entry, { immediate: true });
     return entry;
 }
 
-// Vérifie le mot de passe d'une partie sauvegardée. Un mot de passe vide côté
-// serveur = pas de protection (jointure libre).
-export function checkSavePassword(entry, password) {
-    if (!entry.savePassword) return true;
-    return String(password ?? '') === entry.savePassword;
+// Une partie est-elle protégée ? Source unique pour l'indicateur `hasPassword`
+// exposé aux clients — le secret lui-même ne sort jamais du serveur.
+export const hasSavePassword = (entry) => !!(entry.savePasswordHash || entry.legacyPassword);
+
+// Vérifie le mot de passe d'une partie sauvegardée. Aucune protection = jointure
+// libre. ASYNCHRONE : la dérivation scrypt s'exécute hors de la boucle
+// d'évènements (voir `deriveKey`).
+export async function checkSavePassword(entry, password) {
+    if (entry.savePasswordHash) return matchesHash(entry.savePasswordHash, password);
+
+    // HÉRITAGE : partie enregistrée avant le hachage. On compare le clair (à
+    // temps constant), puis on CONVERTIT immédiatement en empreinte — la
+    // sauvegarde reste accessible à son propriétaire, et son mot de passe
+    // disparaît de la base à la première reprise réussie.
+    if (entry.legacyPassword) {
+        if (!sameBytes(String(password ?? ''), entry.legacyPassword)) return false;
+        entry.savePasswordHash = await hashSavePassword(entry.legacyPassword);
+        entry.legacyPassword = '';
+        schedulePersist(entry, { immediate: true });
+        return true;
+    }
+    return true; // aucune protection
 }
 
 // Nombre de sièges « pourvus » : occupés par un humain OU marqués bot. C'est
@@ -450,7 +630,7 @@ export function setSeatKind(entry, playerId, kind) {
     seat.kind = kind;
     // En devenant bot, on lui garantit une difficulté par défaut.
     if (kind === 'bot') seat.botDifficulty = seat.botDifficulty || 'normal';
-    schedulePersist(entry, { immediate: true });
+    persistConfig(entry);
     return true;
 }
 
@@ -462,7 +642,7 @@ export function setBotDifficulty(entry, playerId, difficulty) {
     const seat = entry.seats.find((s) => s.playerId === playerId);
     if (!seat || seat.kind !== 'bot' || seat.botDifficulty === difficulty) return false;
     seat.botDifficulty = difficulty;
-    schedulePersist(entry, { immediate: true });
+    persistConfig(entry);
     return true;
 }
 
@@ -487,7 +667,7 @@ export function reorderSeat(entry, playerId, direction) {
     // La couleur suit l'occupant (pour un humain, elle reste de toute façon
     // neutre — sa vraie couleur est portée par son membre).
     [a.color, b.color] = [b.color, a.color];
-    schedulePersist(entry, { immediate: true });
+    persistConfig(entry);
     return true;
 }
 
@@ -548,6 +728,7 @@ export async function startLobby(entry) {
     // Premier tour : son point de retour est l'état initial lui-même.
     entry.turnStart = entry.state;
     entry.status = 'playing';
+    entry.expiresAt = null; // partie vivante : jamais purgée automatiquement
     await persist(entry);
     return entry;
 }
@@ -567,7 +748,13 @@ export function applyAction(entry, action) {
     if (next.activePlayerId !== entry.state.activePlayerId) entry.turnStart = next;
     entry.state = next;
     const gameOver = next.status === 'over' && entry.status !== 'over';
-    if (gameOver) entry.status = 'over';
+    if (gameOver) {
+        entry.status = 'over';
+        // Partie finie : plus personne n'y jouera. Elle reste consultable un
+        // temps (rejointure par code), puis l'index TTL l'efface — sans quoi
+        // chaque partie jouée laissait un document résident à jamais.
+        entry.expiresAt = expiryFromNow(OVER_TTL_MS);
+    }
     schedulePersist(entry, { immediate: gameOver });
     return next;
 }

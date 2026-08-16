@@ -68,23 +68,30 @@ const LobbyWaiting = ({
     }, [mySeat]);
 
     // Sauvegarde automatique (config hôte). L'activation est activée par défaut.
-    // Le mot de passe utilise un état LOCAL (frappe fluide), amorcé une fois depuis
-    // le lobby, puis diffusé au serveur à chaque frappe.
+    // Le mot de passe est un champ en ÉCRITURE SEULE : le serveur ne le renvoie
+    // jamais (il ne transmet que `hasPassword`), donc rien ne l'amorce ici. Le
+    // laisser vide ne l'efface pas — seule une frappe envoie une nouvelle valeur.
     const autosave = lobby?.autosave !== false;
     const [savePwDraft, setSavePwDraft] = useState("");
-    const pwSeeded = useRef(false);
-    useEffect(() => {
-        if (!pwSeeded.current && lobby) {
-            setSavePwDraft(lobby.savePassword || "");
-            pwSeeded.current = true;
-        }
-    }, [lobby]);
+    // Une protection existe-t-elle côté serveur ? (Le serveur n'envoie que cet
+    // indicateur, jamais le mot de passe.)
+    const hasPassword = !!lobby?.hasPassword;
+    // ...et l'hôte n'y a-t-il pas retouché ? Sert à le dire à l'écran plutôt que
+    // d'afficher un champ vide laissant croire qu'aucune protection n'existe.
+    const pwAlreadySet = hasPassword && savePwDraft === "";
     const changeAutosave = (v) => {
         if (isHost) onConfigure?.({ autosave: v });
     };
-    const changeSavePassword = (v) => {
-        setSavePwDraft(v);
-        if (isHost) onConfigure?.({ savePassword: v });
+    // La saisie reste LOCALE ; on ne transmet qu'à la validation (sortie du champ
+    // ou touche Entrée). Le serveur dérive une empreinte scrypt à chaque valeur
+    // reçue — volontairement coûteuse — : envoyer à chaque frappe lui ferait
+    // calculer autant d'empreintes que de caractères, toutes jetées sauf la
+    // dernière. `sentPw` évite aussi de renvoyer une valeur inchangée.
+    const sentPw = useRef(null);
+    const commitSavePassword = () => {
+        if (!isHost || sentPw.current === savePwDraft) return;
+        sentPw.current = savePwDraft;
+        onConfigure?.({ savePassword: savePwDraft });
     };
 
     const changeName = (v) => {
@@ -115,6 +122,7 @@ const LobbyWaiting = ({
         <div className="setup-screen setup-screen--online">
             <header className="setup-topbar">
                 <button type="button" className="menu-btn menu-btn--ghost" onClick={onBack}>
+                    <i className="menu-btn__back-icon" aria-hidden="true" />
                     Retour
                 </button>
                 <div className="setup-topbar__heading">
@@ -319,19 +327,34 @@ const LobbyWaiting = ({
                             <div className="setting__text">
                                 <span className="setting__label">Mot de passe</span>
                                 <span className="setting__help">
-                                    Demandé pour reprendre la partie sauvegardée (laisser vide =
-                                    aucun).
+                                    {isHost
+                                        ? pwAlreadySet
+                                            ? "Un mot de passe protège déjà cette partie. Saisir ici le remplace ; le champ vide le laisse inchangé."
+                                            : "Demandé pour reprendre la partie sauvegardée (laisser vide = aucun). Validé en quittant le champ."
+                                        : hasPassword
+                                          ? "Cette partie est protégée par un mot de passe, connu de l'hôte seul."
+                                          : "Aucun mot de passe : la partie sauvegardée sera librement reprenable."}
                                 </span>
                             </div>
                             <div className="setting__control">
                                 <input
                                     className="seat__input"
-                                    type="text"
+                                    // Mot de passe masqué à la frappe, et JAMAIS
+                                    // pré-rempli : le serveur ne le renvoie pas.
+                                    type="password"
+                                    autoComplete="new-password"
                                     maxLength={64}
                                     disabled={!isHost}
-                                    value={isHost ? savePwDraft : lobby?.savePassword || ""}
-                                    placeholder="(aucun)"
-                                    onChange={(e) => changeSavePassword(e.target.value)}
+                                    value={isHost ? savePwDraft : ""}
+                                    placeholder={hasPassword ? "(défini)" : "(aucun)"}
+                                    onChange={(e) => setSavePwDraft(e.target.value)}
+                                    onBlur={commitSavePassword}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            commitSavePassword();
+                                        }
+                                    }}
                                 />
                             </div>
                         </div>

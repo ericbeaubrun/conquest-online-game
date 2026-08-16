@@ -10,13 +10,20 @@
 //     'lobby:join'   { code, name?, color? }         rejoint une partie (siège libre) ou l'observe
 //     'lobby:leave'                                  quitte la salle et retourne à la liste
 //     'lobby:identity' { name?, color? }             modifie SON nom / SA couleur
-//     'lobby:configure' { code, mapId?, settings? }  (hôte) règle carte/paramètres avant le démarrage
-//     'lobby:reorder' { code, playerId, direction }  (hôte) échange une position avec sa voisine (up/down)
-//     'lobby:seatkind' { code, playerId, kind }      (hôte) bascule une place libre entre 'human'/'bot'
-//     'lobby:botdifficulty' { code, playerId, difficulty }  (hôte) change la difficulté d'un bot
-//     'lobby:start'  { code }                        (hôte) démarre la partie
+//     'lobby:configure' { mapId?, settings? }        (hôte) règle carte/paramètres avant le démarrage
+//     'lobby:reorder' { playerId, direction }        (hôte) échange une position avec sa voisine (up/down)
+//     'lobby:seatkind' { playerId, kind }            (hôte) bascule une place libre entre 'human'/'bot'
+//     'lobby:botdifficulty' { playerId, difficulty } (hôte) change la difficulté d'un bot
+//     'lobby:start'                                  (hôte) démarre la partie
 //     'game:action'  action                          joue une action de jeu
 //     'game:reset-turn'                              (joueur actif) recommence SON tour
+//
+//   SEUL 'lobby:join' désigne une salle par son `code` : partout ailleurs le
+//   serveur agit sur la salle COURANTE du socket et ignore un `code` reçu (le
+//   client peut donc continuer d'en envoyer un, il est sans effet).
+//
+//   Tous les évènements sont soumis à un plafond de débit par socket ; au-delà,
+//   le serveur répond 'lobby:error' / 'game:rejected' avec `reason: 'rate-limited'`.
 //   serveur -> client
 //     'lobby:list'    [ résumés ]
 //     'lobby:joined'  { code, memberId, playerId|null, lobby } (à l'émetteur qui rejoint)
@@ -26,7 +33,7 @@
 //     'game:state'    <état sérialisé>               (à toute la salle)
 //     'game:rejected' { reason, action? }            (au seul émetteur)
 
-import { serializeState } from './exportEngine.js';
+import { serializeState, serializeStateWire } from './exportEngine.js';
 import {
     createLobby,
     getLobby,
@@ -37,9 +44,11 @@ import {
     claimSpecificSeat,
     releaseSeat,
     deleteLobby,
+    evictLobby,
     saveLobby,
     resumeLobby,
     checkSavePassword,
+    hasSavePassword,
     seatSummary,
     setMemberIdentity,
     filledCount,
@@ -80,8 +89,32 @@ function broadcastLobby(io, entry) {
         hostMemberId: entry.hostMemberId,
         seats: seatSummary(entry),
         autosave: entry.autosave,
-        savePassword: entry.savePassword,
+        // Le mot de passe de sauvegarde n'est JAMAIS renvoyé — ni ici, ni dans
+        // 'lobby:joined'. Il protège la reprise de la partie contre les
+        // inconnus ; le diffuser à toute la salle le faisait connaître de
+        // quiconque l'avait rejointe une fois, ce qui le vidait de son sens.
+        // Seul l'INDICATEUR voyage, comme le fait déjà `listLobbies`.
+        hasPassword: hasSavePassword(entry),
     });
+}
+
+// Diffuse l'état de jeu à toute la salle en n'envoyant QUE ce qui a pu changer :
+// ni les champs constants de la partie, ni l'historique statistique tant qu'il
+// n'a pas grandi (voir `serializeStateWire`). Le client recompose l'état complet
+// à partir de sa base (voir `mergeStateWire`).
+//
+// `full: true` force la diffusion COMPLÈTE. Obligatoire au DÉMARRAGE : à ce
+// moment aucun client de la salle ne possède encore de base de reconstruction.
+// (Un joueur qui rejoint en cours de partie reçoit, lui, son état complet
+// individuellement dans `enterLobby`.)
+function emitState(io, entry, { full = false } = {}) {
+    const payload = full
+        ? serializeState(entry.state)
+        : serializeStateWire(entry.state, entry.wireStatsLen);
+    // Ce que la salle possède désormais, pour décider de la PROCHAINE diffusion.
+    // Purement transport : ce champ ne va ni en base ni sur le fil.
+    entry.wireStatsLen = entry.state.statsHistory?.length ?? 0;
+    io.to(entry.code).emit('game:state', payload);
 }
 
 // Réaligne `socket.data.playerId` (autorité serveur des actions de jeu) sur
@@ -104,6 +137,26 @@ function syncSocketSeats(io, entry) {
     }
 }
 
+// --- Limitation de débit, par socket ---
+// Aucun évènement n'était plafonné : un client pouvait enchaîner créations de
+// parties et changements de configuration aussi vite que le réseau le permet,
+// chacun déclenchant une écriture MongoDB. Fenêtre glissante volontairement
+// LARGE — un joueur humain tient environ une action par seconde, même en jouant
+// vite ; le plafond ne gêne donc que ce qui n'est pas un joueur.
+const RATE_MAX_EVENTS = 120;
+const RATE_WINDOW_MS = 10000;
+
+function rateLimited(socket) {
+    const now = Date.now();
+    const d = socket.data;
+    if (!d.rateStart || now - d.rateStart > RATE_WINDOW_MS) {
+        d.rateStart = now;
+        d.rateCount = 0;
+    }
+    d.rateCount += 1;
+    return d.rateCount > RATE_MAX_EVENTS;
+}
+
 // Fait entrer un socket dans un lobby et l'abonne à la salle. Facteur commun de
 // create et join.
 //  - Salle d'ATTENTE : on attribue automatiquement la 1re place libre (le joueur
@@ -111,7 +164,22 @@ function syncSocketSeats(io, entry) {
 //  - Partie EN COURS : on N'ATTRIBUE PAS de place ; le joueur devra CHOISIR sa
 //    couleur parmi les places libres (`seatOptions`) via un modal côté client.
 //    S'il n'y a aucune place libre, il rejoint en simple spectateur.
-function enterLobby(socket, entry, identity = {}) {
+async function enterLobby(io, socket, entry, identity = {}) {
+    // Un socket n'appartient qu'à UNE salle à la fois. Sans cette sortie
+    // préalable, `socket.join()` s'ajoutait à la précédente sans la quitter : le
+    // socket restait membre ET occupant d'un siège de l'ancienne partie (qui
+    // n'atteignait donc plus jamais « salle vide », n'était plus nettoyée, et
+    // gardait ce siège bloqué pour les autres), tout en continuant d'en recevoir
+    // toutes les diffusions.
+    if (socket.data.code && socket.data.code !== entry.code) {
+        await leaveCurrentLobby(io, socket, { leaveRoom: true });
+    } else if (socket.data.code === entry.code) {
+        // Ré-entrée dans la MÊME salle (re-jointure, reprise) : on libère
+        // d'abord ce qu'on y détenait, pour ne pas occuper deux places. Surtout
+        // pas `leaveCurrentLobby` ici — sur une salle dont on est le dernier
+        // membre, elle supprimerait la partie qu'on est en train de rejoindre.
+        releaseSeat(entry, socket.id);
+    }
     socket.data.code = entry.code;
     socket.join(entry.code);
     let playerId = null;
@@ -142,7 +210,7 @@ function enterLobby(socket, entry, identity = {}) {
             hostMemberId: entry.hostMemberId,
             seats: seatSummary(entry),
             autosave: entry.autosave,
-            savePassword: entry.savePassword,
+            hasPassword: hasSavePassword(entry), // jamais le mot de passe lui-même
         },
     });
     // Partie déjà en cours : envoie l'état courant au nouvel arrivant.
@@ -153,15 +221,30 @@ function enterLobby(socket, entry, identity = {}) {
 // Câblage d'un évènement 'lobby:*' portant sur un lobby EXISTANT. Factorise le
 // préambule que tous ces handlers partageaient mot pour mot : résolution du
 // lobby, gardes d'accès, et capture des erreurs en 'lobby:error'.
-//  - le code est lu dans le payload, à défaut sur le socket (salle courante), et
-//    normalisé (l'alphabet des codes est majuscule) ;
+//  - `anyCode` : le code est lu dans le PAYLOAD. Réservé à 'lobby:join', seul
+//    évènement qui a une raison légitime de désigner une salle où l'on n'est pas
+//    encore. Partout ailleurs le code est celui de la salle COURANTE du socket
+//    (`socket.data.code`) et le payload est ignoré : un client ne peut donc plus
+//    faire charger en cache une partie quelconque en devinant son code — la
+//    résolution précédait les gardes `hostOnly`/`waitingOnly`, si bien que même
+//    un refus laissait l'entrée résidente.
 //  - `hostOnly` : réservé à l'hôte ; `waitingOnly` : interdit une fois démarrée ;
 //  - le motif d'erreur reste `<évènement>-failed` (ex. 'join-failed'), tel que
 //    le client le libelle déjà.
-function onLobby(socket, event, handler, { hostOnly = false, waitingOnly = false } = {}) {
+function onLobby(
+    socket,
+    event,
+    handler,
+    { hostOnly = false, waitingOnly = false, anyCode = false } = {}
+) {
     socket.on(event, async (payload = {}) => {
         try {
-            const code = String(payload?.code || socket.data.code || '').toUpperCase();
+            if (rateLimited(socket)) {
+                socket.emit('lobby:error', { reason: 'rate-limited' });
+                return;
+            }
+            const raw = anyCode ? payload?.code || socket.data.code : socket.data.code;
+            const code = String(raw || '').toUpperCase();
             const entry = await getLobby(code);
             if (!entry) {
                 socket.emit('lobby:error', { reason: 'not-found' });
@@ -216,6 +299,13 @@ async function leaveCurrentLobby(io, socket, { leaveRoom = false } = {}) {
             } else if (entry.status === 'waiting' || entry.status === 'playing') {
                 await deleteLobby(entry);
             }
+            // Salle vide : on libère l'état vif (plateau désérialisé + point de
+            // retour) QUEL QUE SOIT le statut. Les deux branches ci-dessus ne
+            // couvraient ni 'over' ni 'saved', dont les entrées restaient donc
+            // résidentes jusqu'au redémarrage du serveur. Rien n'est perdu :
+            // ce qui doit survivre est en base, et `getLobby` recharge à la
+            // demande. Idempotent après `deleteLobby`.
+            await evictLobby(entry);
         } else {
             syncSocketSeats(io, entry);
             broadcastLobby(io, entry);
@@ -248,7 +338,7 @@ async function advanceBots(io, entry) {
             // tour impossible à calculer : on passe directement à la fin de tour
         }
         if (entry.state.status !== 'over') applyAction(entry, endTurn());
-        io.to(entry.code).emit('game:state', serializeState(entry.state));
+        emitState(io, entry);
         if (entry.state.status === 'over') {
             broadcastLobby(io, entry);
             break;
@@ -264,8 +354,15 @@ export function attachGameServer(io) {
         // --- Créer une partie ---
         socket.on('lobby:create', async ({ mapId, settings, name, color } = {}) => {
             try {
+                if (rateLimited(socket)) {
+                    socket.emit('lobby:error', { reason: 'rate-limited' });
+                    return;
+                }
                 const entry = await createLobby({ mapId, settings });
-                const playerId = enterLobby(socket, entry, { name, color });
+                // `enterLobby` quitte d'abord la salle précédente : une partie
+                // créée puis abandonnée se retrouve donc vide, et le nettoyage
+                // habituel la supprime. Créer en boucle n'accumule plus rien.
+                const playerId = await enterLobby(io, socket, entry, { name, color });
                 entry.hostMemberId = socket.id; // le créateur est l'hôte (stable)
                 syncSocketSeats(io, entry);
                 broadcastLobby(io, entry);
@@ -279,6 +376,10 @@ export function attachGameServer(io) {
         // --- Lister les parties ouvertes ---
         socket.on('lobby:list', async () => {
             try {
+                if (rateLimited(socket)) {
+                    socket.emit('lobby:error', { reason: 'rate-limited' });
+                    return;
+                }
                 socket.emit('lobby:list', await listLobbies());
             } catch (e) {
                 socket.emit('lobby:error', { reason: 'list-failed', message: String(e.message || e) });
@@ -296,22 +397,24 @@ export function attachGameServer(io) {
         });
 
         // --- Rejoindre une partie ---
-        onLobby(socket, 'lobby:join', (entry, { name, color, password }) => {
+        onLobby(socket, 'lobby:join', async (entry, { name, color, password }) => {
             // Partie SAUVEGARDÉE : on vérifie le mot de passe puis on la reprend
             // (elle redevient 'playing' et réapparaît dans « parties en cours »).
             if (entry.status === 'saved') {
-                if (!checkSavePassword(entry, password)) {
+                if (!(await checkSavePassword(entry, password))) {
                     socket.emit('lobby:error', { reason: 'bad-password' });
                     return;
                 }
                 resumeLobby(entry);
             }
-            const playerId = enterLobby(socket, entry, { name, color });
+            const playerId = await enterLobby(io, socket, entry, { name, color });
             syncSocketSeats(io, entry);
             broadcastLobby(io, entry);
             // eslint-disable-next-line no-console
             console.log(`[lobby] ${socket.id} rejoint '${entry.code}' comme ${playerId || 'spectateur'}`);
-        });
+        },
+        // SEUL évènement à lire le code du payload : c'est sa raison d'être.
+        { anyCode: true });
 
         // --- Choisir sa place (couleur) en rejoignant une partie EN COURS ---
         // Le joueur a reçu `seatOptions` à la jointure ; il en sélectionne une.
@@ -335,8 +438,8 @@ export function attachGameServer(io) {
         onLobby(
             socket,
             'lobby:configure',
-            (entry, { mapId, settings, autosave, savePassword }) => {
-                configureLobby(entry, { mapId, settings, autosave, savePassword });
+            async (entry, { mapId, settings, autosave, savePassword }) => {
+                await configureLobby(entry, { mapId, settings, autosave, savePassword });
                 syncSocketSeats(io, entry);
                 broadcastLobby(io, entry);
             },
@@ -395,7 +498,9 @@ export function attachGameServer(io) {
                 }
                 await startLobby(entry);
                 broadcastLobby(io, entry);
-                io.to(entry.code).emit('game:state', serializeState(entry.state));
+                // Premier état de la partie : COMPLET, il fonde la base de
+                // reconstruction de tous les clients de la salle.
+                emitState(io, entry, { full: true });
                 // eslint-disable-next-line no-console
                 console.log(`[lobby] '${entry.code}' démarrée par ${socket.id}`);
                 // Si le premier tour revient à un bot (ex. partie 100 % bots).
@@ -407,6 +512,10 @@ export function attachGameServer(io) {
         // --- Jouer une action ---
         socket.on('game:action', async (action) => {
             try {
+                if (rateLimited(socket)) {
+                    socket.emit('game:rejected', { reason: 'rate-limited', action });
+                    return;
+                }
                 const entry = await getLobby(socket.data.code);
                 const playerId = socket.data.playerId;
                 if (!entry || !entry.state) {
@@ -434,7 +543,7 @@ export function attachGameServer(io) {
                     socket.emit('game:rejected', { reason: 'illegal-action', action });
                     return;
                 }
-                io.to(entry.code).emit('game:state', serializeState(next));
+                emitState(io, entry);
                 if (next.status === 'over') broadcastLobby(io, entry);
                 // La fin de tour d'un humain peut donner la main à un ou des bots.
                 else await advanceBots(io, entry);
@@ -451,6 +560,10 @@ export function attachGameServer(io) {
         // et aucune fin de partie n'est possible (on revient en arrière).
         socket.on('game:reset-turn', async () => {
             try {
+                if (rateLimited(socket)) {
+                    socket.emit('game:rejected', { reason: 'rate-limited' });
+                    return;
+                }
                 const entry = await getLobby(socket.data.code);
                 const playerId = socket.data.playerId;
                 if (!entry || !entry.state) {
@@ -472,7 +585,7 @@ export function attachGameServer(io) {
                     socket.emit('game:rejected', { reason: 'nothing-to-reset' });
                     return;
                 }
-                io.to(entry.code).emit('game:state', serializeState(next));
+                emitState(io, entry);
             } catch (e) {
                 socket.emit('game:rejected', { reason: 'server-error', message: String(e.message || e) });
             }
