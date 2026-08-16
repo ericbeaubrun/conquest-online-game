@@ -18,3 +18,11 @@ npm-debug.log*
 
 # AI
 .claude
+
+# Décors de carte : fichiers lourds (~2,8 Mo), gardés hors du dépôt.
+# Les cartes y font référence via `palette.backgroundImage` (voir data/maps.js) :
+# sans eux, seule la couleur de fond unie s'affiche.
+/conquest-front/public/backgrounds/cadre-rocheux.webp
+/conquest-front/public/backgrounds/herbe-duel.png
+/conquest-front/public/backgrounds/ile-continent.webp
+/conquest-front/public/backgrounds/sable-vallee.png

@@ -98,7 +98,11 @@ export const NumberInput = ({ value, min = 0, max = 999, step = 1, unit, onChang
                 onChange(Math.min(max, Math.max(min, raw)));
             }}
         />
-        {unit && <span className="setting__unit">{unit}</span>}
+        {unit === 'gold' ? (
+            <img src="/coin.png" alt="or" className="setting__unit-icon coin-icon" />
+        ) : (
+            unit && <span className="setting__unit">{unit}</span>
+        )}
         <button
             type="button"
             className="setting__step"

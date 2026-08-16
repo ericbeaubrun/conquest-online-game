@@ -30,11 +30,12 @@ const LobbyBrowser = ({ lobbies = [], error, onCreate, onJoin, onRefresh, onBack
         <div className="setup-screen setup-screen--online">
             <header className="setup-topbar">
                 <button className="menu-btn menu-btn--ghost" onClick={onBack}>
+                    <i className="menu-btn__back-icon" aria-hidden="true" />
                     Retour
                 </button>
                 <div className="setup-topbar__heading">
                     <span className="setup-topbar__eyebrow">Multijoueur</span>
-                    <h1 className="setup-topbar__title">Jouer en ligne</h1>
+                    <h1 className="setup-topbar__title">JOUER EN LIGNE</h1>
                 </div>
                 <span className="setup-topbar__spacer" />
             </header>

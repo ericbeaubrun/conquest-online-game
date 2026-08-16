@@ -45,7 +45,7 @@ const FilledSlot = ({ index, save, onLoad, onDelete }) => (
             onClick={() => onLoad(save.id)}
             title="Recharger cette partie"
         >
-            Recharger ▶
+            Recharger <i className="save-slot__load-arrow" aria-hidden="true" />
         </button>
         <button
             type="button"
@@ -54,7 +54,7 @@ const FilledSlot = ({ index, save, onLoad, onDelete }) => (
             title="Supprimer cette sauvegarde"
             aria-label={`Supprimer la sauvegarde ${index + 1}`}
         >
-            ×
+            <img src="/croix.png" alt="" draggable={false} />
         </button>
     </div>
 );
@@ -89,6 +89,7 @@ const LoadGame = ({ onBack, onLoadSave }) => {
         <div className="setup-screen setup-screen--local">
             <header className="setup-topbar">
                 <button className="menu-btn menu-btn--ghost" onClick={onBack}>
+                    <i className="menu-btn__back-icon" aria-hidden="true" />
                     Retour
                 </button>
                 <div className="setup-topbar__heading">

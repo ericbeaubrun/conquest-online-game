@@ -9,6 +9,16 @@ export const TERRAIN_COLORS = {
     water: '#5b93c7',
 };
 
+// Opacité par défaut des cases. Une carte peut surcharger chaque type via
+// `palette.opacity` sans devoir redéclarer les autres.
+export const TERRAIN_OPACITIES = {
+    grass: 1,
+    forest: 1,
+    sand: 1,
+    mountain: 1,
+    water: 1,
+};
+
 // Liste ordonnée des types (palette de l'éditeur, itérations d'UI).
 export const TERRAIN_TYPES = Object.keys(TERRAIN_COLORS);
 
@@ -37,7 +47,22 @@ export const DEFAULT_BACKGROUND = '#14171d';
 
 // Couleurs de terrain effectives d'une carte (défauts + surcharges éventuelles).
 export function terrainColors(map) {
-    return map?.palette ? { ...TERRAIN_COLORS, ...map.palette } : TERRAIN_COLORS;
+    if (!map?.palette) return TERRAIN_COLORS;
+    return Object.fromEntries(
+        TERRAIN_TYPES.map((type) => [type, map.palette[type] || TERRAIN_COLORS[type]]),
+    );
+}
+
+// Opacités effectives, bornées entre 0 et 1 pour qu'une erreur de configuration
+// ne produise pas un attribut SVG invalide.
+export function terrainOpacities(map) {
+    return Object.fromEntries(
+        TERRAIN_TYPES.map((type) => {
+            const configured = map?.palette?.opacity?.[type];
+            const value = Number.isFinite(configured) ? configured : TERRAIN_OPACITIES[type];
+            return [type, Math.min(1, Math.max(0, value))];
+        }),
+    );
 }
 
 // Couleur de fond effective d'une carte.
@@ -54,6 +79,13 @@ export function mapBackground(map) {
 // dessous et prend seule le relais si le fichier manque ou ne charge pas.
 export function mapBackgroundImage(map) {
     return map?.palette?.backgroundImage || null;
+}
+
+// Ratio largeur/hauteur du fichier de décor. Il permet au front de conserver
+// les proportions de chaque image sans supposer que toutes ont le même format.
+export function mapBackgroundRatio(map) {
+    const ratio = map?.palette?.backgroundRatio;
+    return Number.isFinite(ratio) && ratio > 0 ? ratio : 3 / 2;
 }
 
 // Terrains sur lesquels on ne peut pas poser d'unité.

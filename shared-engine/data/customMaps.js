@@ -14,9 +14,10 @@
 // agrandissent le cadre de la carte (marge de décor) — voir `margin` dans
 // mapDSL.js.
 //
-// COULEURS : `palette: { grass, forest, mountain, sand, water, background }`
-// donne à la carte son ambiance propre. Toutes les clés sont facultatives —
-// celles qu'on omet gardent la couleur par défaut de terrain.js.
+// APPARENCE : `palette` accepte les couleurs (`grass`, `forest`, `mountain`,
+// `sand`, `water`, `background`), `opacity: { grass: 0.8, ... }` et, en option,
+// `backgroundImage` + `backgroundRatio`. Sans image, le fond reste une couleur
+// unie. Toutes les clés omises gardent leur valeur par défaut de terrain.js.
 
 import {defineAsciiMap} from './mapDSL.js';
 

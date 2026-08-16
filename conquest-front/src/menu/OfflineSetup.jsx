@@ -69,7 +69,7 @@ const PlayerRow = ({ index, player, usedColors, canRemove, onChange, onRemove })
                 disabled={!canRemove}
                 title={canRemove ? 'Retirer ce joueur' : `Minimum ${MIN_PLAYERS} joueurs`}
             >
-                ×
+                <img src="/croix.png" alt="" draggable={false} />
             </button>
         </div>
     );
@@ -135,11 +135,12 @@ const OfflineSetup = ({ initialConfig, onBack, onLaunch, onOpenLoad }) => {
             {/* En-tête */}
             <header className="setup-topbar">
                 <button className="menu-btn menu-btn--ghost" onClick={onBack}>
+                    <i className="menu-btn__back-icon" aria-hidden="true" />
                     Retour
                 </button>
                 <div className="setup-topbar__heading">
                     <span className="setup-topbar__eyebrow">Configuration locale</span>
-                    <h1 className="setup-topbar__title">Partie hors-ligne</h1>
+                    <h1 className="setup-topbar__title">PARTIE HORS-LIGNE</h1>
                 </div>
                 <span className="setup-topbar__spacer" />
             </header>

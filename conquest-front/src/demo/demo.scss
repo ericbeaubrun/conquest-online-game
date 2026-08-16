@@ -4,11 +4,13 @@ $demo-gold: #f2c45b;
 $demo-blue: #526f90;
 $demo-orange: #a55d40;
 $demo-muted: #929baa;
+$demo-green: #3f9d5c;
+$demo-red: #b8402e;
 
 .demo-showcase {
     position: relative;
     flex: 0 0 auto;
-    padding: clamp(112px, 12vw, 176px) clamp(18px, 3vw, 32px);
+    padding: clamp(200px, 20vw, 320px) clamp(18px, 3vw, 32px);
     overflow: hidden;
     background: transparent;
 
@@ -34,7 +36,7 @@ $demo-muted: #929baa;
         margin-bottom: clamp(58px, 6vw, 84px);
 
         > div > span {
-            color: #ffd766;
+            color: $demo-gold;
             font-size: 15px;
             letter-spacing: 0.22em;
         }
@@ -122,7 +124,7 @@ $demo-muted: #929baa;
         animation: demo-copy-in 320ms ease both;
 
         > span {
-            color: #ffd766;
+            color: $demo-gold;
             font-size: 14px;
             letter-spacing: 0.16em;
         }
@@ -210,17 +212,21 @@ $demo-muted: #929baa;
             }
 
             &.done {
-                color: #769c86;
-                background: rgba(63, 111, 159, 0.13);
+                color: #7fb692;
+                background: rgba(63, 157, 92, 0.13);
 
                 > i {
-                    color: #07110b;
-                    background: $demo-blue;
+                    color: #fff;
+                    background: $demo-green;
                     border-color: #000;
+                    font-size: 13px;
+                    font-weight: 700;
+                    letter-spacing: 0;
+                    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.35);
                 }
 
                 strong {
-                    color: $demo-blue;
+                    color: $demo-green;
                 }
             }
         }
@@ -263,14 +269,14 @@ $demo-muted: #929baa;
         align-self: flex-start;
         display: flex;
         align-items: center;
-        gap: 7px;
-        padding: 7px 11px;
+        gap: 8px;
+        padding: 8px 13px;
         color: #a7afba;
         background: #181d25;
         border: 2px solid #050609;
-        box-shadow: 2px 2px 0 #000;
+        box-shadow: 3px 3px 0 #000;
         font-family: $pixel-font;
-        font-size: 16px;
+        font-size: 17px;
         cursor: pointer;
         transition:
             color 160ms ease,
@@ -278,15 +284,10 @@ $demo-muted: #929baa;
             box-shadow 160ms ease,
             transform 160ms ease;
 
-        span {
-            color: $demo-gold;
-            font-size: 19px;
-        }
-
         &:hover {
             color: #fff;
             background: #222833;
-            box-shadow: 4px 5px 0 #000;
+            box-shadow: 5px 6px 0 #000;
             transform: translateY(-2px);
         }
 
@@ -302,13 +303,13 @@ $demo-muted: #929baa;
         gap: 9px;
     }
 
-    &__next-turn {
+    &__reset {
         display: flex;
         align-items: center;
         gap: 8px;
         padding: 8px 13px;
-        color: #10140f;
-        background: #ffd766;
+        color: #fff;
+        background: $demo-red;
         border: 2px solid #030604;
         box-shadow: 3px 3px 0 #000;
         font-family: $pixel-font;
@@ -319,12 +320,44 @@ $demo-muted: #929baa;
             box-shadow 160ms ease,
             transform 160ms ease;
 
-        span {
-            font-size: 21px;
+        &:hover {
+            background: #d1553f;
+            box-shadow: 5px 6px 0 #000;
+            transform: translateY(-2px);
+        }
+
+        &:active {
+            box-shadow: 1px 1px 0 #000;
+            transform: translate(2px, 2px);
+        }
+    }
+
+    &__next-turn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 13px;
+        color: #fff;
+        background: $demo-blue;
+        border: 2px solid #030604;
+        box-shadow: 3px 3px 0 #000;
+        font-family: $pixel-font;
+        font-size: 17px;
+        cursor: pointer;
+        transition:
+            background 160ms ease,
+            box-shadow 160ms ease,
+            transform 160ms ease;
+
+        img {
+            width: 19px;
+            height: 19px;
+            object-fit: contain;
+            image-rendering: pixelated;
         }
 
         &:hover:not(:disabled) {
-            background: #ffe38a;
+            background: #648bb3;
             box-shadow: 5px 6px 0 #000;
             transform: translateY(-2px);
         }
@@ -353,7 +386,7 @@ $demo-muted: #929baa;
         }
 
         &--success {
-            box-shadow: inset 0 0 0 2px rgba(63, 111, 159, 0.38);
+            box-shadow: inset 0 0 0 2px rgba(63, 157, 92, 0.38);
         }
     }
 
@@ -429,7 +462,7 @@ $demo-muted: #929baa;
         background: rgba(9, 14, 12, 0.91);
         border: 3px solid #030604;
         box-shadow:
-            0 0 0 3px $demo-blue,
+            0 0 0 3px $demo-green,
             8px 9px 0 rgba(0, 0, 0, 0.55);
         transform: translate(-50%, -50%);
         pointer-events: none;
@@ -437,18 +470,21 @@ $demo-muted: #929baa;
 
         > span {
             display: grid;
-            width: 38px;
+            min-width: 38px;
             height: 38px;
+            padding: 0 8px;
             margin-bottom: 9px;
             place-items: center;
-            color: #08100a;
-            background: $demo-blue;
+            color: #fff;
+            background: $demo-green;
             border: 2px solid #000;
-            font-size: 25px;
+            font-family: $pixel-font;
+            font-size: 15px;
+            letter-spacing: 0.05em;
         }
 
         strong {
-            color: $demo-blue;
+            color: $demo-green;
             font-size: 23px;
             font-weight: 400;
             letter-spacing: 0.08em;

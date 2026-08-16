@@ -108,10 +108,6 @@ $blue: #3f7fd8;
     position: relative;
     flex: 0 0 auto;
     background-color: var(--home-content-bg);
-    background-image:
-        linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-    background-size: 32px 32px;
 }
 
 // ---- Boutons génériques ----
@@ -137,6 +133,9 @@ $blue: #3f7fd8;
     }
 
     &--ghost {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
         font-size: 20px;
         background: transparent;
         box-shadow: none;
@@ -149,6 +148,16 @@ $blue: #3f7fd8;
         &:active {
             transform: none;
         }
+    }
+
+    &__back-icon {
+        flex: 0 0 auto;
+        width: 13px;
+        height: 13px;
+        background-color: currentColor;
+        transform: scaleX(-1);
+        mask: url('/arrowheads.svg') center / contain no-repeat;
+        -webkit-mask: url('/arrowheads.svg') center / contain no-repeat;
     }
 
     // Gros boutons de jeu : deux lignes (label + sous-titre).
@@ -274,7 +283,7 @@ $blue: #3f7fd8;
                 bottom: 0;
                 left: 0;
                 height: 2px;
-                background: var(--home-blue);
+                background: $gold;
                 transform: scaleX(0);
                 transform-origin: right;
                 transition: transform 180ms ease;
@@ -429,38 +438,6 @@ $blue: #3f7fd8;
         }
     }
 
-    &__discover {
-        position: absolute;
-        z-index: 1;
-        bottom: 22px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 2px;
-        color: #717987;
-        font-family: $pixel-font;
-        font-size: 16px;
-        letter-spacing: 0.08em;
-        text-decoration: none;
-        transition: color 150ms ease, transform 150ms ease;
-
-        span:last-child {
-            color: $gold;
-            font-size: 22px;
-            animation: home-discover-bounce 1.8s ease-in-out infinite;
-        }
-
-        &:hover {
-            color: #aeb5bf;
-            transform: translateY(1px);
-        }
-    }
-}
-
-@keyframes home-discover-bounce {
-    0%,
-    100% { transform: translateY(0); }
-    50% { transform: translateY(5px); }
 }
 
 // Hero d'ouverture : champ de bataille pixel art animé et profondeur au pointeur.
@@ -722,21 +699,6 @@ $blue: #3f7fd8;
         letter-spacing: 0.2em;
         text-shadow: 1px 2px 0 #16120b;
         animation: home-hero-copy-in 640ms 80ms ease-out backwards;
-
-        i {
-            width: 6px;
-            height: 6px;
-            background: $gold;
-            box-shadow:
-                0 0 0 2px rgba(6, 8, 11, 0.8),
-                0 0 0 3px rgba(255, 215, 102, 0.22);
-            transform: rotate(45deg);
-            animation: home-hero-edition-dot 2s ease-in-out infinite;
-
-            &:last-child {
-                animation-delay: -1s;
-            }
-        }
     }
 
     &__title {
@@ -769,7 +731,7 @@ $blue: #3f7fd8;
             transition-delay: calc(var(--letter-index) * 16ms);
             animation:
                 home-hero-letter-in 720ms cubic-bezier(0.16, 1, 0.3, 1) backwards,
-                home-hero-letter-wave 3.8s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+                home-hero-letter-glow 3.8s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
             animation-delay:
                 calc(130ms + var(--letter-index) * 62ms),
                 calc(900ms + var(--letter-index) * 110ms);
@@ -907,17 +869,13 @@ $blue: #3f7fd8;
 
         strong {
             font-size: clamp(25px, 2.5vw, 31px);
-            font-weight: 400;
+            font-weight: 700;
             line-height: 0.92;
             letter-spacing: 0.055em;
         }
 
     }
 
-    &__discover {
-        z-index: 5;
-        bottom: 18px;
-    }
 }
 
 .home-hero:has(.home-hero__cta--local:hover) .home-hero__duality::before {
@@ -932,31 +890,6 @@ $blue: #3f7fd8;
     from {
         opacity: 0;
         transform: translateY(48px) rotateX(-55deg) scaleY(0.72);
-    }
-}
-
-@keyframes home-hero-letter-wave {
-    0%,
-    54%,
-    100% {
-        color: #ffd76a;
-        filter: drop-shadow(0 0 12px rgba(255, 215, 102, 0.08));
-        transform: translateY(0) scale(1);
-    }
-    62% {
-        color: #ffe58c;
-        filter: drop-shadow(0 0 17px rgba(255, 215, 102, 0.2));
-        transform: translateY(-3px) scale(1.012);
-    }
-    68% {
-        color: #fff0ad;
-        filter: drop-shadow(0 0 24px rgba(255, 215, 102, 0.36));
-        transform: translateY(-8px) scale(1.035);
-    }
-    76% {
-        color: #ffe38a;
-        filter: drop-shadow(0 0 16px rgba(255, 215, 102, 0.18));
-        transform: translateY(-2px) scale(1.01);
     }
 }
 
@@ -1007,22 +940,31 @@ $blue: #3f7fd8;
     50% { transform: translateY(-7px) scaleX(-1); }
 }
 
-@keyframes home-hero-edition-dot {
-    50% {
-        opacity: 0.35;
-        transform: rotate(45deg) scale(0.72);
-    }
-}
-
 .home-context {
     --context-blue: var(--home-blue);
     position: relative;
     flex: 0 0 auto;
-    padding: clamp(180px, 17vw, 260px) clamp(18px, 3vw, 32px) clamp(104px, 11vw, 160px);
+    padding: clamp(220px, 22vw, 340px) clamp(18px, 3vw, 32px) clamp(200px, 20vw, 320px);
     overflow: hidden;
     background: transparent;
 
+    &::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: clamp(980px, 98vw, 1460px);
+        height: clamp(360px, 34vw, 540px);
+        background: linear-gradient(155deg, var(--context-blue), transparent 72%);
+        opacity: 0.16;
+        clip-path: polygon(16% 0%, 76% 8%, 100% 46%, 84% 90%, 46% 100%, 8% 80%, 0% 38%);
+        transform: translate(-50%, -50%) rotate(-4deg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
     &__inner {
+        z-index: 1;
         position: relative;
         width: 100%;
         max-width: 1120px;
@@ -1107,8 +1049,10 @@ $blue: #3f7fd8;
 
 .home-footer {
     flex: 0 0 auto;
-    padding: 96px 20px 36px;
-    background: transparent;
+    margin-top: clamp(120px, 12vw, 200px);
+    padding: 56px 20px 36px;
+    background: #05070a;
+    box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.06);
 
     &__inner {
         width: 100%;
@@ -1354,17 +1298,22 @@ $blue: #3f7fd8;
         margin-left: auto;
         width: 30px;
         height: 30px;
-        font-family: $pixel-font;
-        font-size: 24px;
-        line-height: 1;
-        color: $ink;
-        background: #3a2020;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
         border: 2px solid #000;
         box-shadow: inset 0 0 0 1px $line;
         cursor: pointer;
 
+        img {
+            width: 14px;
+            height: 14px;
+            image-rendering: pixelated;
+        }
+
         &:hover:not(:disabled) {
-            background: $red;
+            background: rgba(240, 78, 78, 0.15);
         }
         &:disabled {
             opacity: 0.35;
@@ -1494,6 +1443,9 @@ $blue: #3f7fd8;
 
     &__load {
         flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
         font-family: $pixel-font;
         font-size: 18px;
         color: $green;
@@ -1508,6 +1460,15 @@ $blue: #3f7fd8;
         }
     }
 
+    &__load-arrow {
+        flex: 0 0 auto;
+        width: 12px;
+        height: 12px;
+        background-color: $green;
+        mask: url('/arrowheads.svg') center / contain no-repeat;
+        -webkit-mask: url('/arrowheads.svg') center / contain no-repeat;
+    }
+
     &__delete {
         flex: 0 0 auto;
         width: 32px;
@@ -1515,14 +1476,16 @@ $blue: #3f7fd8;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-family: $pixel-font;
-        font-size: 22px;
-        line-height: 1;
-        color: $red;
         background: transparent;
         border: 2px solid $line;
         cursor: pointer;
         transition: background 0.12s ease;
+
+        img {
+            width: 14px;
+            height: 14px;
+            image-rendering: pixelated;
+        }
 
         &:hover {
             background: rgba(240, 78, 78, 0.15);
@@ -1556,8 +1519,7 @@ $blue: #3f7fd8;
         }
         &--active {
             color: #000;
-            //background: $gold;
-            background: $active;
+            background: $gold;
         }
     }
 
@@ -2243,6 +2205,14 @@ $blue: #3f7fd8;
     @include pixel-border;
     padding: 8px;
 
+    &__backdrop {
+        width: 100%;
+        height: 100%;
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+    }
+
     &__svg {
         width: 100%;
         height: 100%;
@@ -2460,6 +2430,14 @@ $blue: #3f7fd8;
         overflow-x: auto;
         overscroll-behavior-x: contain;
         scroll-snap-type: x proximity;
+        // La dernière carte est coupée net par le bord du panneau : le fondu
+        // transforme cette troncature en signal de défilement plutôt qu'en
+        // bug de mise en page.
+        mask-image: linear-gradient(
+            90deg,
+            black calc(100% - 28px),
+            transparent
+        );
         @include pixel-scrollbar;
     }
 

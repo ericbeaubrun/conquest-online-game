@@ -9,15 +9,38 @@ $stroke_width_4: 5;
   width: 100%;
   height: 100%;
   overflow: hidden;
+
+  // Filet de sécurité pour les ratios extrêmes (écran 4K ultrawide, mobile très
+  // allongé). Le décor SVG ×2,5 le masque dans les formats courants ; cette copie
+  // assombrie n'apparaît que dans les éventuelles zones encore découvertes.
+  &--with-backdrop::before {
+    content: '';
+    position: absolute;
+    inset: -32px;
+    background-color: #14171d;
+    background-image: var(--map-background-image, none);
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    filter: blur(20px) brightness(0.28) saturate(0.62);
+    transform: scale(1.05);
+    pointer-events: none;
+  }
+
   // Bordure épaisse à la couleur du joueur actif (posée via `style` inline) :
   // signale d'un coup d'œil à qui est le tour, tout autour du plateau.
   //A tester, mais on retire pour l'instant
   //border: 8px solid transparent;
 
   &__svg {
+    position: relative;
+    z-index: 1;
     width: 100%;
     height: 100%;
     display: block;
+    // Le décor panoramique dépasse volontairement du viewBox logique des
+    // cartes étroites pour occuper les marges latérales de l'écran.
+    overflow: visible;
     // On gère nous-mêmes déplacement/zoom : on neutralise les gestes du navigateur.
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
@@ -57,6 +80,14 @@ $stroke_width_4: 5;
   // alors composité) et rastérisée à nouveau seulement au commit du viewBox —
   // jamais 60 fois par seconde. Aucun filtre ni ombre n'est posé dessus.
   &__backdrop {
+    pointer-events: none;
+  }
+
+  // Même voile sombre que `.hex__dimmed`, mais sous toute la grille : le décor
+  // recule visuellement pendant un déplacement comme pendant une pose d'achat.
+  &__backdrop-dimmer {
+    fill: #05070a;
+    fill-opacity: 0.2;
     pointer-events: none;
   }
 
@@ -105,6 +136,7 @@ $stroke_width_4: 5;
   // bas/droite au clic qui simule le bouton qu'on enfonce physiquement.
   &__controls {
     position: absolute;
+    z-index: 2;
     right: 12px;
     // Assez haut pour rester au-dessus du panneau du bas (soldat, boutique…),
     // qui masquait les premiers boutons.

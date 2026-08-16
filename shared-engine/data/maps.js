@@ -16,13 +16,35 @@ const plainTerrain = () => 'grass';
 // carte, ce qui laisse respirer le décor de fond (voir `buildGeometry`).
 const MARGIN = {top: 3, bottom: 3};
 
+// Configuration visuelle commune aux cartes qui utilisent le cadre rocheux.
+// Chaque appel crée son propre objet `opacity` pour permettre des réglages
+// indépendants carte par carte.
+const rockyPalette = (opacity = {}) => ({
+    background: '#14171d',
+    backgroundImage: '/backgrounds/cadre-rocheux.webp',
+    backgroundRatio: 2048 / 1365,
+    opacity: {
+        grass: 1,
+        forest: 1,
+        sand: 1,
+        mountain: 1,
+        water: 1,
+        ...opacity,
+    },
+});
+
 // --- Registre ---
 export const MAPS = [
     buildMap({
         id: 'duel',
         name: 'Duel',
         description: '2 joueurs · 61 cases',
-        // palette: {backgroundImage: '/backgrounds/duel.png'},
+        palette: {
+            ...rockyPalette({grass: 0.55}),
+            background: '#315d08',
+            backgroundImage: '/backgrounds/herbe-duel.png',
+            backgroundRatio: 4 / 3,
+        },
         cells: hexShape(4, plainTerrain),
         margin: MARGIN,
         spawns: [
@@ -34,6 +56,13 @@ export const MAPS = [
         id: 'vallee',
         name: 'Vallée',
         description: '3 joueurs · 217 cases',
+        palette: {
+            ...rockyPalette({grass: 0.55}),
+            grass: '#d9c48c',
+            background: '#d2b98e',
+            backgroundImage: '/backgrounds/sable-vallee.png',
+            backgroundRatio: 4 / 3,
+        },
         cells: hexShape(8, plainTerrain),
         margin: MARGIN,
         spawns: [
@@ -46,6 +75,12 @@ export const MAPS = [
         id: 'continent',
         name: 'Continent',
         description: '4 joueurs · 397 cases',
+        palette: {
+            ...rockyPalette({grass: 0.55}),
+            background: '#4f9992',
+            backgroundImage: '/backgrounds/ile-continent.webp',
+            backgroundRatio: 4 / 3,
+        },
         cells: hexShape(11, plainTerrain),
         margin: MARGIN,
         spawns: [

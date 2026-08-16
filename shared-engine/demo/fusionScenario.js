@@ -29,6 +29,11 @@ const P2_TERRITORY = [
     '5,-2', '4,-2', '5,-1', '4,-1', '4,0', '5,1', '4,1', '3,0',
 ];
 
+// Exposé pour le front : sert à vérifier l'objectif « conquérir toutes les
+// cases ennemies » sans dépendre de la totalité du plateau (qui inclut des
+// cases neutres non liées au camp adverse).
+export const FUSION_DEMO_ENEMY_TERRITORY = P2_TERRITORY;
+
 const makeLeveledSoldier = (playerId, uid, level, settings) => ({
     ...makeSoldier(playerId, uid, settings),
     level,
@@ -56,12 +61,14 @@ export function createFusionDemoState() {
     const scout = makeSoldier('p1', 3, state.settings);
     const explorer = makeSoldier('p1', 4, state.settings);
     const veteran = makeLeveledSoldier('p1', 5, 3, state.settings);
-    const goblinA = makeUnit('goblin', 'p2', 6);
-    const goblinB = makeUnit('goblin', 'p2', 7);
-    const skeletonB = makeUnit('skeleton', 'p2', 9);
-    const warlock = makeBonusSoldier('p2', 10, 'warlock', state.settings);
-    const warlockSkeletonA = makeUnit('skeleton2', 'p2', 11);
-    const warlockSkeletonB = makeUnit('skeleton2', 'p2', 12);
+    // Les ennemis regardent vers le joueur (à gauche) plutôt que vers leur
+    // propre camp, comme le veut la convention « sprite dessiné à droite ».
+    const goblinA = {...makeUnit('goblin', 'p2', 6), facing: 'left'};
+    const goblinB = {...makeUnit('goblin', 'p2', 7), facing: 'left'};
+    const skeletonB = {...makeUnit('skeleton', 'p2', 9), facing: 'left'};
+    const warlock = {...makeBonusSoldier('p2', 10, 'warlock', state.settings), facing: 'left'};
+    const warlockSkeletonA = {...makeUnit('skeleton2', 'p2', 11), facing: 'left'};
+    const warlockSkeletonB = {...makeUnit('skeleton2', 'p2', 12), facing: 'left'};
     const defenseTower = {
         type: 'defenseTower',
         playerId: 'p2',

@@ -21,10 +21,6 @@ import {
     lootRarity,
 } from '@conquest/shared-engine/data/chests.js';
 import {
-    TERRAIN_COLORS,
-    TERRAIN_LABELS,
-} from '@conquest/shared-engine/data/terrain.js';
-import {
     BUILDING_STATS,
     BUILDING_UPKEEP,
     SOLDIER_LEVEL_STATS,
@@ -366,38 +362,15 @@ const treasureEntries = [
     })),
 ];
 
-const terrainDescriptions = {
-    grass: 'Terrain ouvert et praticable, idéal pour étendre rapidement son territoire.',
-    forest: 'Terrain praticable aux teintes boisées. Les arbres peuvent y apparaître.',
-    sand: 'Terrain praticable des régions arides.',
-    mountain: 'Terrain praticable au relief minéral.',
-    water: 'Terrain infranchissable : aucune unité ni construction ne peut y être posée.',
-};
-
-const terrainEntries = Object.entries(TERRAIN_COLORS).map(([id, color]) => ({
-    id: `terrain-${id}`,
-    title: TERRAIN_LABELS[id],
-    eyebrow: 'Terrain',
-    color,
-    glow: color,
-    description: terrainDescriptions[id],
-    details: [
-        {label: 'Déplacement', value: id === 'water' ? 'Bloqué' : 'Autorisé'},
-        {label: 'Construction', value: id === 'water' ? 'Impossible' : 'Autorisée'},
-    ],
-    badge: id === 'water' ? 'OBSTACLE' : 'PRATICABLE',
-}));
-
 export const WIKI_CATEGORIES = [
+    {id: 'trees', label: 'Arbres', shortLabel: 'Arbres', entries: treeEntries},
     {id: 'soldiers', label: 'Soldats', shortLabel: 'Soldats', entries: soldierEntries},
     {id: 'heroes', label: 'Héros & bonus', shortLabel: 'Héros', entries: bonusEntries},
     {id: 'creatures', label: 'Créatures', shortLabel: 'Créatures', entries: creatureEntries},
     {id: 'buildings', label: 'Bâtiments', shortLabel: 'Bâtiments', entries: buildingEntries},
     {id: 'affinities', label: 'Affinités', shortLabel: 'Éléments', entries: affinityEntries},
     {id: 'potions', label: 'Potions', shortLabel: 'Potions', entries: potionEntries},
-    {id: 'trees', label: 'Arbres', shortLabel: 'Arbres', entries: treeEntries},
     {id: 'treasures', label: 'Coffres & butins', shortLabel: 'Trésors', entries: treasureEntries},
-    {id: 'terrains', label: 'Terrains', shortLabel: 'Terrains', entries: terrainEntries},
 ];
 
 export const WIKI_ENTRY_COUNT = WIKI_CATEGORIES.reduce(

@@ -10,6 +10,7 @@ import {
     mapBackground,
     mapBackgroundImage,
     terrainColors,
+    terrainOpacities,
 } from '@conquest/shared-engine/data/terrain.js';
 import { buildGeometry } from '@conquest/shared-engine/render/geometry.js';
 
@@ -18,13 +19,14 @@ export const ONLINE_MAP_IDS = ['duel', 'vallee', 'continent'];
 
 // Aperçu statique d'une carte : terrains et points de départ numérotés.
 const MapPreview = ({ mapId, spawnInfo }) => {
-    const { map, geo, players, colors, background, backgroundImage } = useMemo(() => {
+    const { map, geo, players, colors, opacities, background, backgroundImage } = useMemo(() => {
         const selectedMap = getMapById(mapId);
         return {
             map: selectedMap,
             geo: buildGeometry(mapId),
             players: playersForMap(selectedMap),
             colors: terrainColors(selectedMap),
+            opacities: terrainOpacities(selectedMap),
             background: mapBackground(selectedMap),
             backgroundImage: mapBackgroundImage(selectedMap),
         };
@@ -34,66 +36,62 @@ const MapPreview = ({ mapId, spawnInfo }) => {
     const spawnRadius = base.w * 0.028 + 14;
 
     return (
-        <svg
-            className="map-preview__svg"
-            style={{ backgroundColor: background }}
-            viewBox={`${base.x} ${base.y} ${base.w} ${base.h}`}
-            preserveAspectRatio="xMidYMid meet"
-            role="img"
-            aria-label={`Aperçu de la carte ${map.name}`}
+        <div
+            className="map-preview__backdrop"
+            style={{
+                backgroundColor: background,
+                backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+            }}
         >
-            {/* Décor de la carte, cadré comme dans la partie (même rectangle
-                `base`) : l'aperçu montre exactement l'ambiance du plateau. */}
-            {backgroundImage && (
-                <image
-                    href={backgroundImage}
-                    x={base.x}
-                    y={base.y}
-                    width={base.w}
-                    height={base.h}
-                    preserveAspectRatio="xMidYMid slice"
-                />
-            )}
-            {cells.map((cell) => (
-                <polygon
-                    key={cell.id}
-                    points={cell.points}
-                    fill={colors[cell.type] || '#888'}
-                />
-            ))}
-            {map.spawns.map((spawn, index) => {
-                const cell = cellMap.get(hexId(spawn.q, spawn.r));
-                if (!cell) return null;
+            <svg
+                className="map-preview__svg"
+                viewBox={`${base.x} ${base.y} ${base.w} ${base.h}`}
+                preserveAspectRatio="xMidYMid meet"
+                role="img"
+                aria-label={`Aperçu de la carte ${map.name}`}
+            >
+                {cells.map((cell) => (
+                    <polygon
+                        key={cell.id}
+                        points={cell.points}
+                        fill={colors[cell.type] || '#888'}
+                        fillOpacity={opacities[cell.type] ?? 1}
+                    />
+                ))}
+                {map.spawns.map((spawn, index) => {
+                    const cell = cellMap.get(hexId(spawn.q, spawn.r));
+                    if (!cell) return null;
 
-                const info = spawnInfo?.[index];
-                const color = info?.color || players[index]?.color || '#ffd766';
-                const filled = info ? info.filled : true;
+                    const info = spawnInfo?.[index];
+                    const color = info?.color || players[index]?.color || '#ffd766';
+                    const filled = info ? info.filled : true;
 
-                return (
-                    <g key={index} opacity={filled ? 1 : 0.4}>
-                        <circle
-                            cx={cell.cx}
-                            cy={cell.cy}
-                            r={spawnRadius}
-                            fill={color}
-                            stroke="#000"
-                            strokeWidth={spawnRadius * 0.18}
-                        />
-                        <text
-                            x={cell.cx}
-                            y={cell.cy}
-                            fontSize={spawnRadius * 1.35}
-                            fontFamily='"VT323", monospace'
-                            fill="#000"
-                            textAnchor="middle"
-                            dominantBaseline="central"
-                        >
-                            {index + 1}
-                        </text>
-                    </g>
-                );
-            })}
-        </svg>
+                    return (
+                        <g key={index} opacity={filled ? 1 : 0.4}>
+                            <circle
+                                cx={cell.cx}
+                                cy={cell.cy}
+                                r={spawnRadius}
+                                fill={color}
+                                stroke="#000"
+                                strokeWidth={spawnRadius * 0.18}
+                            />
+                            <text
+                                x={cell.cx}
+                                y={cell.cy}
+                                fontSize={spawnRadius * 1.35}
+                                fontFamily='"VT323", monospace'
+                                fill="#000"
+                                textAnchor="middle"
+                                dominantBaseline="central"
+                            >
+                                {index + 1}
+                            </text>
+                        </g>
+                    );
+                })}
+            </svg>
+        </div>
     );
 };
 

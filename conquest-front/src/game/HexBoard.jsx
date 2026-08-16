@@ -18,7 +18,9 @@ import {getMapById} from '@conquest/shared-engine/data/maps.js';
 import {
     mapBackground,
     mapBackgroundImage,
+    mapBackgroundRatio,
     terrainColors,
+    terrainOpacities,
 } from '@conquest/shared-engine/data/terrain.js';
 import {computeReachable} from '@conquest/shared-engine/engine/selectors.js';
 import {
@@ -51,6 +53,10 @@ import {
 import './HexBoard.scss';
 
 const NO_MOVES = {moves: new Map(), allies: []};
+
+// Agrandissement commun des décors de carte : ils débordent du cadre logique
+// tout en restant attachés au groupe de la caméra.
+const MAP_BACKDROP_SCALE = 2.5;
 
 // Types de cibles dont le survol ouvre un aperçu en bas de l'écran : fusion,
 // combat et abattage (panneau de l'arbre visé). Un simple déplacement ou une
@@ -103,18 +109,32 @@ const HexBoard = ({
     // Modèle logique (règles) et géométrie (rendu), mémoïsés par carte.
     const board = useMemo(() => getLogicalBoard(mapId), [mapId]);
     const {cells, cellMap, base, baseCells} = useMemo(() => buildGeometry(mapId), [mapId]);
-
     // Palette d'ambiance de la carte : couleurs de terrain, fond du plateau et
     // image de fond éventuelle, paramétrables carte par carte (défauts communs
     // si non définis).
-    const {tileColors, background, backgroundImage} = useMemo(() => {
+    const {tileColors, tileOpacities, background, backgroundImage, backgroundRatio} = useMemo(() => {
         const map = getMapById(mapId);
         return {
             tileColors: terrainColors(map),
+            tileOpacities: terrainOpacities(map),
             background: mapBackground(map),
             backgroundImage: mapBackgroundImage(map),
+            backgroundRatio: mapBackgroundRatio(map),
         };
     }, [mapId]);
+    const backdrop = useMemo(() => {
+        // Le cadre est 2,5 fois plus grand que l'emprise minimale nécessaire
+        // pour contenir la carte. Centré sur le même point, il remplit les
+        // écrans larges et verticaux sans duplication ni raccord.
+        const width = Math.max(base.w, base.h * backgroundRatio) * MAP_BACKDROP_SCALE;
+        const height = Math.max(base.h, base.w / backgroundRatio) * MAP_BACKDROP_SCALE;
+        return {
+            x: base.x - (width - base.w) / 2,
+            y: base.y - (height - base.h) / 2,
+            width,
+            height,
+        };
+    }, [base, backgroundRatio]);
 
     // Couleur par joueur (stable par carte) pour la couche territoire.
     const colors = useMemo(
@@ -287,13 +307,14 @@ const HexBoard = ({
 
     return (
         <div
-            className="hex-board"
+            className={`hex-board${backgroundImage ? ' hex-board--with-backdrop' : ''}`}
             style={{
                 borderColor: colors[activePlayerId],
                 // Couleur unie du plateau : elle reste seule si la carte n'a pas
                 // d'image, ou si le fichier ne charge pas (l'image est dans le
                 // SVG ci-dessous, elle ne masque rien tant qu'elle n'est pas là).
                 backgroundColor: background,
+                '--map-background-image': backgroundImage ? `url("${backgroundImage}")` : 'none',
             }}
         >
             <svg
@@ -313,22 +334,39 @@ const HexBoard = ({
                     translate/scale pendant un geste, pour éviter de toucher au
                     `viewBox` (qui re-rastérise tout le plateau). */}
                 <g ref={contentRef} className="hex-board__content">
-                {/* Décor de la carte, posé DANS le repère du monde : couvrant
-                    exactement l'emprise du plateau (`base`), il se déplace et
-                    grossit avec les cases au lieu de rester collé à l'écran.
-                    `slice` remplit ce rectangle sans déformer l'image. */}
+                {/* Décor posé DANS le repère du monde : il se déplace et grossit
+                    avec les cases. Son rectangle conserve le ratio de l'image,
+                    mais mesure 2,5 fois l'emprise minimale du plateau afin de
+                    couvrir les écrans larges comme verticaux sans raccord. */}
                 {backgroundImage && (
                     <image
                         className="hex-board__backdrop"
                         href={backgroundImage}
-                        x={base.x}
-                        y={base.y}
-                        width={base.w}
-                        height={base.h}
-                        preserveAspectRatio="xMidYMid slice"
+                        x={backdrop.x}
+                        y={backdrop.y}
+                        width={backdrop.width}
+                        height={backdrop.height}
+                        preserveAspectRatio="xMidYMid meet"
                     />
                 )}
-                <Tiles cells={cells} terrainColors={tileColors}/>
+                {/* Dès que la grille passe en mode ciblage (déplacement ou achat
+                    à placer), le décor est assombri au même niveau que les cases
+                    sans action. Placé sous la grille, ce voile ne ternit pas les
+                    cases accessibles. */}
+                {dimIds && (
+                    <rect
+                        className="hex-board__backdrop-dimmer"
+                        x={backdrop.x}
+                        y={backdrop.y}
+                        width={backdrop.width}
+                        height={backdrop.height}
+                    />
+                )}
+                <Tiles
+                    cells={cells}
+                    terrainColors={tileColors}
+                    terrainOpacities={tileOpacities}
+                />
                 <Territory cells={cells} ownership={ownership} colors={colors}/>
                 {/* Ces deux couches montent elles-mêmes leurs groupes (remplissage
                     statique + contours pulsants par cadence) — voir `PulseLayers`. */}

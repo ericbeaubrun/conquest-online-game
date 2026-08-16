@@ -2,6 +2,7 @@ import {useState} from 'react';
 import HexBoard from '../game/HexBoard.jsx';
 import {getLogicalBoard} from '@conquest/shared-engine/engine/board.js';
 import {gameReducer} from '@conquest/shared-engine/engine/reducer.js';
+import {computeReachable} from '@conquest/shared-engine/engine/selectors.js';
 import {
     ATTACK_SOLDIER,
     CHOP_TREE,
@@ -9,9 +10,11 @@ import {
     MOVE_SOLDIER,
     OPEN_CHEST,
     endTurn,
+    moveSoldier,
 } from '@conquest/shared-engine/engine/actions.js';
 import {
     FUSION_DEMO_ENEMY_BASE_ID,
+    FUSION_DEMO_ENEMY_TERRITORY,
     createFusionDemoState,
 } from '@conquest/shared-engine/demo/fusionScenario.js';
 import './demo.scss';
@@ -19,15 +22,15 @@ import './demo.scss';
 const CONQUEST_GOAL = 3;
 
 const OBJECTIVES = [
-    {id: 'conquer', label: 'Conquérir 3 cases', detail: 'Étendre votre territoire'},
-    {id: 'merge', label: 'Fusionner 2 soldats', detail: 'Créer une unité supérieure'},
-    {id: 'chest', label: 'Ouvrir un coffre', detail: 'Révéler un butin aléatoire'},
-    {id: 'tree', label: 'Détruire un arbre', detail: 'Récolter son or'},
-    {id: 'attack', label: 'Attaquer un ennemi', detail: 'Engager un combat'},
-    {id: 'kill', label: 'Éliminer sans mourir', detail: 'Survivre à votre victoire'},
-    {id: 'base', label: 'Détruire la base', detail: 'Faire tomber la forteresse orange'},
-    {id: 'allCells', label: 'Conquérir toutes les cases', detail: 'Prendre le contrôle de toute la carte'},
-    {id: 'allEnemies', label: 'Tuer tous les ennemis', detail: 'Éliminer toutes les forces adverses'},
+    {id: 'conquer', label: 'Conquérir 3 cases'},
+    {id: 'merge', label: 'Fusionner 2 soldats'},
+    {id: 'chest', label: 'Ouvrir un coffre'},
+    {id: 'tree', label: 'Détruire un arbre'},
+    {id: 'attack', label: 'Attaquer un ennemi'},
+    {id: 'kill', label: 'Éliminer sans mourir'},
+    {id: 'base', label: 'Détruire la base'},
+    {id: 'allCells', label: 'Conquérir toutes les cases ennemies'},
+    {id: 'allEnemies', label: 'Tuer tous les ennemis'},
 ];
 
 const createProgress = () => ({
@@ -41,9 +44,8 @@ const createProgress = () => ({
 });
 
 const objectiveState = (progress, game) => {
-    const board = getLogicalBoard(game.mapId);
-    const allCellsConquered = board.cells.every(
-        (cell) => game.ownership.get(cell.id) === 'p1',
+    const allCellsConquered = FUSION_DEMO_ENEMY_TERRITORY.every(
+        (id) => game.ownership.get(id) === 'p1',
     );
     const allEnemiesKilled = [...game.placements.values()].every(
         (placed) => placed.playerId !== 'p2',
@@ -132,11 +134,37 @@ const FusionDemo = () => {
         setSelection(nextSelection);
     };
 
+    // La garde se déplace pour donner vie au terrain d'entraînement, mais
+    // n'attaque jamais : seuls les déplacements/conquêtes de case sont
+    // retenus (les cibles de combat renvoyées par computeReachable sont
+    // ignorées), pour laisser l'apprenant mener toutes les offensives.
+    const moveEnemies = (state) => {
+        const board = getLogicalBoard(state.mapId);
+        let next = state;
+        const soldierIds = [...next.placements.entries()]
+            .filter(([, placed]) => placed.type === 'soldier' && placed.playerId === 'p2')
+            .map(([id]) => id);
+
+        for (const id of soldierIds) {
+            const placed = next.placements.get(id);
+            if (!placed || placed.type !== 'soldier' || placed.playerId !== 'p2') continue;
+            if (next.movedSoldiers?.has(id)) continue;
+
+            const {moves} = computeReachable(next, board, id);
+            const target = [...moves.entries()].find(
+                ([, move]) => move.kind === 'move' || move.kind === 'conquer',
+            );
+            if (target) {
+                next = gameReducer(next, moveSoldier(id, target[0]));
+            }
+        }
+        return next;
+    };
+
     const nextRound = () => {
         let next = gameReducer(game, endTurn());
-        // La garde sert de cible et ne joue pas dans ce terrain d'entraînement :
-        // on passe son tour avec la même action moteur, puis on rend la main.
         if (next.status === 'playing' && next.activePlayerId === 'p2') {
+            next = moveEnemies(next);
             next = gameReducer(next, endTurn());
         }
         setGame(next);
@@ -174,16 +202,15 @@ const FusionDemo = () => {
                         <ol className="demo-player__objectives" aria-label="Objectifs du terrain d’entraînement">
                             {OBJECTIVES.map((objective, index) => {
                                 const isDone = done[objective.id];
-                                const detail =
+                                const label =
                                     objective.id === 'conquer'
-                                        ? `${Math.min(progress.conqueredIds.length, CONQUEST_GOAL)}/${CONQUEST_GOAL} cases prises`
-                                        : objective.detail;
+                                        ? `${objective.label} (${Math.min(progress.conqueredIds.length, CONQUEST_GOAL)}/${CONQUEST_GOAL})`
+                                        : objective.label;
                                 return (
                                     <li className={isDone ? 'done' : ''} key={objective.id}>
-                                        <i aria-hidden="true">{isDone ? '✓' : index + 1}</i>
+                                        <i aria-hidden="true">{isDone ? 'OK' : index + 1}</i>
                                         <span>
-                                            <strong>{objective.label}</strong>
-                                            {detail}
+                                            <strong>{label}</strong>
                                         </span>
                                     </li>
                                 );
@@ -207,7 +234,6 @@ const FusionDemo = () => {
                                     className="demo-player__reset"
                                     onClick={resetChallenge}
                                 >
-                                    <span aria-hidden="true">↻</span>
                                     Recommencer
                                 </button>
                                 <button
@@ -216,7 +242,7 @@ const FusionDemo = () => {
                                     onClick={nextRound}
                                     disabled={game.status !== 'playing'}
                                 >
-                                    <span aria-hidden="true">»</span>
+                                    <img src="/skip.png" alt="" aria-hidden="true" />
                                     Tour suivant
                                 </button>
                             </div>
@@ -237,7 +263,7 @@ const FusionDemo = () => {
                             />
                             {allCompleted && (
                                 <div className="demo-player__success" role="status">
-                                    <span aria-hidden="true">✓</span>
+                                    <span aria-hidden="true">OK</span>
                                     <strong>FRONT MAÎTRISÉ</strong>
                                     <small>{OBJECTIVES.length} objectifs accomplis</small>
                                 </div>

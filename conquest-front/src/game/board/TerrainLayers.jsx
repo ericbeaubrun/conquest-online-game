@@ -3,7 +3,7 @@
 // elles ne se re-rendent que si leurs données changent (pas au pan / zoom, qui
 // ne touche que le viewBox).
 import {memo} from 'react';
-import {TERRAIN_COLORS} from '@conquest/shared-engine/data/terrain.js';
+import {TERRAIN_COLORS, TERRAIN_OPACITIES} from '@conquest/shared-engine/data/terrain.js';
 import {CHOP_SRC, FIGHT_SRC, MERGE_SRC, MOVE_CLASS, OPEN_CHEST_SRC} from './constants.js';
 import {fightKind, unitAt} from './targeting.js';
 
@@ -44,12 +44,17 @@ const PulseLayers = ({fills, strokes}) => (
 
 // `terrainColors` : palette effective de la carte jouée (défauts + surcharges
 // définies par la carte). Voir `terrainColors()` dans terrain.js.
-export const Tiles = memo(function Tiles({cells, terrainColors = TERRAIN_COLORS}) {
+export const Tiles = memo(function Tiles({
+    cells,
+    terrainColors = TERRAIN_COLORS,
+    terrainOpacities = TERRAIN_OPACITIES,
+}) {
     return cells.map((cell) => (
         <g key={cell.id} className={`hex${cell.blocked ? ' hex--blocked' : ''}`}>
             <polygon
                 points={cell.points}
                 fill={terrainColors[cell.type] || '#888'}
+                fillOpacity={terrainOpacities[cell.type] ?? 1}
                 className="hex__tile"
             />
         </g>

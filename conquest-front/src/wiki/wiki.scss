@@ -10,7 +10,7 @@ $wiki-coin: #f2c45b;
 .wiki {
     position: relative;
     flex: 0 0 auto;
-    padding: clamp(112px, 12vw, 176px) clamp(18px, 3vw, 32px);
+    padding: clamp(200px, 20vw, 320px) clamp(18px, 3vw, 32px);
     overflow: hidden;
     background: transparent;
 
@@ -134,11 +134,11 @@ $wiki-coin: #f2c45b;
         padding: 0;
         place-items: center;
         transform: translateY(-50%);
-        color: #7f9fc2;
+        color: #ffd766;
         background: #171b24;
         border: 3px solid #050609;
         box-shadow:
-            0 0 0 2px #526f90,
+            0 0 0 2px #ffd766,
             4px 5px 0 rgba(0, 0, 0, 0.7);
         font-family: $pixel-font;
         font-size: 27px;
@@ -157,15 +157,15 @@ $wiki-coin: #f2c45b;
         }
 
         &:hover:not(:disabled) {
-            color: #fff;
-            background: #526f90;
+            color: #171b24;
+            background: #ffd766;
             transform: translateY(calc(-50% - 2px));
         }
 
         &:active:not(:disabled) {
             transform: translate(2px, calc(-50% + 2px));
             box-shadow:
-                0 0 0 2px #526f90,
+                0 0 0 2px #ffd766,
                 1px 2px 0 rgba(0, 0, 0, 0.7);
         }
 

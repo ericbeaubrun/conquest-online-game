@@ -62,7 +62,9 @@ export function clearWaterAroundSpawns(cells, spawns) {
 
 // Assemble une carte : applique le nettoyage de l'eau autour des spawns.
 // `palette` (facultatif) surcharge les couleurs de terrain et le fond de la
-// carte — voir `terrainColors` / `mapBackground` dans terrain.js.
+// carte — voir `terrainColors` / `terrainOpacities` / `mapBackground` dans
+// terrain.js. `palette.backgroundImage` est facultatif : sans lui, seule la
+// couleur `background` est affichée.
 // `margin` (facultatif) : { top, bottom } en nombre de RANGÉES vides ajoutées
 // au cadre de la carte, sans y poser de case — voir `buildGeometry`.
 export function buildMap({id, name, description, cells, spawns, palette, margin}) {

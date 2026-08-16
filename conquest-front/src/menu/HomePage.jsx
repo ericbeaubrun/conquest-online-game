@@ -190,9 +190,7 @@ const HomePage = ({ onPlayOffline, onPlayOnline }) => {
                 <div className="home-hero__content">
                     <div className="home-hero__copy">
                         <span className="home-hero__edition">
-                            <i aria-hidden="true" />
-                            STRATÉGIE · TOUR PAR TOUR
-                            <i aria-hidden="true" />
+                            VERSION BETA
                         </span>
                         <h1 className="home-hero__title" aria-label="Conquete">
                             {'CONQUETE'.split('').map((letter, index) => (
@@ -236,11 +234,6 @@ const HomePage = ({ onPlayOffline, onPlayOnline }) => {
                         </button>
                     </div>
                 </div>
-
-                <a className="home-hero__discover" href="#context-title">
-                    <span>Découvrir le royaume</span>
-                    <span aria-hidden="true">↓</span>
-                </a>
             </main>
 
             <div className="home-content">

@@ -64,7 +64,7 @@ const ITEM_COST_FIELDS = [...ITEMS, ...AFFINITY_ITEMS, SACRIFICE_POTION_ITEM].ma
     // de plus élevés.
     max: 999,
     step: 1,
-    unit: '💰',
+    unit: 'gold',
 }));
 
 const UPKEEP_FIELDS = [
@@ -87,7 +87,7 @@ const BONUS_PRICE_FIELDS = BONUS_OFFERS.map((b) => ({
     // un maximum trop bas ROGNERAIT silencieusement le prix par défaut affiché.
     max: 9999,
     step: 5,
-    unit: '💰',
+    unit: 'gold',
 }));
 
 const BONUS_UPKEEP_FIELDS = BONUS_OFFERS.map((b) => ({
@@ -141,7 +141,7 @@ export const GAME_SETTINGS = [
         min: 0,
         max: 500,
         step: 5,
-        unit: '💰',
+        unit: 'gold',
         help: 'Or dans la réserve de chaque joueur au premier tour.',
     },
     {
@@ -233,7 +233,7 @@ export const GAME_SETTINGS = [
         min: 0,
         max: 100,
         step: 1,
-        unit: '💰',
+        unit: 'gold',
         help: 'Récompense pour un arbre coupé par un soldat adjacent.',
         dependsOn: 'treesEnabled',
     },
@@ -245,7 +245,7 @@ export const GAME_SETTINGS = [
         min: 0,
         max: 50,
         step: 1,
-        unit: '💰',
+        unit: 'gold',
         help: 'Or prélevé chaque tour pour chaque arbre présent sur votre territoire.',
         dependsOn: 'treesEnabled',
     },
@@ -392,7 +392,7 @@ export const GAME_SETTINGS = [
         min: 50,
         max: 10000,
         step: 50,
-        unit: '💰',
+        unit: 'gold',
         help: 'Or à accumuler pour gagner la course à l’or.',
         showWhen: (s) => s.victoryMode === 'economy',
     },
