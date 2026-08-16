@@ -38,6 +38,8 @@ Always run them through `npm test`. Invoking the runner directly needs the quote
 
 ### Judging a bot change
 
+**On this branch the bot AI is a blank slate**: `engine/bot/` contains no decision logic, only the entry point (`isBotTurn`, and a `runBotTurn` that does nothing, so bot seats pass their turn). Everything around it is intact — bot seats and difficulties, the offline driver in `useGameSession`, `advanceBots` in `gameSocket.js`, the speed slider, this bench. The contract a new AI must respect is documented at the top of `engine/bot/index.js`; the most important lines: work from the state returned by `apply`, never play `endTurn` (the callers do), stay deterministic, import nothing React- or Node-specific. Until a routine exists, botstats reports zeros.
+
 Tests say a bot is *correct*; `npm run botstats` says what it actually **does**. It plays deterministic bot-vs-bot games (`shared-engine/balance/botMetrics.js`) on the three test maps (60/180/300 cells, `data/testMaps.js`), 10 games each, 100 turns max, difficulty « Débutant » — the same command twice gives the same table, so any difference is attributable to the constant you touched.
 
 Useful flags: `-- --games 50`, `-- --turns 200`, `-- --maps test-small`, `-- --seed 100`, `-- --csv`.

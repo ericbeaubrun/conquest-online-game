@@ -39,6 +39,8 @@ Always run them through `npm test`. Invoking the runner directly needs the quote
 
 `shared-engine/engine/reducer.js` is a **pure** `(state, action) -> state` function; all game-state mutation lives there and nowhere else. Randomness goes through a seeded PRNG (`engine/rng.js`), so given the same seed and action sequence, client and server compute byte-identical states. Never duplicate rule logic in the front or back — the whole online model depends on both sides replaying the exact same reducer.
 
+**Bot AI — blank slate on this branch**: `engine/bot/` holds no decision logic, only the entry point (`isBotTurn`, plus a `runBotTurn` that does nothing, so bot seats pass their turn). All the plumbing around it is intact — bot seats/difficulties, the offline driver in `useGameSession`, `advanceBots` in `gameSocket.js`, the speed slider, `npm run botstats`. Read the contract at the top of `engine/bot/index.js` before writing a routine: work from the state returned by `apply`, never play `endTurn` (the callers do), stay deterministic, no React/Node imports.
+
 Key engine modules: `engine/actions.js` (action creators — the only way to change state; actions carry *intent* only, the actor is always the active player), `engine/board.js` (initial state), `engine/rules.js` (combat/merge/building constants and formulas), `engine/selectors.js` (derived state: reachability, income, victory), `engine/serialize.js` (wire/persistence format), `engine/settings.js`, and `data/` (maps, soldiers, items, terrain, hex geometry).
 
 ### Front: one game UI, two interchangeable sessions

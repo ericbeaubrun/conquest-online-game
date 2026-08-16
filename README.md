@@ -149,10 +149,16 @@ Key modules:
 | `engine/serialize.js` | Wire and persistence format |
 | `engine/settings.js` | Configurable per-game settings and their defaults |
 | `engine/endturn/`, `engine/turnReset.js` | End-of-turn effects, turn reset |
-| `engine/bot/` | Bot decision logic (conquest, offense, threat, affinities, bonuses…) |
+| `engine/bot/` | Bot entry point — **currently empty**, see below |
 | `data/` | Maps, soldiers, items, terrain, hex geometry |
 
 Available actions: `MOVE_SOLDIER`, `MERGE_SOLDIER`, `ATTACK_SOLDIER`, `CHOP_TREE`, `OPEN_CHEST`, `PLACE_ITEM`, `BUY_BONUS`, `SET_BEHAVIOR`, `END_TURN`, plus the server-only `SET_MAP` and `RESET_GAME`.
+
+#### Bot AI: blank slate
+
+`engine/bot/` holds **no decision logic at the moment** — it was removed wholesale to rewrite the AI from scratch. `index.js` keeps only the contract its two callers depend on: `isBotTurn(state)` and `runBotTurn(state, apply)`, the latter currently a no-op, so bot seats simply pass their turn.
+
+Everything around the AI still works and is where a new implementation plugs in: bot seats and difficulties in the lobby, the offline bot driver (`useGameSession`) and the online one (`advanceBots` in `gameSocket.js`), the bot-speed slider, and the `npm run botstats` bench. Both callers play `endTurn` themselves — `runBotTurn` must never play it. The full contract (use the state returned by `apply`, stay deterministic, no React/Node imports) is documented at the top of `engine/bot/index.js`.
 
 ### Front end: one game UI, two interchangeable sessions
 
@@ -233,7 +239,7 @@ $env:UPDATE_GOLDEN=1; npm test
 
 `npm run balance` and `npm run bonus` print static tables (costs, upkeeps, drop rates; per-bonus price, real gold/turn, challenge, effect).
 
-`npm run botstats` is different: tests say the bot is *correct*, botstats says what it actually **does**. It plays deterministic bot-vs-bot games (`shared-engine/balance/botMetrics.js`) on the three test maps (60/180/300 cells, `data/testMaps.js`), 10 games each, 100-turn cap, difficulty « Débutant ». The same command twice yields the same table, so any difference is attributable to the constant you changed.
+`npm run botstats` is different: tests say the bot is *correct*, botstats says what it actually **does**. (On the current blank-slate AI it reports zeros across the board — it becomes useful again as soon as a routine exists.) It plays deterministic bot-vs-bot games (`shared-engine/balance/botMetrics.js`) on the three test maps (60/180/300 cells, `data/testMaps.js`), 10 games each, 100-turn cap, difficulty « Débutant ». The same command twice yields the same table, so any difference is attributable to the constant you changed.
 
 Flags: `-- --games 50`, `-- --turns 200`, `-- --maps test-small`, `-- --seed 100`, `-- --csv`.
 

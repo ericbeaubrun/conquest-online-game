@@ -179,9 +179,9 @@ export function createInitialState(mapId = DEFAULT_MAP_ID, setup = null, seed = 
         // Joueurs ayant DÉJÀ acheté un Chevalier noir cette partie (voir
         // `reduceBuyBonus`) : contrairement aux autres compteurs, cette
         // information doit SURVIVRE à la mort du porteur — `placements` seul ne
-        // permet pas de distinguer « n'en a jamais eu » de « le sien est mort »,
-        // ce dont a besoin le bot pour ne pas en racheter un second (voir
-        // `engine/bot/bonuses/blackKnight.js`).
+        // permet pas de distinguer « n'en a jamais eu » de « le sien est mort ».
+        // C'est ce qui permet à une IA de bot de ne pas en racheter un second
+        // (l'ancienne routine s'en servait ; la nouvelle le retrouvera ici).
         blackKnightBoughtBy: {},
     };
 }
