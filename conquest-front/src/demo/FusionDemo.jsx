@@ -179,7 +179,6 @@ const FusionDemo = () => {
 
     return (
         <section className="demo-showcase" aria-labelledby="demo-title">
-            <div className="demo-showcase__glow" aria-hidden="true" />
             <div className="demo-showcase__inner">
                 <header className="demo-showcase__heading">
                     <div>

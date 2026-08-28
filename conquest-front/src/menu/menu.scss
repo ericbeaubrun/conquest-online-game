@@ -41,15 +41,15 @@ $blue: #3f7fd8;
 }
 
 .home-screen {
-    --home-hero-bg: #14171c;
+    --home-hero-bg: #1a1a1c;
     --home-blue: #526f90;
     --home-orange: #a55d40;
-    --home-content-bg: #0d141d;
+    --home-content-bg: #131316;
     --home-context-bg: var(--home-content-bg);
     --home-rules-bg: var(--home-content-bg);
     --home-demo-bg: var(--home-content-bg);
     --home-wiki-bg: var(--home-content-bg);
-    background-color: $bg;
+    background-color: #1a1a1c;
     background-image: none;
     overflow-x: hidden;
     overflow-y: auto;
@@ -451,6 +451,7 @@ $blue: #3f7fd8;
     isolation: isolate;
     padding: clamp(68px, 7vw, 94px) clamp(18px, 3vw, 32px) 106px;
     background: #11253c;
+    border-bottom: 3px solid rgba(90, 90, 90, 0.5);
 
     &::before {
         display: none;
@@ -1052,7 +1053,7 @@ $blue: #3f7fd8;
     margin-top: clamp(120px, 12vw, 200px);
     padding: 56px 20px 36px;
     background: #05070a;
-    box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.06);
+    border-top: 3px solid rgba(255, 255, 255, 0.12);
 
     &__inner {
         width: 100%;
@@ -1518,8 +1519,11 @@ $blue: #3f7fd8;
             color: $ink;
         }
         &--active {
-            color: #000;
-            background: $gold;
+            color: #fff;
+            // Suit l'accent du contexte : bleu en local, orange en ligne (cf.
+            // --setup-accent défini sur .setup-screen / .setup-screen--online),
+            // pour uniformiser avec le reste des écrans de configuration.
+            background: var(--setup-accent, $gold);
         }
     }
 
@@ -2426,10 +2430,17 @@ $blue: #3f7fd8;
         display: flex;
         gap: 9px;
         min-width: 0;
-        padding: 4px 4px 10px;
+        // overflow-x: auto force overflow-y à 'auto' (couplage CSS, la barre de
+        // défilement horizontale grignote alors la hauteur disponible et rogne
+        // le bas des cartes) : un padding généreux absorbe cette perte.
+        padding: 6px 4px 18px;
         overflow-x: auto;
         overscroll-behavior-x: contain;
         scroll-snap-type: x proximity;
+        // Sans ça, scroll-snap-align: start aligne la 1ère carte sur le bord du
+        // scrollport (qui inclut le padding) et annule le padding-left visuel :
+        // sa bordure/ombre gauche se retrouve rognée dès le chargement.
+        scroll-padding-left: 4px;
         // La dernière carte est coupée net par le bord du panneau : le fondu
         // transforme cette troncature en signal de défilement plutôt qu'en
         // bug de mise en page.

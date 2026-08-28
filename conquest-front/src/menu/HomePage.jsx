@@ -189,9 +189,9 @@ const HomePage = ({ onPlayOffline, onPlayOnline }) => {
 
                 <div className="home-hero__content">
                     <div className="home-hero__copy">
-                        <span className="home-hero__edition">
+                        {/* <span className="home-hero__edition">
                             VERSION BETA
-                        </span>
+                        </span> */}
                         <h1 className="home-hero__title" aria-label="Conquete">
                             {'CONQUETE'.split('').map((letter, index) => (
                                 <span

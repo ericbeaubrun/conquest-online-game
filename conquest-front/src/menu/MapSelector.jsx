@@ -2,7 +2,7 @@
 // prévisualisation présente la carte active ; le bandeau inférieur permet
 // d'accéder directement à toutes les cartes disponibles dans le mode courant.
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { getMapById } from '@conquest/shared-engine/data/maps.js';
 import { playersForMap } from '@conquest/shared-engine/data/players.js';
 import { hexId } from '@conquest/shared-engine/data/hex.js';
@@ -113,6 +113,18 @@ const MapSelector = ({
         onSelect(ids[next]);
     };
 
+    const activeOptionRef = useRef(null);
+
+    // Le rail défile au clic ou aux flèches ‹ › : garde toujours l'option
+    // active visible plutôt que de la laisser hors champ.
+    useEffect(() => {
+        activeOptionRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'nearest',
+        });
+    }, [selectedId]);
+
     return (
         <div className={`map-selector ${disabled ? 'map-selector--disabled' : ''}`}>
             <div className="map-selector__showcase">
@@ -178,6 +190,7 @@ const MapSelector = ({
                     return (
                         <button
                             key={id}
+                            ref={active ? activeOptionRef : null}
                             type="button"
                             role="tab"
                             aria-selected={active}

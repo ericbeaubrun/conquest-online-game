@@ -14,17 +14,6 @@ $demo-red: #b8402e;
     overflow: hidden;
     background: transparent;
 
-    &__glow {
-        position: absolute;
-        width: 760px;
-        height: 760px;
-        top: 10%;
-        left: 50%;
-        transform: translateX(-50%);
-        pointer-events: none;
-        background: radial-gradient(circle, rgba(63, 111, 159, 0.14), transparent 66%);
-    }
-
     &__inner {
         position: relative;
         z-index: 1;
